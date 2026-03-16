@@ -36,10 +36,13 @@ Or set config before loading:
 
 ## Behavior (per AI Chat Agent doc)
 
-- **Activation** (widget does not open immediately):
+- **Launcher icon**: always visible; clicking it opens chat immediately.
+- **Drag support**: launcher and floating close button are draggable and clamped to viewport bounds.
+- **Activation checks** (apply to auto-popup behavior only):
   - 6–10 seconds on landing page, OR
   - 40% scroll, OR
   - 8 seconds user idle (no mouse/keyboard/scroll)
+- **Fullscreen toggle**: header expand button toggles desktop fullscreen mode and restore mode.
 - **Opening message**: “Hi! Welcome to JP Loft! I'm Anaya, your digital consultant. Are you looking to build something or just exploring ideas?”
 
 ## CORS

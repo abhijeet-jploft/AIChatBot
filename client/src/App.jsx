@@ -78,6 +78,7 @@ export default function App() {
   const isWebsiteView = location.pathname === '/' || location.pathname === '';
 
   const [widgetActivated, setWidgetActivated] = useState(!isWebsiteView);
+  const [autoPopupHandled, setAutoPopupHandled] = useState(!isWebsiteView);
   const [openingMessageShown, setOpeningMessageShown] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() =>
@@ -151,8 +152,14 @@ export default function App() {
 
   // ── Website view: reset activation when entering landing ───────────────────
   useEffect(() => {
-    if (isWebsiteView) setWidgetActivated(false);
-    else setWidgetActivated(true);
+    if (isWebsiteView) {
+      setWidgetActivated(false);
+      setAutoPopupHandled(false);
+      setChatViewMode(CHAT_VIEW_MODES.WIDGET_CLOSED);
+    } else {
+      setWidgetActivated(true);
+      setAutoPopupHandled(true);
+    }
   }, [isWebsiteView]);
 
   // ── Widget activation (doc: 6–10s OR 40% scroll OR 8s idle) ─────────────────
@@ -187,6 +194,19 @@ export default function App() {
       window.removeEventListener('scroll', resetIdle);
     };
   }, [isWebsiteView, widgetActivated]);
+
+  // ── Activation checks open popup once (icon is always visible/clickable) ───
+  useEffect(() => {
+    if (!isWebsiteView || !widgetActivated || autoPopupHandled) return;
+
+    setCurrentPage('chat');
+    if (messages.length === 0 && !openingMessageShown) {
+      setMessages([{ role: 'assistant', content: OPENING_MESSAGE }]);
+      setOpeningMessageShown(true);
+    }
+    setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
+    setAutoPopupHandled(true);
+  }, [isWebsiteView, widgetActivated, autoPopupHandled, messages.length, openingMessageShown]);
 
   // ── Resize ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -307,6 +327,7 @@ export default function App() {
 
   const handleOpenWidget = () => {
     setCurrentPage('chat');
+    if (isWebsiteView) setAutoPopupHandled(true);
     if (isWebsiteView && messages.length === 0 && !openingMessageShown) {
       setMessages([{ role: 'assistant', content: OPENING_MESSAGE }]);
       setOpeningMessageShown(true);
@@ -588,7 +609,7 @@ export default function App() {
       <>
         <Landing />
         <div className="chat-widget-host" style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 40 }}>
-          {widgetActivated ? <div style={{ pointerEvents: 'auto' }}>{widgetContent}</div> : null}
+          <div style={{ pointerEvents: 'auto' }}>{widgetContent}</div>
         </div>
       </>
     );

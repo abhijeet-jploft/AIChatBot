@@ -5,29 +5,217 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chat widget embed demo</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.5rem; }
-    p { color: #374151; line-height: 1.6; }
-    code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+    :root {
+      --bg: #f8fafc;
+      --text: #111827;
+      --muted: #4b5563;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --brand: #4f46e5;
+      --brand-soft: #eef2ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(180deg, #ffffff 0%, var(--bg) 38%, #ffffff 100%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container {
+      width: min(1100px, calc(100% - 2rem));
+      margin: 0 auto;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar-row {
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .logo {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+    .pill {
+      display: inline-block;
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      border: 1px solid #c7d2fe;
+      color: #3730a3;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .hero {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 4rem 0;
+    }
+    .hero-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 30px 60px -45px rgba(17, 24, 39, 0.45);
+      padding: clamp(1.2rem, 1rem + 1vw, 2.4rem);
+    }
+    h1 {
+      margin: 0 0 0.6rem;
+      font-size: clamp(1.9rem, 1.4rem + 2.2vw, 3rem);
+      line-height: 1.16;
+    }
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      max-width: 68ch;
+      font-size: 1.03rem;
+    }
+    .section {
+      padding: 3.4rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .section h2 {
+      margin: 0 0 0.8rem;
+      font-size: 1.45rem;
+    }
+    .section p {
+      margin: 0.45rem 0;
+      color: var(--muted);
+    }
+    .grid {
+      margin-top: 1rem;
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem;
+      box-shadow: 0 12px 26px -20px rgba(0, 0, 0, 0.35);
+    }
+    .card h3 {
+      margin: 0 0 0.45rem;
+      font-size: 1rem;
+    }
+    .card p {
+      margin: 0;
+      font-size: 0.95rem;
+    }
+    pre {
+      margin: 1rem 0 0;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+      overflow-x: auto;
+      border: 1px solid #1e293b;
+    }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.9rem;
+    }
+    .foot {
+      padding: 2rem 0 4rem;
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.92rem;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <h1>Chat widget embed demo</h1>
-  <p>
-    This page loads the widget via the script below. The widget will activate after
-    <strong>6–10 seconds</strong>, or <strong>40% scroll</strong>, or <strong>8 seconds idle</strong>.
-    When you open it, Anaya’s opening message will appear.
-  </p>
-  <p>
-    Configure <code>data-api-url</code> to your API (e.g. <code>https://your-server.com/api</code>).
-    Ensure the API allows CORS from this origin.
-  </p>
-  <pre><code>&lt;script
+  <header class="topbar">
+    <div class="container topbar-row">
+      <p class="logo">JP Loft Embed Demo</p>
+      <span class="pill">Same activation behavior as /</span>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <div class="hero-card">
+        <h1>Chat widget embed demo with landing-page style scroll depth</h1>
+        <p class="lead">
+          This page intentionally mirrors the landing route behavior: the launcher icon is always visible and clickable,
+          and the chat popup auto-opens after
+          <strong>6-10 seconds</strong>, or at <strong>40% scroll</strong>, or after <strong>8 seconds idle</strong>.
+          The launcher and close button are draggable, and the header expand icon now toggles desktop fullscreen mode.
+          When you open it, Anaya's opening message appears.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>What to test</h2>
+      <p>1. Refresh: launcher icon should be visible immediately.</p>
+      <p>2. Click launcher immediately: chat should open right away.</p>
+      <p>3. Refresh, do not click, then wait 6-10 seconds: popup should auto-open.</p>
+      <p>4. Refresh, do not click, then scroll around 40%: popup should auto-open.</p>
+      <p>5. Refresh, do not click or move for 8 seconds: popup should auto-open.</p>
+      <p>6. First open on page load should show Anaya's opening message.</p>
+      <p>7. Drag the launcher icon and close button: both should move and stay within viewport bounds.</p>
+      <p>8. Click the expand icon in chat header (desktop): widget should enter fullscreen; click again to restore.</p>
+      <pre><code>&lt;script
   src="https://your-domain.com/chat-widget.js"
   data-api-url="https://your-api.com/api"
   data-company-id="_JP_Loft"
   data-company-name="JP Loft"
 &gt;&lt;/script&gt;</code></pre>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Services</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Web apps</h3>
+          <p>Scalable product-focused engineering for custom business workflows.</p>
+        </article>
+        <article class="card">
+          <h3>Mobile apps</h3>
+          <p>Cross-platform and native delivery with analytics and growth loops.</p>
+        </article>
+        <article class="card">
+          <h3>AI consulting</h3>
+          <p>Practical assistant integrations, data pipelines, and automation strategy.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>More content for scroll testing</h2>
+      <p>Use this section to test the 40% scroll activation trigger reliably on desktop and mobile.</p>
+      <p>The launcher icon click should always open chat and should not be blocked by activation checks.</p>
+      <p>If your API is hosted on another domain, ensure CORS is enabled for this demo origin.</p>
+      <p>You can duplicate this section on partner pages where the same embed script is used.</p>
+      <p>All copy here is placeholder to create realistic page depth and interaction context.</p>
+      <p>Activation checks are one-time per page load and only control auto-popup behavior.</p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    JP Loft embed demo page
+  </footer>
 
   <!-- Replace with your deployed script and API URL -->
   <script>
