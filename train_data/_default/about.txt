@@ -1,0 +1,3 @@
+AI Sales Agent - Default Company
+This is the default training context when no specific company is selected.
+Add company-specific folders as _CompanyName (e.g., _JP_Loft, _Acme_Corp) and place .txt, .md, or .json files inside with your business knowledge.

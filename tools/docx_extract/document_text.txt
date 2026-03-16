@@ -1,0 +1,1856 @@
+﻿SOFTWARE REQUIREMENT                    SPECIFICATION_V1.0
+1 Overview:
+The objective of this project is to build a fully intelligent AI-powered Website Sales Agent that functions as a digital business representative for a companyâ€™s website. The system is not a traditional chatbot or helpdesk assistant. Instead, it is designed to behave like a trained human sales executive who understands the companyâ€™s business, communicates with visitors, guides them, answers their queries, and converts them into customers or qualified leads.
+The AI agent will be deployed directly on a website using a lightweight embedded widget and will automatically interact with website visitors in real time. It will greet users, understand their intent, ask discovery questions, recommend services or products, navigate website pages, and assist them through decision-making and checkout or meeting booking.
+The system will be powered by a Large Language Model (LLM) and a custom business knowledge training layer. The AI will be trained using the companyâ€™s actual data, including website content, service offerings, pricing structures, documentation, previous proposals, FAQs, and databases. As a result, the agent will provide contextual and business-aware responses rather than generic chatbot replies.
+Initially, the product will be built for IT and software development companies (such as agencies offering websites, mobile apps, SaaS platforms, and custom software). In the long term, the system will be released as a Software-as-a-Service (SaaS) platform so any business (e-commerce, education, healthcare, consulting, etc.) can create their own branded AI sales representative and deploy it without technical knowledge.
+The core purpose of the system is to automate sales conversations, improve user engagement, reduce manual sales workload, increase website conversion rates, and ensure that every visitor is handled instantly 24/7.
+2 User Role Overview:
+Chatbot (AI Assistant):
+The Chatbot acts as an intelligent assistant within the platform, helping users interact with the system more efficiently and understand the insights generated from the data. It assists users in navigating the platform, explaining features, and answering questions related to traffic conditions, road quality, flood risks, and environmental exposure across different corridors or road segments. The chatbot can help users generate reports, interpret analytics, and quickly identify key disruptions or trends within the selected time period. By simplifying access to insights and guiding users through the platformâ€™s capabilities, the chatbot improves usability and enables decision-makers to extract actionable information from the system more quickly.
+Super Admin (Platform Owner):
+The Super Admin is the highest authority within the platform and has complete control over the system. This role is responsible for managing the overall platform, including client organizations, users, system configurations, and data operations. The Super Admin can create and manage organizations, assign roles such as Client Owners and Client Users, and control access levels across the platform. They oversee the data ingestion pipeline to ensure that vehicle-collected data such as GPS, sensor, and environmental inputs are being processed correctly. Additionally, the Super Admin manages API access, monitors system performance, configures alert rules, and generates high-level reports. This role ensures the platform operates smoothly, securely, and remains scalable as more organizations and data sources are added.
+3.0 Functional Requirements of Chatbot and User:
+1. Product Vision
+The product is designed to simulate a real human employee inside a website.
+Instead of a visitor browsing the website alone, the visitor is accompanied by a trained digital representative that:
+â€¢ Welcomes them
+â€¢ Understands their needs
+â€¢ Explains offerings
+â€¢ Shows relevant pages
+â€¢ Handles objections
+â€¢ Suggests the best solution
+â€¢ Upsells services
+â€¢ Captures contact details
+â€¢ Books meetings
+â€¢ Assists checkout
+â€¢ Reports analytics to the business owner
+The AI agent, therefore, acts as:
+Sales Executive + Product Consultant + Website Guide + Lead Generator + Business Analyst
+This product is not a CRM and not an FAQ bot.
+It is a conversational business operator.
+2. System Workflow (High-Level)
+The complete system operates in four main stages:
+Business Onboarding
+Knowledge Training
+Website Deployment
+Live Customer Interaction & Analytics
+3. Business Onboarding ( for Later Phases)
+When a business subscribes to the platform, they create an account and receives an admin panel.
+During onboarding, the business provides essential details:
+â€¢ Business name
+â€¢ Website URL
+â€¢ Industry type
+â€¢ Services/products offered
+â€¢ Pricing plans
+â€¢ Target audience
+â€¢ Sales objectives (lead generation, booking, purchase, consultation) etc
+The system prepares a dedicated workspace for that business.
+4. AI Knowledge Training (Most Important Module)
+The most critical feature of the product is the AI learning process.
+The AI agent becomes intelligent by learning the businessâ€™s real knowledge.
+The platform allows multiple training sources:
+4.1 Website Scraping
+The system automatically reads:
+â€¢ Pages
+â€¢ Service descriptions
+â€¢ Blogs
+â€¢ FAQs
+â€¢ Case Studies etc
+4.2 Database Upload
+The business can upload:
+â€¢ Website database
+â€¢ Service catalog
+â€¢ Customer patterns
+The AI then understands actual business operations.
+4.3 Document Training
+Users can upload:
+â€¢ PDFs
+â€¢ Word files
+â€¢ Proposals
+â€¢ Brochures
+4.4 Media Training
+The system can learn from:
+â€¢ Images
+â€¢ Audio recordings
+â€¢ Videos
+â€¢ Text notes
+After ingestion, the AI forms a structured knowledge base.
+This allows it to answer accurately and contextually.
+5. Deployment (Widget Integration)
+Once training is complete, the platform generates a small JavaScript widget code.
+The business only needs to paste this code into their website.
+No development work is required.
+Immediately after installation:
+â€¢ The AI agent appears as a floating chat icon
+â€¢ Automatically activates
+â€¢ Starts engaging visitors
+6. Customization & Branding
+The business can fully personalize the agent:
+Identity
+â€¢ Agent name (Anaya, Harry, etc.)
+â€¢ Gender/persona
+â€¢ Avatar selection
+Personality
+â€¢ Friendly
+â€¢ Professional
+â€¢ Sales-oriented
+â€¢ Technical consultant
+Communication
+â€¢ Custom greeting
+â€¢ Emojis
+â€¢ Tone
+â€¢ Speaking style
+Voice
+â€¢ Voice responses
+â€¢ Custom owner voice cloning
+â€¢ Accent selection
+Languages
+Multilingual conversation support (e.g., English, Hindi, and other languages).
+This makes the AI appear as a branded company representative rather than a generic bot.
+7. Live Visitor Interaction (Full Journey will be coming later on)
+When a visitor lands on the website:
+AI greets the visitor automatically.
+Asks intent-based questions.
+Understands needs using natural language.
+Navigates the website on behalf of the user.
+Suggests relevant service or product.
+Explains benefits in simple terms.
+Handles doubts and price objections.
+Suggests upgrades or bundles.
+Encourages conversion action.
+Possible conversions:
+â€¢ Purchase
+â€¢ Consultation booking
+â€¢ Contact form
+â€¢ WhatsApp connection
+â€¢ Call scheduling
+The visitor does not need to manually browse â€” the AI guides them.
+8. Sales Capabilities
+The AI performs real sales activities:
+â€¢ Discovery questioning
+â€¢ Qualification (budget, timeline, requirement)
+â€¢ Solution recommendation
+â€¢ Competitive positioning
+â€¢ Objection handling
+â€¢ Upselling
+â€¢ Cross-selling
+â€¢ Conversion prompting, etc
+It behaves like a trained salesperson.
+User Journey
+1. Visitor Arrival (Trigger Stage)
+When it activates
+The widget does not immediately attack the user.
+It waits:
+â€¢ 6â€“10 seconds on landing page
+OR
+â€¢ 40% scroll
+OR
+â€¢ user idle 8 seconds
+Opening Message
+AI:
+â€œHi  Welcome to JP Loft!
+Iâ€™m Anaya, your digital consultant.
+Are you looking to build something or just exploring ideas?â€
+Scenario 01
+â€” First Time Visitor Arrival (Introduction Flow)
+01 User:
+I need a website/ I want an app/ I need software/ I want an e-commerce site/ I need a redesign.
+AI Response:
+Great! Iâ€™d love to help ðŸ˜Š Is this for a brand-new business or one you already run?
+Nice â€” websites are a great place to start. Is your business new or already operating?
+Awesome ðŸ‘ Are you starting something fresh, or do you already have a business running?
+Perfect! Can I ask â€” is this your first business or an existing one you want to take online?
+Thatâ€™s exciting ðŸ™‚ Is this a new venture or an established business?
+Sure, I can guide you. May I know if the website is for a new business or an existing company?
+Absolutely. Is the website intended for a startup or for a business you already operate?
+Understood. Are you launching a new venture or improving your current business presence?
+Happy to assist. Is this your first online presence or an upgrade for your current business?
+Great â€” let me understand better. Is your business already operational?
+Nice! Tell me â€” what kind of business are we building this for?
+Sounds good ðŸ™‚ What do you do, and is the business already running?
+Cool! Whatâ€™s the business about â€” something new or something you already have?
+Thatâ€™s a good step. Are customers already coming to you offline?
+Interesting! Are you starting fresh or moving your current business online?
+Perfect â€” a website can really boost inquiries. Is your business already getting customers?
+Great decision ðŸ‘ Are you planning to launch a business or grow an existing one?
+Nice! I can suggest the right type of website â€” first tell me, is your business already active?
+Good choice ðŸ™‚ Are you trying to get your first customers or bring more customers?
+Excellent! Let me recommend the right setup. Do you already run the business?
+Sure ðŸ™‚ May I ask what youâ€™re planning to use the website for?
+I can help with that. What kind of business do you have in mind?
+Of course! Tell me a little about your business idea.
+Happy to help ðŸ‘‹ What are you thinking of creating?
+No problem at all â€” what would you like the website to do for you?
+Scenario 02
+â€” Confused / Idea Stage Visitor
+User: I have an idea/  I want to start something online/ I donâ€™t know what I need/ Can you guide me?/How to start a business online?
+AI Response:
+Thatâ€™s exciting ðŸ˜Š Tell me a bit about your idea â€” what are you thinking of starting?
+Iâ€™d be happy to guide you. What kind of business do you have in mind?
+Nice! Many businesses actually begin exactly this way. What are you planning to offer?
+Sure, letâ€™s figure it out together ðŸ‘ Whatâ€™s the idea?
+Great â€” you donâ€™t need to know the technical part yet. Just tell me what you want to create.
+I can definitely help. Is it a product you want to sell or a service you want to provide?
+Perfect! First step is understanding your goal. What are you hoping to build?
+Good starting point ðŸ™‚ What problem are you trying to solve for customers?
+No worries at all â€” most people come here at the idea stage. Tell me about it.
+Thatâ€™s actually the best time to talk. What kind of business are you thinking about?
+Letâ€™s start simple â€” do you want to sell products, offer services, or build an app idea?
+Interesting! Who do you imagine as your customers?
+Okay ðŸ‘ Are you planning something local or online nationwide?
+What inspired the idea?
+Do you already have a business name or still deciding?
+Are you planning to run it alone or with a team?
+Would customers book, order, or just contact you?
+Are you thinking website, mobile app, or youâ€™re not sure yet?
+Do you want this as a side business or full-time?
+Have you already started anything or still at planning stage?
+Donâ€™t worry â€” you donâ€™t need to know technology. Thatâ€™s our job ðŸ™‚
+Many successful businesses started exactly with â€œI just have an idea.â€
+Iâ€™ll help you understand what you actually need â€” website, app, or system.
+Youâ€™re at the right place â€” we usually guide clients from zero to launch.
+First we understand your idea, then we suggest the simplest way to start.
+Most people think they need an app, but often a website works better initially.
+Weâ€™ll keep it simple and practical for your budget.
+You focus on the business â€” we handle the technical side.
+I wonâ€™t push anything unnecessary; weâ€™ll choose only what you need.
+Starting online can feel confusing â€” Iâ€™ll break it down step by step.
+Usually, online businesses start with a website to test the idea.
+An app normally comes later after customers start using the service.
+First we validate your idea, then we build the platform.
+The goal is not just launching â€” itâ€™s getting customers.
+A simple setup can often start generating leads quickly.
+We normally recommend starting small and scaling later.
+The right platform depends on how customers will interact with you.
+Many startups overspend early â€” we help you avoid that.
+Weâ€™ll choose the fastest way to bring your first customers.
+You donâ€™t need a big system initially â€” just a working model.
+If youâ€™d like, I can suggest a basic plan for your idea.
+I can help you outline what features you actually need.
+I can have our consultant quickly review your idea and guide you.
+We can even tell you the estimated cost range once I understand it.
+Want me to help you shape the idea into a launch plan?
+I can prepare a simple structure for you.
+Once I know a little more, I can recommend the best starting point.
+I can connect you with our strategist â€” itâ€™s a quick 10-minute discussion.
+Many founders find it helpful to get a quick expert opinion.
+I can help you avoid common beginner mistakes.
+Take your time ðŸ™‚ What kind of business were you thinking?
+Even a rough idea is fine â€” you donâ€™t need full clarity yet.
+You can explain in simple words â€” Iâ€™ll understand.
+Are you thinking selling something or providing a service?
+No pressure â€” Iâ€™m here whenever youâ€™re ready.
+Scenario 03
+â€” Price-hungry User: These users will come and ask directly price, but Our AI wont tell the prices, itâ€™ll do below things.
+STEP 1 â€” Initial Deflection (Do NOT refuse, redirect)
+I  can definitely estimate that ðŸ™‚ First let me understand what youâ€™re planning to build.
+Sure! The cost actually depends on what you need â€” what are you thinking of creating?
+Happy to help. Is this for a website, mobile app, or an online store?
+Iâ€™ll give you a proper idea. What kind of project are you planning?
+Good question ðŸ‘ Are you starting a new business or improving an existing one?
+I can guide you with pricing, but first I need to know what you want the system to do.
+I donâ€™t want to give you a wrong estimate â€” tell me a bit about your requirement.
+We price based on features, not random numbers ðŸ™‚ What are you trying to build?
+I can calculate a range for you. Whatâ€™s the purpose of the project?
+Sure â€” what will customers be able to do on it?
+STEP 2 â€” If User Repeats â€œJust tell priceâ€
+I understand ðŸ™‚ but a basic website and a business-generating system are very different.
+I donâ€™t want to mislead you with a random number â€” two similar projects can vary a lot.
+If I quote without understanding, it will likely be wrong for your case.
+Let me quickly ask 2 things and I can guide you much better.
+Give me 30 seconds â€” Iâ€™ll narrow it down for you.
+Even a carâ€™s price changes based on features â€” same applies here ðŸ™‚
+I can give a range once I know your goal.
+I promise Iâ€™m not avoiding â€” I just want to give you a useful estimate.
+Iâ€™ll keep it very simple. What business is this for?
+Just one question: what do you want users to do on it?
+STEP 3 â€” Qualification Questions (Collect Data)
+The AI asks conversationally and try to ask the category so our LLM gets to know where to take the user if he wants to redirect to the portfolio page.
+â€¢ What business is this for?
+â€¢ Website or app?
+â€¢ Customers contact you or order online?
+â€¢ New or existing business?
+â€¢ Approx timeline?
+Question Variations
+What kind of business is this for?
+Are you planning to sell online or just get inquiries?
+Will users place orders or only contact you?
+Do you already have a website?
+When are you planning to start?
+STEP 4 â€” Feature Listing (Value Building)
+We will use our proposal and other data here to get the details.
+Now,  instead of price â†’ AI explains what they
+actually need
+.
+AI Response Examples
+Based on what you told me, youâ€™ll need:
+â€¢ Mobile-friendly website
+â€¢ Product/service pages
+â€¢ Contact or WhatsApp integration
+â€¢ Google visibility setup
+For your case, a proper setup should include:
+â€¢ Admin panel
+â€¢ Customer inquiry system
+â€¢ SEO-ready pages
+â€¢ Speed optimization
+To make it useful (not just a page), we normally include:
+â€¢ Lead capture form
+â€¢ Direct contact option
+â€¢ Security & hosting setup
+Otherwise, youâ€™ll just have a page online but no inquiries.
+STEP 5 â€” Now Give RANGE (Optional â€” Controlled)
+AI still doesnâ€™t
+give an exact quote; here, call initialization would work
+Responses
+Projects like this usually fall into a range depending on features.
+I can give you an accurate estimate after a quick discussion with our consultant.
+A proper estimate needs 10 minutes discussion so we donâ€™t overcharge or underscope.
+STEP 6 â€” Move to Call Booking (Most Important Conversion)
+First Call Offer
+I can arrange a quick 10-minute call where we explain everything clearly.
+Our consultant can suggest the exact setup for your business.
+Itâ€™ll actually save you money because youâ€™ll know what you really need.
+Weâ€™ll also tell you what NOT to spend on.
+Will send the Calendly link if needed, it also has to be integrated inside the AI chatbot
+Call Closing Variations
+Would you prefer a call this evening or tomorrow?
+What time works better for you?
+Should I schedule a quick consultation for you?
+Itâ€™s a short discussion â€” no obligation.
+Iâ€™ll set it according to your availability.
+STEP 7 â€” Move to Call Booking (Most Important Conversion)
+AI:
+Where should we send the meeting details â€” WhatsApp or email?
+Then:
+Please share the best number.
+And your name?
+If User Refuses Call
+User: â€œNo call.â€
+AI Responses
+No problem ðŸ™‚ I can still send a brief plan to you.
+Iâ€™ll just share a simple outline you can review later.
+You can decide after seeing it.
+Share Email instead.
+Scenario 04
+â€” Exploring / Browsing Visitor
+User:  Just looking/ Exploring/ Checking services/ No requirement yet/ Just visiting/ Seeing what you do/ Nothing for now.
+AI Responses:
+No worries at all ðŸ™‚ Feel free to explore â€” Iâ€™m here if you get stuck anywhere.
+Totally fine! Many visitors like to look around first.
+Thatâ€™s perfectly okay ðŸ‘Œ Let me know if you want me to explain anything.
+Sure! I can also quickly guide you to the right section if helpful.
+Welcome! Take your time â€” what caught your interest here?
+All good ðŸ˜Š Are you researching for something in the future?
+No pressure at all â€” just browsing or planning something later?
+Iâ€™m here whenever you need help.
+Happy to show you what we do if you want.
+You can ask me anything about our services.
+Are you thinking about starting something later on?
+What kind of business are you involved in?
+Have you built a website before?
+Are you researching for yourself or a client?
+Do you run a business currently?
+Just curious â€” what brought you to our site?
+Looking for inspiration or planning a project?
+Are you comparing companies?
+Are you more interested in websites, apps, or general info?
+Are you a business owner or just learning?
+If they respond casually, AI gives light helpful information.
+We mainly help businesses build websites and systems that bring inquiries.
+Most people who visit are either starting online or upgrading old websites.
+A lot of companies actually come to us after their first website didnâ€™t work.
+Many businesses now use websites mainly for lead generation rather than just presence.
+Even a simple website can start bringing customers if structured properly.
+After a few messages:
+Can I show you a project similar to your interest?
+I can recommend a good starting point based on your business.
+Want to see how some businesses use websites to get daily inquiries?
+I can explain what usually works best for businesses like yours.
+Would you like a quick example?
+If They Still Have No Requirement:
+No problem ðŸ™‚ Whenever you plan something, you can come back and Iâ€™ll guide you.
+Even if itâ€™s months later, Iâ€™ll still be here.
+Feel free to bookmark us â€” I can help you plan when you're ready.
+Starting online can feel confusing; I can simplify it anytime.
+Iâ€™ll remember this conversation if you return.
+You donâ€™t ask directly.
+Instead:
+I can send you a short guide on how businesses usually start online.
+I can share a simple checklist many owners find useful.
+Would you like me to send it to your email or WhatsApp?
+If User Says â€œNot Interestedâ€
+No worries at all ðŸ™‚ Thanks for visiting us!
+Happy you stopped by â€” have a great day!
+If you ever need help, Iâ€™ll be here.
+Good luck with whatever youâ€™re planning!
+Feel free to come back anytime ðŸ‘‹
+Scenario 05
+â€” Evaluating if youâ€™re capable. ( Portfolio Updates)
+Users: Have you built an ecommerce website?/ Any Shopify projects?/ Do you have food delivery apps?/ Have you done a real estate website?/ Do you have examples?/ Show me your previous work/ Can I see your portfolio?/ Any project similar to mine?/ Have you worked in healthcare?/ Do you have mobile app samples?
+AI Steps:
+The AI must immediately:
+Understand category
+Fetch similar portfolio item
+Open/scroll user to that page
+Explain what was built
+Connect it to userâ€™s idea
+Step 1 â€” Acknowledge + Confirm
+Yes, weâ€™ve built several ðŸ™‚ What type of products are you planning to sell?
+We have! Let me show you a similar project.
+Absolutely â€” Iâ€™ll take you to one right now.
+Yes ðŸ‘ Iâ€™ll open a relevant example for you.
+Sure! What category is your store?
+Step 2 â€” Guided Viewing (VERY IMPORTANT)
+Iâ€™ve opened one of our recent ecommerce projects for you.
+This store allows:
+â€¢ Product browsing
+â€¢ Online payments
+â€¢ Order tracking
+â€¢ Admin inventory management
+AI Response:
+Yes, we have ðŸ™‚ Iâ€™m opening a similar project for you right now.
+Absolutely â€” let me take you to one of our recent projects.
+Sure! Iâ€™ll show you a live example.
+Yes ðŸ‘ Iâ€™m guiding you to a similar case.
+Weâ€™ve worked on that â€” Iâ€™m opening it on your screen.
+Let me show you something relevant.
+Iâ€™ve got a perfect example for you â€” one moment.
+Iâ€™ll take you to a similar project page.
+Opening a related portfolio item now.
+Iâ€™ll scroll you to a project you might like.
+You should now see the homepage of the project.
+Scroll a little â€” youâ€™ll notice the product categories.
+This section shows how customers browse items.
+Here customers can directly open product details.
+Notice the â€œAdd to Cartâ€ and â€œBuy Nowâ€ options here.
+This button connects customers instantly to checkout.
+The site is optimized for mobile â€” most buyers come from phones.
+Iâ€™m highlighting the important sections for you.
+This is the admin side feature we built for the owner.
+You can see how navigation is kept simple.
+We built a full product catalogue system here.
+Customers can browse, filter, and place orders.
+The owner can manage products from an admin panel.
+Payments are integrated directly.
+Orders automatically appear in the dashboard.
+Stock updates automatically after purchase.
+Customers receive confirmation instantly.
+We added an easy checkout to reduce drop-offs.
+The design focuses on clarity so customers donâ€™t get confused.
+Everything is manageable without technical knowledge.
+Before this, the client handled orders manually.
+After launch, most orders became automatic.
+They started receiving daily inquiries.
+Customers began finding them on Google.
+It reduced their manual work significantly.
+They now update products themselves easily.
+The website became their main sales channel.
+Their customers mostly order directly now.
+It helped them organize inventory properly.
+They no longer needed to explain products repeatedly.
+Would your business work in a similar way?
+Are you planning something like this?
+What kind of products would you sell?
+Is your store online already or offline?
+Do you want customers to order or just inquire?
+Would you also need online payment?
+Are you starting fresh or upgrading?
+Roughly how many products would you have?
+Would delivery or pickup be required?
+What is your business about?
+A similar structure would work well for you.
+We would just customize categories and design.
+Your setup would be slightly simpler than this.
+You may not need all features initially.
+We can start with a basic version and expand later.
+This can easily adapt to your business type.
+The same flow can be tailored for your customers.
+We can simplify checkout according to your process.
+You can manage everything yourself after launch.
+It will mainly depend on how customers interact with you.
+I can have our consultant suggest the exact setup.
+They can quickly review your idea.
+Itâ€™s just a short 10-minute discussion.
+Theyâ€™ll also tell you what features you actually need.
+This helps avoid unnecessary cost.
+Youâ€™ll get a clear plan before starting.
+Theyâ€™ll explain everything in simple terms.
+Itâ€™s more like guidance than a sales call.
+You can ask anything during it.
+No obligation â€” just clarity.
+Should I schedule a quick call for you?
+Would today evening or tomorrow suit you?
+What time works best?
+Iâ€™ll arrange it according to your availability.
+Where should I send the meeting details â€” WhatsApp or email?
+Please share the best number to reach you.
+And your name?
+Iâ€™ll note your requirement for them.
+Youâ€™ll receive confirmation shortly.
+Our team will contact you soon.
+I can show you another example as well.
+Want to see a mobile app version?
+I can also show a simpler project.
+Iâ€™ll open another category for comparison.
+Take your time â€” Iâ€™ll stay here.
+You can ask about any feature you see.
+I can explain any section.
+Just tell me what youâ€™re curious about.
+Weâ€™ve built similar ones in different industries.
+Iâ€™ll guide you through them.
+Scenario 06
+â€” User asks about Technology
+User Question examples:
+Which technology do you use?
+Do you use React?
+Is it WordPress?
+Do you build in Shopify?
+Native or Flutter?
+Which backend?
+Do you use Node?
+Is it custom coded?
+MERN stack?
+Laravel?
+What tech stack do you work on?
+AI response:
+We work with multiple technologies depending on the project ðŸ™‚
+What are you planning to build?
+Yes, we use modern stacks like React, Node, and others â€” it really depends on your requirement.
+Tell me about your project idea.
+Good question ðŸ‘ We donâ€™t stick to one technology; we choose what fits the business best.
+What are you looking to create?
+We select the tech based on scalability and budget.
+Is this for a website, app, or system?
+We can build using custom code, frameworks, or platforms depending on the use case.
+What are you planning?
+If User Specifically Asks any tech:
+React
+Yes, we do React-based applications. Are you planning a web platform or a dashboard system?
+We use React where fast UI and scalability are needed. What kind of project do you have in mind?
+React works well for dynamic platforms. What are you trying to build?
+Flutter / Mobile App
+Yes, we build apps using Flutter and native approaches depending on performance needs.
+Is your app idea service-based or ecommerce?
+We usually recommend Flutter for startups to reduce cost and development time.
+What will users do inside your app?
+WordPress
+Yes, we use WordPress where a manageable website is needed.
+Is your goal content, leads, or online sales?
+WordPress works great for business websites and SEO.
+What type of business is this for?
+Shopify / Ecommerce
+Yes, we work on Shopify and custom ecommerce solutions.
+What products are you planning to sell?
+Shopify is good for quick launch, while custom works for advanced features.
+Which one are you considering?
+Capability Assurance (Build Trust)
+Technology is actually the second step â€” first we design the solution.
+The same business can fail on the wrong tech choice.
+We choose the stack based on performance and future scaling.
+Our goal is not just coding â€” itâ€™s building something that grows with you.
+Many clients come with a fixed tech request, but after understanding, we recommend a better approach.
+What problem are you trying to solve with the system?
+What will users do on your platform?
+Are customers ordering, booking, or just contacting?
+Are you building for internal use or customers?
+Is this a startup or an existing business?
+User: â€œI need MERN stackâ€
+AI:
+Sure â€” MERN can work well. What scale are you expecting initially?
+Are you building an MVP or a full production platform?
+Do you already have UI designs?
+Will there be real-time users or standard usage?
+Do you need an admin dashboard as well?
+I can have our technical consultant review your requirement and suggest the best architecture.
+Theyâ€™ll also tell you what to avoid early on.
+Itâ€™s a quick discussion and gives clarity before development.
+Youâ€™ll get a proper approach instead of trial and error.
+Want me to arrange that?
+If YES, then arrange a call with Calendly
+There can be multiple scenarios as well, like:
+Scenario 07
+â€” Returning Visitor:
+User:
+Hey, I think I visited earlier.
+AI Response:
+Welcome back! Iâ€™m glad you returned. Since youâ€™ve already explored us once, I wonâ€™t make you go through the whole introduction again. Iâ€™m directly opening the projects and services that usually interest returning visitors so you can quickly understand what we actually build. You can browse real applications weâ€™ve developed, see their features, and understand how they work from a user and business perspective. If you already have an idea in mind, you can tell me and Iâ€™ll immediately relate it to a similar project and explain how we would approach building it.
+User:
+Hi, I remember checking your portfolio a few days ago.
+AI Response:
+Great to see you again! Iâ€™m taking you straight to the portfolio section so you can continue from where you left. Iâ€™ll show you similar apps and platforms that match what visitors usually revisit us for. When you open any project, Iâ€™ll explain what the client needed, how we structured the system, and what features were included in the first version. If you want, you can describe your requirement and Iâ€™ll suggest the most practical starting version along with development approach and expectations.
+User:
+I came before but didnâ€™t explore much.
+AI Response:
+No problem â€” Iâ€™ll give you a faster walkthrough this time. Iâ€™m presenting selected projects instead of the entire catalog so you can quickly understand our capabilities. As you view them, Iâ€™ll explain the business logic behind each product and how similar solutions can be created for different industries. Once you share your idea, Iâ€™ll outline what your initial build should include and how we would structure it technically.
+User:
+I opened your site earlier and came back today.
+AI Response:
+Nice to have you back! Iâ€™m skipping the generic intro and directly guiding you through actual products weâ€™ve delivered. Iâ€™ll help you explore relevant case studies, show how the apps operate, and explain the development approach behind them. If youâ€™re evaluating whether your idea is feasible, you can tell me your concept and Iâ€™ll translate it into a realistic application structure and development plan.
+User:
+I saw your company earlier but wanted to check properly now.
+AI Response:
+Perfect â€” this time Iâ€™ll walk you through things clearly. Iâ€™m showing you working applications similar to what businesses usually want so you can see practical implementations instead of just descriptions. As you open each one, Iâ€™ll explain the core features, user roles, and backend management. If you share what you want to build, Iâ€™ll align it with a comparable project and explain how your first version would be created.
+Scenario 08
+â€” Job Seeker:
+User:
+Hi, are you hiring?
+AI Response:
+Yes, we do hire for different roles based on current projects. You can share your skills or resume and Iâ€™ll match you with a suitable position and forward it to our hiring team.
+User:
+I want to apply for a job.
+AI Response:
+Sure! Just upload your resume or tell me your experience and preferred role. Iâ€™ll check available openings and guide you through the application process.
+User:
+Do you offer internships?
+AI Response:
+Yes, we offer internships for students and freshers. Share your interests or field and Iâ€™ll help you apply for the relevant department.
+User:
+Iâ€™m a developer looking for opportunities.
+AI Response:
+Great! Tell me your technologies and experience. Iâ€™ll see which role fits you and move your profile for review.
+User:
+Where should I send my CV?
+AI Response:
+You can upload your CV here directly. Iâ€™ll attach it to your profile and forward it to our recruitment team.
+User:
+Any openings right now?
+AI Response:
+Yes, we have ongoing openings depending on project needs. Share your role and experience, and Iâ€™ll check if thereâ€™s a suitable position for you.
+User:
+Iâ€™m a fresher, can I still apply?
+AI Response:
+Absolutely. We consider freshers as well. Tell me your field and skills, and Iâ€™ll guide you to the right application.
+User:
+What roles are available?
+AI Response:
+We usually hire developers, designers, QA testers, and business analysts. Share your background and Iâ€™ll suggest the closest match.
+User:
+I have 2 years experience in web development.
+AI Response:
+Thatâ€™s great. Iâ€™ll align your profile with our web development roles and forward it to the hiring team for review.
+User:
+Do you have remote jobs?
+AI Response:
+Some roles can be remote depending on the project. Tell me your position and Iâ€™ll let you know the available work type.
+User:
+What is your hiring process?
+AI Response:
+It usually includes resume review, a discussion round, and a technical or practical evaluation depending on the role.
+User:
+Can I apply for multiple roles?
+AI Response:
+Yes, you can. Iâ€™ll note your preferences and share your profile with the relevant departments.
+User:
+I donâ€™t have a portfolio yet.
+AI Response:
+No problem. You can still apply by sharing your skills and any academic or personal projects youâ€™ve worked on.
+User:
+When will I get a response?
+AI Response:
+After submission, the hiring team reviews profiles and usually responds within a few working days.
+User:
+Do you provide training?
+AI Response:
+Yes, selected candidates go through an initial training or onboarding phase before working on live projects.
+Scenario 09
+â€” Wrong Visitors / Irrelevant Queries:
+User:
+Do you sell phones here?
+AI Response:
+We donâ€™t sell products, but we do build e-commerce apps and websites for businesses that sell them.
+User:
+Is this Amazon customer care?
+AI Response:
+No, this is a software development company, though we can build platforms similar to online marketplaces.
+User:
+I want to recharge my mobile.
+AI Response:
+I canâ€™t recharge it, but I can show you apps weâ€™ve developed that provide recharge and payment features.
+User:
+Can you repair my laptop?
+AI Response:
+We donâ€™t do hardware repairs, we create software systems and applications for businesses.
+User:
+I came for a school project answer.
+AI Response:
+I canâ€™t complete assignments, but I can explain how real apps are designed and built if that helps.
+User:
+Are you a bank?
+AI Response:
+No, weâ€™re a tech company that develops fintech and banking platforms for clients.
+User:
+Can you help me recover my Instagram account?
+AI Response:
+I canâ€™t access or recover accounts, but we do build secure login and account systems for applications.
+User:
+I need to book a flight ticket.
+AI Response:
+I canâ€™t book tickets, but I can show you booking platforms weâ€™ve developed.
+User:
+I want to order food.
+AI Response:
+I canâ€™t place orders, though we build food delivery apps and ordering systems.
+User:
+Is this a government office?
+AI Response:
+No, this is a private software development company.
+User:
+Can you track my courier?
+AI Response:
+I canâ€™t track shipments, but we build logistics and tracking systems for businesses.
+User:
+Iâ€™m looking for customer support of another company.
+AI Response:
+Youâ€™ve reached a development company, but I can help you understand how support systems are built.
+Scenario 10
+â€” Competitor / Agency Checking You
+User: Where are you located?
+AI Responses:
+We operate globally with a distributed team and work with clients from multiple regions ðŸ™‚
+Our team works remotely and serves international clients.
+We support clients worldwide â€” location doesnâ€™t affect delivery.
+We collaborate online with businesses across different countries.
+Weâ€™re set up to work remotely with clients wherever they are.
+User:
+How big is your team?
+We have a structured team that covers design, development, and project management.
+We scale resources based on project requirements.
+The team size varies depending on active projects.
+We assign a dedicated team per project.
+Youâ€™ll always have a project coordinator and technical team.
+User:
+Who are your clients?
+We work with startups, small businesses, and established companies across different industries.
+Most of our work is under confidentiality agreements, but I can show relevant project examples.
+I can show you similar projects instead â€” what industry are you interested in?
+We maintain client privacy but demonstrate our capabilities through portfolio work.
+Let me show a related project rather than sharing client details.
+User:
+What is your development process?
+We follow a structured process: understanding requirement â†’ design â†’ development â†’ testing â†’ launch.
+The workflow adapts based on project complexity.
+We keep clients updated at every stage.
+Youâ€™ll receive progress reviews during development.
+I can explain the approach based on your project idea.
+User:
+Hourly rate?
+We donâ€™t usually work on generic hourly quotes â€” we scope projects based on requirements.
+Cost depends entirely on features and complexity.
+We provide project-based estimates after understanding needs.
+Each project is estimated individually.
+I can help estimate if you tell me what youâ€™re planning.
+User:
+Do you do white-label work?
+We do collaborate with businesses on long-term projects depending on requirements.
+Partnership discussions are handled directly by our management team.
+I can note your interest and have our team contact you.
+Could you briefly share what kind of collaboration youâ€™re considering?
+We can explore that â€” what type of projects are you handling?
+Scenarios 11: Feature Shopper
+Typical User Questions
+Do you provide SEO?
+Is hosting included?
+Do I get admin panel?
+Will I be able to update content?
+Do you provide maintenance?
+Payment gateway integration?
+Mobile responsive?
+Domain included?
+Support after delivery?
+Will website rank on Google?
+Do you provide content?
+Can I manage products myself?
+AI Behaviour Strategy
+Step 1:
+Answer clearly
+Step 2:
+Group features
+Step 3:
+Explain purpose
+Step 4:
+Ask about their project
+The AI should slowly make the user realize:
+They donâ€™t need featuresâ€¦
+They need a
+solution
+.
+1. Direct Feature Responses (with Transition)
+SEO
+Yes, we build SEO-ready websites so Google can properly read them.
+What kind of business is this for?
+We structure pages so they can rank â€” what services or products will you offer?
+SEO depends a lot on your business type. What are you planning to start?
+Hosting
+Yes, we also handle hosting setup so you donâ€™t have to manage technical things.
+Is this your first website?
+We manage the technical setup for clients. Are you creating a business website?
+Admin Panel
+Yes, youâ€™ll be able to update content and products yourself.
+Will you be adding products regularly?
+Youâ€™ll have a simple dashboard to manage things. What will you mainly update?
+Maintenance
+Yes, we provide post-launch support as well.
+Are you planning long-term usage for your business?
+We assist after launch too â€” what type of website are you considering?
+Payment Gateway
+Yes, online payments can be integrated.
+Are you planning to sell products or services?
+We connect payment options securely. Will customers order directly online?
+Mobile Friendly
+All our websites are mobile optimized since most users visit from phones.
+What kind of customers will visit yours?
+2. Bundle Explanation (Very Important)
+After 2â€“3 feature questions, AI must stop checklist pattern.
+AI should say something like:
+All of these features are part of the setup â€” what really matters is how customers will use the website.
+Instead of selecting features individually, we design the system around your business.
+The right features depend on what you want customers to do.
+A restaurant, a clothing store, and a service business all need different setups.
+I can suggest the proper structure once I understand your requirement.
+(This is the turning point.)
+3. Redirect to Requirement
+Now AI asks:
+What kind of business are you planning?
+Are customers booking, ordering, or contacting you?
+Is this a new business or existing one?
+Will you sell online or just get inquiries?
+What are you hoping the website will help you achieve?
+4. If User Keeps Asking Features Only
+They might continue:
+â€œDo you provide logo?â€
+â€œDo you write content?â€
+AI must gently interrupt the pattern.
+Responses
+We can include that as well ðŸ™‚
+Let me understand your project so I can recommend what you actually need.
+Yes, thatâ€™s possible.
+Tell me a little about your business â€” Iâ€™ll guide you properly.
+All of this can be arranged.
+What are you planning to build?
+Rather than you figuring out features, I can suggest the best setup.
+A quick description of your idea will help me guide you much better.
+5. Move to Consultation
+After the user explains:
+Based on your requirement, I can have our consultant outline the exact setup.
+Theyâ€™ll explain what to include and what you can skip initially.
+It saves both time and cost.
+Itâ€™s a short discussion â€” no obligation.
+Want me to arrange it?
+6. Contact Capture
+Where should we send the details â€” WhatsApp or email?
+Please share your number.
+And your name?
+Scenarios 12: Urgent Buyers ( need in 1-2 days)
+Typical User Messages
+I need a website urgently
+Can you deliver in 2 days?
+I need it this week
+Very urgent project
+Deadline in 48 hours
+Client waiting
+I need quick delivery
+ASAP development required
+I have a presentation/investor demo
+1. Immediate Acknowledgement
+Response Variations
+I understand â€” sounds urgent. Let me quickly check what would be possible ðŸ™‚
+Weâ€™ll try to help you with this. What exactly do you need built?
+No worries, letâ€™s see how we can assist. Is it a website, app, or update?
+Got it ðŸ‘ Tell me a little about the requirement so I can prioritize correctly.
+Iâ€™ll treat this as priority. What are you trying to launch?
+Let me gather a few details so I can alert our team immediately.
+We handle urgent launches sometimes â€” whatâ€™s the deadline?
+Okay, letâ€™s act fast. What needs to be ready?
+Iâ€™ll check availability for you. What kind of project is it?
+Iâ€™ll help you figure the quickest possible approach.
+2. Quick Qualification (FAST Questions Only)
+AI should ask only essential questions:
+What needs to be ready? (website/app/landing page)
+Deadline date?
+Do you already have content/design?
+Is it new or modification?
+What is the main purpose (demo, launch, submission)?
+Example Lines
+What is your exact deadline?
+Do you already have the content or design ready?
+Is this a full website or just a landing page?
+Is it for real customers or a presentation/demo?
+Do you need payments or just display information?
+3. Set Realistic Expectation (VERY IMPORTANT)
+The AI must avoid commitment.
+Responses
+Some full systems take time, but a quick launch version may be possible.
+We may be able to prepare a starter version first and expand later.
+The fastest approach is usually a launch-ready version, not the final product.
+I want to connect you directly with our team so you get a clear answer.
+This needs a quick discussion with a developer to confirm feasibility.
+4. Immediate Escalation to Call
+Now AI must
+push direct call strongly
+(stronger than any other scenario).
+Call Push Responses
+The best step is a quick call with our team right now.
+A 10-minute discussion will save a lot of time.
+Iâ€™ll arrange a priority callback.
+Theyâ€™ll tell you exactly what can be done within your deadline.
+Iâ€™ll mark this as urgent internally.
+5. Contact Capture (Fast Mode)
+Instead of long flow:
+AI:
+Iâ€™ll connect you with our project team immediately.
+Please share your phone number.
+Then:
+And your name?
+6. After Capture (Reassurance)
+Thanks â€” Iâ€™ve marked this as urgent.
+Our team will contact you shortly.
+Please keep your phone available.
+Theyâ€™ll discuss the quickest solution.
+Weâ€™ll try to help you meet the deadline.
+7. If User Hesitates to Share Number
+Since the timeline is tight, chat may delay things â€” a quick call is much faster.
+Our developer needs to confirm feasibility directly.
+Youâ€™ll get clarity immediately.
+It wonâ€™t be a sales call â€” just a solution discussion.
+This is the fastest way to help you.
+Get the Email if the number not provided.
+Functional Requirements of Admin:
+4.1 Admin Dashboard:
+The Dashboard Home Page provides a real-time summary of AI agent performance, visitor engagement, and business outcomes.
+It serves as the primary monitoring screen where the Owner can quickly understand daily activity without opening individual modules.
+The page must load immediately after a successful login.
+Layout Structure
+The dashboard shall be divided into the following sections:
+System Status Header
+Key Performance Metrics (KPIs)
+Live Activity Panel
+Lead Snapshot
+Conversation Snapshot
+AI Insights (Smart Summary)
+Recent Notifications
+System Status Header
+Information Displayed
+AI Agent Name with Edit icon
+Agent Status (Online / Paused / Training)
+Connected Website Domain
+Last Training Date
+Active Language(s)
+Voice Mode (Enabled/Disabled)
+Actions
+Owner can:
+Pause AI
+Resume AI
+Refresh training
+Key Performance Metrics (KPI Cards) ( Daily Refreshed)
+Displayed as top summary cards.
+Card 1 â€” Visitors Engaged
+Definition: Number of visitors who interacted with the AI.
+Show:
+Today
+Yesterday comparison
+% increase/decrease
+Card 2 â€” Conversations Started
+Number of chat sessions initiated by visitors.
+Show:
+Today count
+Weekly trend indicator
+Card 3 â€” Leads Generated
+Visitors who shared contact details.
+Show:
+Today
+This week
+Conversion rate (Conversations â†’ Leads)
+Card 4 â€” Meetings Requested
+Number of consultation bookings.
+Show:
+Pending
+Completed
+Card 5 â€” Conversion Rate
+Formula:
+Leads / Conversations Ã— 100
+Card 6 â€” AI Response Rate
+Percentage of user messages successfully answered by AI.
+Live Activity Panel (Real-Time)
+A real-time section showing current website activity.
+Displays
+Active visitors on site
+Visitors currently chatting
+Last message received
+Page visitor is currently on
+Live Alerts
+New chat started
+Lead captured
+Meeting requested
+Lead Snapshot (Quick CRM View)
+Shows the most recent leads.
+Each lead shows:
+Name
+Requirement
+Source page
+Time received
+Quick Actions
+The owner can:
+Mark contacted
+Add note
+Open full lead profile
+Call or email (future integration)
+Conversation Snapshot
+Shows last few conversations handled by AI.
+Displays:
+Visitor first message
+Conversation duration
+Lead captured (Yes/No)
+Status (active/closed)
+The owner can:
+Open full chat
+Take over conversation (if live)
+AI Insights (Smart Summary) â€” IMPORTANT FEATURE
+The system automatically generates a daily business summary using AI analysis.
+Example Output
+Most visitors asked for ecommerce websites
+Peak traffic time: 8 PM â€“ 11 PM
+High interest in mobile apps this week
+3 users asked for urgent development
+Pricing questions increased today
+Recent Notifications
+Displays system alerts:
+New lead captured
+Missed conversation
+Training completed
+Support request received
+System error
+Notifications must be clickable and redirect to relevant module.
+Refresh & Update Behavior
+Dashboard data refreshes every 15â€“30 seconds
+Manual refresh button available
+Real-time updates via socket connection (preferred)
+Empty State Handling
+If no visitors yet:
+Display message:
+â€œYour AI agent is live and ready. Share your website to start receiving visitors.â€
+Include:
+Widget installation guide shortcut
+Test chat button
+Performance Requirements
+Page load time < 3 seconds
+Real-time updates must not require a full page reload
+Dashboard accessible on desktop and tablet
+4.2 AI Training Module (Knowledge Base Management)
+4.2.1 Purpose
+The AI Training Module enables the Owner to teach the AI Agent about their business so the agent can behave like a trained company representative while interacting with website visitors.
+The system shall allow the Owner to provide knowledge through multiple methods including conversational instructions, website content, documents, structured data, and manual entries.
+The AI shall prioritize Owner-provided information over general AI knowledge when generating responses.
+4.2.2 Training Workflow
+The training process shall follow this sequence:
+Owner provides business information
+System processes and extracts meaningful data
+Knowledge is structured and indexed
+AI responses utilize this knowledge during conversations
+Training shall run in the background and must not interrupt active chats.
+4.2.3 Conversational Training (Owner Talks to AI)
+The platform shall provide a â€œTrain the AIâ€ chat interface inside the dashboard where the Owner can directly teach the AI using natural language.
+Owner Capabilities
+The Owner can:
+Describe services
+Define company policies
+Set behavior rules
+Guide sales responses
+Correct AI behavior
+Example Instructions
+â€œWe do not provide template websites.â€
+â€œIf a user asks for price, first ask their requirement.â€
+â€œCollect phone number from urgent clients.â€
+â€œOur office hours are 10 AM â€“ 7 PM IST.â€
+System Behavior
+The system shall:
+Store conversations as training instructions
+Convert instructions into structured knowledge
+Apply instructions to future AI responses
+The system must distinguish between:
+Behavioral instructions (how to respond)
+Business knowledge (facts)
+4.2.4 Website URL Scraping
+The Owner may provide their website URL to automatically import business information.
+Owner Actions
+Enter domain URL
+Select specific pages (optional)
+Re-scan website content
+System Processing
+The system shall:
+Crawl accessible website pages
+Extract readable text content
+Identify services, FAQs, and descriptions
+Ignore scripts and styling elements
+The extracted content shall be stored in the knowledge base.
+4.2.5 Multi-Document Upload Training
+The Owner shall be able to upload multiple documents simultaneously.
+Supported Formats
+PDF
+DOC/DOCX
+TXT
+Example Documents
+Company profile
+Proposals
+Brochures
+Case studies
+Service documents
+Policies
+System Behavior
+The system shall:
+Extract text from each document
+Segment the content into retrievable knowledge
+Index it for AI retrieval
+The AI shall answer questions based on uploaded documents.
+4.2.6 Media Training
+The system shall allow training using media files.
+Supported Media
+Images
+Audio recordings
+Video files
+Processing
+Images:
+Optional OCR text extraction
+Caption reading
+Audio/Video:
+Speech-to-text transcription
+Conversion into knowledge entries
+4.2.7 Structured Database Knowledge Integration
+The Owner may provide structured business data to the AI.
+Accepted Input Methods
+File Upload
+SQL dump (.sql)
+CSV
+Excel
+Manual Structured Entry
+Form-based product/service creation.
+Example Data
+Product catalog
+Service packages
+Pricing plans
+Feature lists
+Categories
+System Behavior
+The system shall:
+Parse structured data
+Map fields into readable format
+Convert records into retrievable entries
+Allow the AI to recommend services/products
+The AI shall not expose raw database records or internal identifiers.
+4.2.8 Manual Written Knowledge Entry
+The Owner shall be able to manually write knowledge using a text editor.
+The Owner can add:
+FAQs
+Policies
+Instructions
+Business description
+The AI shall use this information while answering users.
+4.2.9 Knowledge Correction (Supervised Learning)
+The Owner shall be able to correct incorrect AI responses.
+Owner Actions
+Open conversation
+Provide corrected answer
+Mark as preferred response
+System Behavior
+The system shall:
+Store the corrected answer
+Use it in similar future queries
+Improve response accuracy
+4.2.10 Training Status & Feedback
+The dashboard shall display:
+Training progress
+Last training date
+Knowledge size
+Processing errors
+The Owner shall receive notification upon completion.
+Example:
+â€œAI learned 124 new knowledge entries.â€
+4.2.11 Knowledge Priority Hierarchy
+When responding to visitors, the AI shall prioritize knowledge as follows:
+Owner behavioral instructions (chat training)
+Corrected responses
+Structured database data
+Manual written knowledge
+Uploaded documents
+Website scraped content
+General AI knowledge
+4.2.12 Safety Controls
+The system shall:
+Prevent exposure of sensitive database data
+Avoid sharing internal notes
+Allow marking information as private
+4.2.13 Failure Handling
+If the AI cannot find reliable information, it shall respond safely, for example:
+â€œI may need to confirm this with our team. I can arrange a quick discussion for you.â€
+4.2.14 Performance Requirements
+Training runs in background
+Active chats remain uninterrupted
+Large files supported (configurable limit)
+Knowledge updates apply without system downtime
+4.3 Conversations Module (Chat Monitoring & Live Interaction):
+4.3.1 Purpose
+The Conversations Module allows the Owner to monitor, review, and manage all interactions between the AI Agent and Website Visitors.
+This module ensures transparency, quality control, and human intervention capability when required.
+The Owner shall be able to:
+View all past and active conversations
+Join live chats
+Override AI responses
+Review chat transcripts
+Analyze conversation outcomes
+4.3.2 Conversation List View
+The main screen shall display a list of all chat sessions.
+Each conversation item shall display:
+Visitor ID (anonymous or named)
+Visitor name (if provided)
+Date and time
+Conversation status (Active / Closed / Escalated)
+Lead captured (Yes / No)
+Source page (where chat started)
+Conversation duration
+Intent tag (Website / App / Pricing / Support etc.)
+4.3.3 Filters & Search
+The Owner shall be able to:
+Filter by date range
+Filter by lead status
+Filter by conversation outcome
+Filter by intent type
+Search by visitor name, email, or phone
+Filter active chats only
+4.3.4 Conversation Detail View
+When a conversation is opened, the system shall display:
+Full chat transcript (AI and visitor messages)
+Timestamp for each message
+Message type (Text / Voice)
+Lead information (if captured)
+AI intent classification
+Conversation summary (auto-generated)
+4.3.5 Live Chat Monitoring
+The system shall support real-time monitoring of ongoing conversations.
+Live Indicators:
+Active visitor count
+Visitor currently typing
+Current page of visitor
+Duration of chat
+The Owner shall see new messages instantly without refreshing the page.
+4.3.6 Human Takeover (Manual Override)
+The Owner shall be able to take control of a live conversation.
+Actions Available:
+Click â€œTake Over Chatâ€
+Send manual message
+Pause AI responses
+Resume AI after manual intervention
+System Behavior:
+Once takeover is activated, AI stops replying
+Owner messages are labeled as â€œHuman Agentâ€
+Owner can return control to AI
+4.3.7 Escalation Rules
+The system shall automatically suggest escalation when:
+AI confidence is low
+Visitor repeats unanswered question
+Visitor expresses frustration
+Visitor requests human
+Urgent project identified
+System may notify Owner:
+â€œHigh-intent visitor detected. Consider joining chat.â€
+4.3.8 Conversation Summary (AI Generated)
+After the conversation ends, the system shall auto-generate:
+Visitor intent
+Business type
+Requirements discussed
+Lead qualification level (Cold / Warm / Hot)
+Suggested next action
+This summary shall be visible to Owner.
+4.3.9 Lead Creation Integration
+If a visitor provides contact details:
+The system shall automatically:
+Create a lead entry
+Attach conversation transcript
+Mark lead status as â€œNewâ€
+Notify Owner
+4.3.10 Conversation Status Types
+Each conversation shall have one of the following statuses:
+Active
+Closed by AI
+Closed by Visitor
+Escalated to Human
+Converted to Lead
+Support Request
+4.3.11 Voice Interaction Logs
+If voice mode is enabled:
+Audio input shall be converted to text
+Transcript shall be stored
+Voice messages labeled accordingly
+4.3.12 Data Retention
+The system shall:
+Store conversation history securely
+Allow export of transcripts (PDF/CSV)
+Allow deletion (if required by compliance)
+Retain data based on subscription plan
+4.3.13 Performance Requirements
+Real-time updates using socket/web connection
+No full page reload required
+Message latency < 2 seconds
+Support multiple concurrent conversations
+4.3.14 Security & Privacy
+The system shall:
+Mask sensitive information if needed
+Protect visitor data
+Encrypt stored chat data
+Allow Owner to delete visitor data upon request
+4.3.15 Conversation Analytics Integration
+Conversation data shall feed into:
+Analytics module
+Lead scoring engine
+AI improvement system
+4.4 Leads Module (Lead Management System):
+4.4.1 Purpose
+The Leads Module acts as a lightweight CRM system where all contact details and business inquiries captured by the AI Agent are stored, organized, and managed.
+This module ensures that no potential client is lost and allows the Owner to track and convert prospects efficiently.
+4.4.2 Lead Creation
+A lead shall be automatically created when a Connecting User:
+Shares name and phone number
+Shares email address
+Requests a consultation
+Requests pricing details
+Asks to be contacted
+Books a meeting
+Is marked high-intent by AI (optional configuration)
+The system shall automatically associate the full conversation transcript with the lead.
+4.4.3 Lead Data Structure
+Each lead record shall include:
+Basic Information
+Lead ID (auto-generated)
+Name
+Phone number
+Email address
+Location (if available)
+Date and time captured
+Requirement Information
+Business type
+Service requested
+Project summary (AI-generated)
+Budget range (if discussed)
+Timeline (if mentioned)
+Source Information
+Landing page
+Device type
+Conversation ID
+AI-detected intent
+Status Information
+Lead status
+Lead score
+Assigned owner (if future team module added)
+Notes
+4.4.4 Lead Status Categories
+The Owner shall be able to assign and update lead status:
+New
+Contacted
+In Discussion
+Proposal Sent
+Converted
+Lost
+Follow-Up Required
+Status updates must be timestamped.
+4.4.5 Lead Scoring System
+The system shall automatically assign a lead score based on conversation signals.
+Example Criteria
+Shared contact details (+)
+Mentioned urgency (+)
+Mentioned budget (+)
+Asked pricing only (neutral)
+Short conversation (low)
+Lead score categories:
+Cold
+Warm
+Hot
+Very Hot
+The scoring logic shall be configurable in future phases.
+4.4.6 Lead List View
+The Leads page shall display:
+Name
+Requirement summary
+Status
+Lead score
+Date received
+Contact method (WhatsApp/Email/Call)
+Owner shall be able to:
+Filter by status
+Filter by date
+Filter by score
+Search by name, phone, or email
+Sort by newest, highest score
+4.4.7 Lead Detail View
+When opening a lead, the Owner shall see:
+Complete contact information
+Full conversation transcript
+AI-generated summary
+Timeline mentioned
+Budget mentioned
+Notes section
+Status history
+4.4.8 Notes & Activity Log
+The Owner shall be able to:
+Add notes manually
+Record follow-up details
+Update contact attempts
+View activity history
+Each action shall be timestamped.
+4.4.9 Quick Actions
+From the lead view, the Owner shall have:
+Copy phone number
+Copy email
+Export lead
+Open full conversation
+Mark as converted
+Delete lead (with confirmation)
+4.4.10 Export & Data Handling
+The Owner shall be able to:
+Export leads in CSV format
+Filter before exporting
+Download conversation transcript
+Bulk export selected leads
+4.4.11 Notifications
+When a new lead is captured:
+The system shall:
+Show dashboard alert
+Send email notification (if enabled)
+Notification shall include:
+Lead name
+Service requested
+Urgency level
+4.4.12 Follow-Up Reminders (Optional Enhancement)
+Future enhancement:
+Owner can set reminder date for a lead.
+System shall:
+Notify Owner on reminder date
+Highlight overdue leads
+4.4.13 Privacy & Compliance
+The system shall:
+Store lead data securely
+Allow deletion upon request
+Prevent unauthorized access
+Mask sensitive data where necessary
+4.4.14 Performance Requirements
+Lead creation must be instant upon capture
+Lead page load time < 3 seconds
+Data must be searchable in real time
+Support a large lead database without lag
+4.5 AI Configuration Module (Behavior & Persona Management)
+4.5.1 Purpose
+The AI Configuration Module allows the Owner to customize the AI Agentâ€™s identity, communication style, behavioral logic, and operational settings.
+This module ensures the AI represents the brand correctly and aligns with business objectives (sales, support, booking, etc.).
+4.5.2 AI Identity Settings
+The Owner shall be able to configure the visible identity of the AI Agent.
+Configurable Fields
+Agent Name (e.g., Anaya, Harry, etc.)
+Avatar (upload custom image or select from library)
+Persona Type (Sales Consultant / Support Assistant / Technical Advisor)
+Greeting Message
+Tagline (e.g., â€œYour Digital Growth Partnerâ€)
+Changes shall reflect instantly on the website widget.
+4.5.3 Conversation Tone & Style
+The Owner shall be able to define the AIâ€™s communication tone.
+Tone Options
+Professional
+Friendly
+Formal
+Sales-Focused
+Casual
+Technical
+The AI shall adapt vocabulary and sentence style based on selected tone.
+4.5.4 Conversation Goals
+The Owner shall be able to define the primary objective of the AI.
+Goal Options
+Lead Generation
+Meeting Booking
+Product Recommendation
+Customer Support
+Mixed Mode
+The AI shall prioritize conversation flow based on selected goal.
+Example:
+If Lead Generation is selected, AI shall attempt to collect contact details before conversation ends.
+4.5.5 Proactive Messaging Settings
+The Owner shall configure when the AI initiates a conversation.
+Settings
+Auto-greet delay (seconds after page load)
+Scroll percentage trigger
+Idle trigger timing
+Disable proactive greeting
+Owner may also define:
+First message text
+Follow-up reminder message (if user does not reply)
+4.5.6 Lead Capture Rules
+The Owner shall configure how and when contact details are requested.
+Options
+Ask for contact after X messages
+Ask only if high-intent is detected
+Always request before the conversation ends
+Manual lead capture only
+Fields configurable:
+Name required (Yes/No)
+Phone required (Yes/No)
+Email required (Yes/No)
+4.5.7 Pricing Disclosure Rules
+The Owner shall configure AI pricing behavior.
+Options
+Never display exact pricing
+Redirect pricing queries to consultation.
+4.5.8 Language Settings
+The AI shall support multilingual interaction.
+Owner Options
+Primary language selection
+Enable multiple languages
+Auto-detect visitor language
+Manual language switch option
+AI shall maintain language consistency within a session.
+4.5.9 Voice Configuration
+If voice mode is enabled:
+Owner Settings
+Enable/Disable voice interaction
+Voice type selection
+Accent selection
+Speech speed
+Microphone input toggle
+Voice responses must convert speech to text for storage in Conversations module.
+4.5.10 Escalation Settings
+Owner shall configure when AI suggests human intervention.
+Escalation Triggers
+User requests human
+AI confidence low
+Urgent keywords detected
+Angry sentiment detected
+High-value lead detected
+Owner may enable:
+Instant notification
+Auto-schedule meeting
+Chat takeover alert
+4.5.11 Safety & Compliance Controls
+The owner shall configure safety boundaries.
+Options
+Block certain topics
+Prevent sharing internal data
+Restrict database price exposure
+Disable competitor comparisons
+Restrict file sharing
+The AI shall refuse politely if restricted topics are asked.
+4.5.12 Working Hours Configuration
+Owner shall define:
+Business working hours
+Weekend behavior
+After-hours message
+Example:
+â€œWe are currently offline, but I can collect your details and our team will contact you tomorrow.â€
+AI shall adjust conversation tone based on time.
+4.5.13 Session Memory Settings
+Owner shall configure:
+Remember returning visitors (Yes/No)
+Duration of memory retention
+Allow personalization
+If enabled, AI may greet returning visitor by name (if previously shared).
+4.5.14 Save & Apply Behavior
+Any changes in configuration:
+Must require explicit Save action
+Shall apply instantly without system downtime
+Shall not interrupt active conversations
+4.5.15 Performance Requirements
+Configuration changes must reflect within 10 seconds
+No page reload required for minor updates
+System must validate conflicting settings
+4.6 Website Integration Module (Widget & Deployment System)
+4.6.1 Purpose
+The Website Integration Module allows the Owner to deploy the AI Agent onto their website using a lightweight widget script.
+This module ensures secure embedding, domain validation, widget behavior customization, and seamless communication between the website and the AI platform.
+4.6.2 Widget Code Generation
+The system shall generate a unique JavaScript embed code for each Owner account.
+Code Characteristics
+Lightweight script
+Unique API key tied to Owner account
+Async loading (must not block website rendering)
+Secure token authentication
+Compatible with major platforms (HTML, WordPress, Shopify, etc.)
+Owner Actions
+Copy widget code
+Regenerate code (invalidate old one)
+View integration instructions
+4.6.3 Domain Verification
+The Owner shall configure allowed domains where the widget can operate.
+Features
+Add primary domain (e.g., example.com)
+Add subdomains (e.g., app.example.com)
+Restrict unauthorized domains
+Domain validation during widget load
+If script is installed on unauthorized domain, AI shall not load.
+4.6.4 Widget Placement & Appearance Settings
+The Owner shall configure:
+Position
+Bottom right
+Bottom left
+Display Options
+Floating icon only
+Auto-open chat window
+Minimized by default
+Show on desktop only
+Show on mobile only
+Appearance Customization
+Primary color
+Background color
+Font style (basic options)
+Icon style
+Chat bubble shape
+Changes must reflect instantly.
+4.6.5 Auto-Trigger Settings
+The Owner shall define when the AI proactively opens.
+Trigger Options
+After X seconds on page
+After X% scroll
+On specific pages only
+On pricing page
+On portfolio page
+Disable proactive greeting
+4.6.6 Page Targeting Rules
+The Owner shall be able to:
+Enable AI on all pages
+Enable only on selected pages
+Disable on certain URLs
+Create rules (e.g., show only on /services)
+This allows strategic targeting.
+4.6.7 Real-Time Communication Engine
+The widget shall:
+Establish secure real-time connection to AI servers
+Send visitor messages instantly
+Receive AI responses in real time
+Support text and voice mode
+Handle reconnect on network interruption
+Communication must use encrypted protocols.
+4.6.8 Visitor Session Tracking
+The widget shall:
+Assign an anonymous visitor ID
+Track session duration
+Track page navigation
+Track returning visitors (if enabled)
+Session data shall be linked to conversations.
+4.6.9 Performance Requirements
+The widget shall:
+Load in under 1 second
+Not increase website load time significantly
+Not block other scripts
+Use lazy loading where possible
+Be responsive on mobile devices
+4.6.10 Compatibility Requirements
+The widget shall be compatible with:
+Static HTML websites
+WordPress
+Shopify
+Webflow
+Custom frameworks (React, Angular, etc.)
+The script must not conflict with common JS libraries.
+4.6.11 Security Requirements
+The system shall:
+Use API key authentication
+Encrypt data transmission
+Prevent cross-site scripting
+Prevent unauthorized script usage
+Protect visitor data
+4.6.12 Offline & Error Handling
+If AI server is unavailable:
+Widget shall display fallback message
+â€œWeâ€™re currently unavailable. Please leave your details.â€
+If training not completed:
+AI shall display limited greeting
+Owner shall be notified
+4.6.13 Version Control & Updates
+The system shall:
+Automatically update widget improvements
+Maintain backward compatibility
+Allow Owner to enable/disable new features
+4.6.14 Test Mode
+The Owner shall have access to:
+Test chat environment (sandbox)
+Preview widget appearance
+Simulate visitor conversation
+Test mode must not create real leads.
+4.7 Billing & Subscription Module
+4.7.1 Purpose
+The Billing & Subscription module allows the Owner to manage their subscription plan, billing cycle, payment methods, and usage limits associated with the AI Agent platform.
+This module ensures that the Owner can easily view their current plan, upgrade or downgrade plans, track usage, and access billing records without requiring manual assistance from the platform provider.
+4.7.2 Subscription Plan Management
+The platform shall provide multiple subscription plans based on usage and available features.
+Each plan may differ based on:
+Monthly AI conversation limits ( Can be managed with Connects)
+Number of connected websites
+Knowledge storage capacity
+Voice interaction availability
+Advanced analytics access
+The Owner shall be able to view all available plans in a plan comparison interface.
+4.7.3 Current Subscription Overview
+The Billing dashboard shall display the Ownerâ€™s current subscription details.
+Information Displayed
+Current plan name
+Billing cycle (monthly or yearly)
+Plan start date
+Next billing date
+Subscription status (active / expired / canceled)
+Feature limits included in the plan
+Example display:
+Plan Name: Professional Plan
+Billing Cycle: Monthly
+Start Date: 10 June 2026
+Next Billing Date: 10 July 2026
+Status: Active
+4.7.4 Usage Monitoring
+The system shall track and display usage metrics related to the subscription plan.
+Usage Indicators
+AI conversations used
+AI conversations remaining
+Knowledge storage usage
+Number of connected domains
+Active AI agents
+Example display:
+AI Conversations: 2,450 / 5,000
+Knowledge Storage Used: 1.2 GB / 5 GB
+Usage progress bars shall visually indicate consumption levels.
+4.7.5 Plan Upgrade
+The Owner shall be able to upgrade their subscription plan at any time.
+Upgrade Behavior
+When upgrading:
+The new plan becomes active immediately
+Additional features become available instantly
+Billing adjustment may apply based on the remaining billing cycle
+Before confirming upgrade, the system shall display:
+new plan cost
+billing difference
+updated feature limits
+4.7.6 Plan Downgrade
+The Owner shall be able to downgrade their subscription plan.
+Downgrade Behavior
+When downgrading:
+The new plan will take effect at the start of the next billing cycle
+Current plan features remain active until the cycle ends
+The system shall notify the Owner if current usage exceeds the limits of the selected lower plan.
+Example warning:
+"Your current usage exceeds the limits of the selected plan."
+4.7.7 Payment Methods
+The Owner shall be able to manage payment methods used for subscription billing.
+Supported Payment Methods (configurable)
+Credit card
+Debit card
+Online payment gateway
+Bank transfer (optional)
+Owner Actions
+The Owner can:
+Add a new payment method
+Update existing payment method
+Remove payment method
+Set a default payment method
+Payment information must be processed through a secure third-party payment gateway.
+The platform shall not store sensitive card information directly.
+4.7.8 Billing History
+The Owner shall be able to view and access past billing records.
+Billing Record Information
+Each invoice shall contain:
+Invoice number
+Plan name
+Billing period
+Amount paid
+Payment date
+Payment status
+Owner Actions
+The Owner can:
+View invoice details
+Download invoice as PDF
+4.7.9 Billing Notifications
+The system shall notify the Owner for billing-related events.
+Notification Types
+Upcoming billing reminder
+Payment successful confirmation
+Payment failure notification
+Subscription renewal confirmation
+Notifications may be delivered via:
+Email
+Dashboard alerts
+4.7.10 Subscription Cancellation
+The Owner shall be able to cancel their subscription.
+Cancellation Behavior
+When cancellation occurs:
+The subscription remains active until the end of the billing period
+No further charges will occur after the current cycle
+Access to premium features may be restricted after expiry
+The system shall notify the Owner prior to subscription expiration.
+4.8 Settings Module
+4.8.1 Purpose
+The Settings module allows the Owner to manage account preferences, business information, security configurations, and general system settings related to the AI Agent platform.
+This section enables the Owner to update their profile, manage account security, configure business details used by the AI agent, and control system-level preferences.
+4.8.2 Account Profile Settings
+The Owner shall be able to manage personal account information.
+Information Fields
+Owner name
+Email address
+Phone number
+Company name
+Company website
+Industry category
+Owner Actions
+The Owner can:
+Update profile information
+Change contact details
+Save updated information
+Changes shall be reflected across the system where applicable.
+4.8.3 Business Information Settings
+The Owner shall be able to configure basic business details used by the AI agent during conversations.
+Business Information Fields
+Business name
+Business description
+Industry type
+Service categories
+Business contact email
+Business contact phone number
+System Behavior
+The AI agent may reference this information when answering visitor questions.
+Example:
+If a visitor asks about the company, the AI may respond using the stored business description.
+4.8.4 Password Management
+The Owner shall be able to update their account password.
+Features
+Change password
+Confirm new password
+Password strength validation
+Security Requirements
+Passwords must be stored using encrypted hashing.
+Password change requires current password verification.
+4.8.5 Security Settings
+The Settings module shall allow the Owner to manage security-related options.
+Security Controls
+View active login sessions
+Logout from all devices
+Enable additional verification (future enhancement)
+System Behavior
+The system may automatically log out inactive sessions after a predefined time period.
+4.8.6 Notification Preferences
+The Owner shall be able to control which system notifications they receive.
+Notification Types
+New lead captured
+Meeting request received
+Training completion
+Payment notifications
+System alerts
+Notification Channels
+Email notifications
+Dashboard alerts
+The Owner may enable or disable specific notification types.
+4.8.7 Language Preferences
+The Owner may configure preferred languages used by the AI agent.
+Features
+Select primary language
+Enable additional supported languages
+The AI agent shall use these preferences when communicating with visitors whenever possible.
+4.8.8 Data Management
+The Owner shall have basic controls related to stored data.
+Features
+Request data export (optional)
+Remove uploaded knowledge files
+Clear historical training data
+Data removal actions may require confirmation before execution.
+4.8.9 Logout
+The Owner shall be able to securely log out from the dashboard.
+Logging out will terminate the current session and require authentication for future access.
+â€”------------------------------------------------The Endâ€”--------------------------------------------------

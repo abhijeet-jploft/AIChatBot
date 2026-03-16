@@ -1,0 +1,16 @@
+/* Admin panel styles - inherits from main index.css vars */
+.admin-nav-link:hover {
+  background: var(--chat-surface);
+  border-radius: 6px;
+}
+
+/* Ensure labels and form text are visible on light background */
+[data-theme="light"] .form-label {
+  color: #374151;
+  font-weight: 500;
+}
+
+[data-theme="light"] .form-control::placeholder,
+[data-theme="light"] .form-select option:disabled {
+  color: #9e9e9e;
+}

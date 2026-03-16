@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat widget embed demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.5rem; }
+    p { color: #374151; line-height: 1.6; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>Chat widget embed demo</h1>
+  <p>
+    This page loads the widget via the script below. The widget will activate after
+    <strong>6–10 seconds</strong>, or <strong>40% scroll</strong>, or <strong>8 seconds idle</strong>.
+    When you open it, Anaya’s opening message will appear.
+  </p>
+  <p>
+    Configure <code>data-api-url</code> to your API (e.g. <code>https://your-server.com/api</code>).
+    Ensure the API allows CORS from this origin.
+  </p>
+  <pre><code>&lt;script
+  src="https://your-domain.com/chat-widget.js"
+  data-api-url="https://your-api.com/api"
+  data-company-id="_JP_Loft"
+  data-company-name="JP Loft"
+&gt;&lt;/script&gt;</code></pre>
+
+  <!-- Replace with your deployed script and API URL -->
+  <script>
+    window.JPLoftChatConfig = {
+      apiUrl: window.location.origin + '/api',
+      companyId: '_JP_Loft',
+      companyName: 'JP Loft'
+    };
+  </script>
+  <script src="/chat-widget.js"></script>
+</body>
+</html>
