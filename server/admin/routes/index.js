@@ -17,6 +17,7 @@ router.get('/auth/me', requireAuth, authController.me);
 
 router.get('/settings', requireAuth, settingsController.getSettings);
 router.put('/settings', requireAuth, settingsController.updateSettings);
+router.get('/settings/modes', requireAuth, settingsController.getModeSettings);
 
 router.post('/training/scrape/start', requireAuth, trainingController.startScrape);
 router.get('/training/scrape/status/:jobId', requireAuth, trainingController.scrapeStatus);

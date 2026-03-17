@@ -16,8 +16,10 @@ export default function Settings() {
 
   useEffect(() => {
     authFetch('/settings')
-      .then((r) => r.json())
-      .then((d) => {
+      .then(async (settingsRes) => {
+        if (!settingsRes.ok) throw new Error('Failed to load settings');
+        const d = await settingsRes.json();
+
         setDisplayName(d.displayName || d.name || '');
         setIconUrl(d.iconUrl || '');
         setGreetingMessage(d.greetingMessage || '');
@@ -124,7 +126,7 @@ export default function Settings() {
           </div>
         </div>
         <button type="submit" className="btn btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving...' : 'Save'}
         </button>
       </form>
     </div>

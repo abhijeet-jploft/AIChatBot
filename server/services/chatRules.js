@@ -183,7 +183,38 @@ function sanitizeInternalIdentifiers(text = '') {
   return String(text).replace(UUID_RE, '[redacted-id]');
 }
 
-function enforceOutputRules({ latestUserMessage = '', modelText = '', messages = [] }) {
+function needsUrgentEscalationFallback(text = '') {
+  return !/\b(call|phone|number|whatsapp|priority|urgent|deadline|10[- ]minute|consult)\b/i.test(String(text || ''));
+}
+
+function buildUrgentEscalationReply() {
+  return [
+    'I understand this is urgent, and I will prioritize a fast path for you.',
+    '',
+    'To avoid delay, please share these quick details:',
+    '- What needs to be ready (website, app, or landing page)',
+    '- Your exact deadline',
+    '- Whether content/design is ready',
+    '',
+    'The best next step is a quick 10-minute call so the team can confirm what is feasible in your timeline. Please share your best phone number and name for priority callback.',
+  ].join('\n');
+}
+
+function violatesJobSeekerRule(text = '') {
+  return /\b(upload|attach|share)\b[^\n]{0,30}\b(resume|cv)\b/i.test(String(text || ''));
+}
+
+function buildJobSeekerSafeReply() {
+  return [
+    'Thanks for your interest in joining the team.',
+    '',
+    'Please apply through the official hiring contact listed on the company website or Contact Us page so your profile is reviewed through the right process.',
+    '',
+    'If helpful, I can guide you on suitable role categories based on your experience.',
+  ].join('\n');
+}
+
+function enforceOutputRules({ latestUserMessage = '', modelText = '', messages = [], modeContext = null }) {
   let output = sanitizeInternalIdentifiers(modelText || '');
 
   if (isOffDomainCodeRequest(latestUserMessage)) {
@@ -198,6 +229,16 @@ function enforceOutputRules({ latestUserMessage = '', modelText = '', messages =
     if (!output || containsPriceLikeNumbers(output) || looksTooGeneric || lacksConsultativeFlow) {
       output = pricingFallback;
     }
+
+    return output;
+  }
+
+  if ((modeContext?.scenario === 'urgent_buyer' || isUrgentLead(latestUserMessage)) && needsUrgentEscalationFallback(output)) {
+    output = buildUrgentEscalationReply();
+  }
+
+  if (modeContext?.scenario === 'job_seeker' && violatesJobSeekerRule(output)) {
+    output = buildJobSeekerSafeReply();
   }
 
   return output;

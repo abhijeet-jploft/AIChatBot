@@ -4,6 +4,7 @@ import { AdminToastProvider } from './context/AdminToastContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
+import ConversationMode from './pages/ConversationMode';
 import Training from './pages/Training';
 import './index.css';
 
@@ -35,6 +36,7 @@ function AdminLayout({ children }) {
         <nav className="nav flex-column p-2">
           <a className={`nav-link py-2 ${location.pathname === '/admin' || location.pathname === '/admin/' ? 'fw-bold' : ''}`} href="/admin" style={{ color: 'var(--chat-text)' }}>Dashboard</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/settings' ? 'fw-bold' : ''}`} href="/admin/settings" style={{ color: 'var(--chat-text)' }}>Settings</a>
+          <a className={`nav-link py-2 ${location.pathname === '/admin/modes' ? 'fw-bold' : ''}`} href="/admin/modes" style={{ color: 'var(--chat-text)' }}>AI Mode</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/training' ? 'fw-bold' : ''}`} href="/admin/training" style={{ color: 'var(--chat-text)' }}>Training</a>
         </nav>
         <div className="mt-auto p-3 border-top" style={{ borderColor: 'var(--chat-border)' }}>
@@ -72,6 +74,18 @@ export default function AdminApp() {
             token ? (
               <AdminLayout>
                 <Settings />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="modes"
+          element={
+            token ? (
+              <AdminLayout>
+                <ConversationMode />
               </AdminLayout>
             ) : (
               <Navigate to="/admin/login" replace />

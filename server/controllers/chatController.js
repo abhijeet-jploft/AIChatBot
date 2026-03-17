@@ -17,11 +17,14 @@ async function postMessage(req, res) {
     }
 
     let sid = sessionId || null;
+    let selectedModeId = null;
     const userMsg = messages[messages.length - 1];
 
     // Persist pre-response data (non-fatal if DB is unavailable)
     try {
       await Chatbot.findOrCreate(companyId);
+      const chatbot = await Chatbot.findByCompanyId(companyId);
+      selectedModeId = chatbot?.ai_mode || null;
 
       if (!sid) {
         const { id } = await ChatSession.create(companyId);
@@ -41,7 +44,7 @@ async function postMessage(req, res) {
       console.error('[chat] DB pre-write (non-fatal):', dbErr.message);
     }
 
-    const response = await sendMessage(companyId, messages);
+    const response = await sendMessage(companyId, messages, { modeId: selectedModeId });
 
     if (sid) {
       try {

@@ -3,6 +3,7 @@ const pool = require('../../db/index');
 async function findByCompanyId(companyId) {
   const { rows } = await pool.query(
     `SELECT id, company_id, name, display_name, icon_url, greeting_message, password_hash,
+            ai_mode,
             theme_primary_color, theme_primary_dark_color,
             theme_secondary_color, theme_secondary_light_color
      FROM chatbots WHERE company_id = $1`,
@@ -22,6 +23,7 @@ async function updateSettings(companyId, {
   display_name,
   icon_url,
   greeting_message,
+  ai_mode,
   theme_primary_color,
   theme_primary_dark_color,
   theme_secondary_color,
@@ -41,6 +43,10 @@ async function updateSettings(companyId, {
   if (greeting_message !== undefined) {
     updates.push(`greeting_message = $${i++}`);
     values.push(greeting_message);
+  }
+  if (ai_mode !== undefined) {
+    updates.push(`ai_mode = $${i++}`);
+    values.push(ai_mode);
   }
   if (theme_primary_color !== undefined) {
     updates.push(`theme_primary_color = $${i++}`);

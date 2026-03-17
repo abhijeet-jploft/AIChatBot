@@ -14,4 +14,18 @@ async function findOrCreate(companyId) {
   );
 }
 
-module.exports = { findOrCreate };
+/**
+ * Fetch chatbot row for a company.
+ * @param {string} companyId
+ * @returns {Promise<object|null>}
+ */
+async function findByCompanyId(companyId) {
+  const { rows } = await pool.query(
+    `SELECT company_id, ai_mode FROM chatbots WHERE company_id = $1`,
+    [companyId]
+  );
+
+  return rows[0] || null;
+}
+
+module.exports = { findOrCreate, findByCompanyId };

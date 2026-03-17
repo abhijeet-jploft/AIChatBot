@@ -1,12 +1,18 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { loadCompanyContext } = require('./trainingLoader');
 const { buildDocxRulesPrompt, enforceOutputRules } = require('./chatRules');
+const {
+  buildConversationModePrompt,
+  buildModeContext,
+  buildModeDebugLine,
+  normalizeConversationModeId,
+} = require('./conversationModes');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const PERSONA =
+const BASE_SYSTEM_PROMPT =
   'You are a helpful AI sales assistant. You represent the company professionally, ' +
   'help visitors understand offerings, and guide them toward booking consultations or ' +
   'taking action. Be friendly, concise, and focused on understanding their needs before ' +
@@ -25,19 +31,21 @@ const PERSONA =
  * Build system prompt as an array of Anthropic content blocks with cache_control.
  *
  * How caching works:
- *   Block 1 — persona text (small, not cached individually).
+ *   Block 1 — base persona and global rules (small, not cached individually).
  *   Block 2 — large knowledge-base text with cache_control: ephemeral.
  *             Anthropic caches everything up to this marker for 5 minutes.
  *             Subsequent turns read this block from cache at ~90 % cost reduction.
+ *   Block 3 — dynamic mixed-mode scenario guidance (not cached).
  *
- * If there is no company context, the persona block itself carries the cache marker.
+ * If there is no company context, the base persona block itself carries the cache marker.
  */
-function buildSystemBlocks(companyId, userQuery = '') {
+function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext = null) {
+  const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const context = loadCompanyContext(companyId, userQuery);
 
   if (context) {
     return [
-      { type: 'text', text: PERSONA },
+      { type: 'text', text: BASE_SYSTEM_PROMPT },
       {
         type: 'text',
         text:
@@ -47,10 +55,14 @@ function buildSystemBlocks(companyId, userQuery = '') {
           context,
         cache_control: { type: 'ephemeral' }, // ← cache breakpoint
       },
+      { type: 'text', text: modePrompt },
     ];
   }
 
-  return [{ type: 'text', text: PERSONA, cache_control: { type: 'ephemeral' } }];
+  return [
+    { type: 'text', text: BASE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: modePrompt },
+  ];
 }
 
 /**
@@ -98,19 +110,26 @@ function buildCachedMessages(messages) {
  */
 async function sendMessage(companyId, messages, options = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
+  const { modeId: requestedModeId, modeContext: providedModeContext, ...anthropicOptions } = options || {};
+  const modeId = normalizeConversationModeId(requestedModeId);
+  const modeContext = providedModeContext || buildModeContext({ modeId, latestUserMessage, messages });
+
+  if (process.env.AI_MODE_DEBUG === '1') {
+    console.log(`[ai-mode] company=${companyId} ${buildModeDebugLine(modeId, modeContext)}`);
+  }
 
   const params = {
     model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 1024,
-    system: buildSystemBlocks(companyId, latestUserMessage),
+    system: buildSystemBlocks(companyId, latestUserMessage, modeId, modeContext),
     messages: buildCachedMessages(messages),
-    ...options,
+    ...anthropicOptions,
   };
 
   const response = await anthropic.messages.create(params);
   const textBlock = response.content.find((b) => b.type === 'text');
   const modelText = textBlock ? textBlock.text : '';
-  return enforceOutputRules({ latestUserMessage, modelText, messages });
+  return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext });
 }
 
 module.exports = { sendMessage, buildSystemBlocks };

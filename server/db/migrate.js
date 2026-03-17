@@ -45,6 +45,7 @@ ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS icon_url TEXT;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS greeting_message TEXT;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS ai_mode VARCHAR(64) NOT NULL DEFAULT 'mixed_mode';
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_primary_color VARCHAR(7);
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_primary_dark_color VARCHAR(7);
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_secondary_color VARCHAR(7);
