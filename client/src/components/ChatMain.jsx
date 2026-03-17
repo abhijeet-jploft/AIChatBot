@@ -55,7 +55,6 @@ export default function ChatMain({
           )}
           <div>
             <span className="fw-semibold" style={{ color: 'inherit' }}>{companyName}</span>
-            <span className="ms-2 small opacity-85" style={{ color: 'inherit' }}>AI Sales Agent</span>
           </div>
         </header>
       )}

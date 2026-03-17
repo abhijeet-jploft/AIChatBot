@@ -497,7 +497,7 @@
         '<button type="button" class="jploft-icon-btn jploft-close-btn" aria-label="Close widget" title="Close">' +
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
         '</button>' +
-        '<div class="jploft-title-wrap"><span class="jploft-title">' + escapeHtml(companyName) + '</span><span class="jploft-subtitle">AI Sales Agent</span></div>' +
+        '<div class="jploft-title-wrap"><span class="jploft-title">' + escapeHtml(companyName) + '</span></div>' +
         '<div class="jploft-right">' +
           '<button type="button" class="jploft-icon-btn jploft-max-btn" aria-label="Expand chat" title="Expand">' +
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>' +

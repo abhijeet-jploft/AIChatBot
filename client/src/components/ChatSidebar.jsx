@@ -157,6 +157,8 @@ export default function ChatSidebar({
                             padding: isActive ? '7px 10px' : '5px 10px',
                             margin: isActive ? '4px 2px' : '1px 6px',
                             borderRadius: isActive ? 6 : 7,
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
                             cursor: 'pointer',
                             background: isActive
                               ? 'linear-gradient(135deg, var(--chat-launcher-gradient-start), var(--chat-launcher-gradient-end))'

@@ -841,7 +841,6 @@ export default function App() {
 
               <div className="chat-widget-title-wrap">
                 <span className="chat-widget-title">{companyName}</span>
-                <span className="chat-widget-subtitle">AI Sales Agent</span>
               </div>
 
               <div className="d-flex align-items-center gap-2">
