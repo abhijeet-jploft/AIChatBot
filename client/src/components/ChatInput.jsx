@@ -49,7 +49,7 @@ export default function ChatInput({ onSend, disabled }) {
           />
           <button
             type="submit"
-            className="btn btn-primary rounded-2 px-3 py-2"
+            className="btn chat-send-btn rounded-2 px-3 py-2 text-white"
             disabled={disabled || !value.trim()}
           >
             <svg

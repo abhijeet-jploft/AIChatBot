@@ -110,7 +110,7 @@ export default function ChatSidebar({
         <>
           <button
             type="button"
-            className="btn btn-primary mx-3 mt-3"
+            className="btn btn-primary mx-3 mt-3 bg-dark"
             onClick={onNewChat}
           >
             + New chat
@@ -145,18 +145,24 @@ export default function ChatSidebar({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '5px 10px',
-                            margin: '1px 6px',
-                            borderRadius: 7,
+                            padding: isActive ? '7px 10px' : '5px 10px',
+                            margin: isActive ? '4px 2px' : '1px 6px',
+                            borderRadius: isActive ? 6 : 7,
                             cursor: 'pointer',
-                            background: isActive ? 'var(--session-active-bg)' : isHovered ? 'var(--session-hover-bg)' : 'transparent',
-                            transition: 'background 0.12s',
+                            background: isActive
+                              ? 'linear-gradient(135deg, var(--chat-launcher-gradient-start), var(--chat-launcher-gradient-end))'
+                              : isHovered
+                                ? 'var(--session-hover-bg)'
+                                : 'transparent',
+                            boxShadow: isActive ? '0 10px 22px -16px var(--chat-launcher-shadow)' : 'none',
+                            transition: 'background 0.12s, box-shadow 0.12s',
                           }}
                         >
                           <span
                             style={{
                               fontSize: 13,
-                              color: isActive ? 'var(--session-active-color)' : 'var(--chat-text)',
+                              color: isActive ? '#ffffff' : 'var(--chat-text)',
+                              fontWeight: isActive ? 600 : 400,
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
@@ -172,7 +178,7 @@ export default function ChatSidebar({
                             <button
                               type="button"
                               className="btn btn-link p-0 ms-1 flex-shrink-0"
-                              style={{ color: '#f87171', lineHeight: 1 }}
+                              style={{ color: isActive ? 'rgba(255,255,255,0.9)' : '#f87171', lineHeight: 1 }}
                               aria-label="Delete conversation"
                               onClick={(e) => {
                                 e.stopPropagation();

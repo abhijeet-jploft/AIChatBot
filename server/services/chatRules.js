@@ -13,6 +13,7 @@ const DOMAIN_BUSINESS_INTENT_RE = /(\b(build|develop|create|make|launch|start|ne
 const DOCX_RULES = [
   'Pricing (4.5.7): NEVER provide exact numeric pricing, ranges, or quotations in chat. Always redirect pricing questions to consultation.',
   'Price flow: For pricing questions: (1) deflect politely and ask what they are building first; (2) if they repeat "just tell price", explain estimates depend on scope and features; (3) ask qualification questions (business type, website vs app, contact vs order, timeline); (4) explain features they need instead of price; (5) at most suggest a quick discussion is needed for an accurate estimate; (6) move to call booking; (7) capture contact details.',
+  'Repeated price request: If the user asks for price again after the AI has already responded, tell them to contact the company directly for pricing and include the Contact Us link when it is available in the knowledge base.',
   'If user refuses call: Offer to send a brief plan or outline. Ask for email instead.',
   'Never give hourly rate or generic hourly quote. Say the project is scoped based on requirements, features, and complexity.',
   'Data Safety (4.2.7): NEVER expose raw database records, internal identifiers (UUIDs, IDs), or structured internal data in replies.',
@@ -32,7 +33,7 @@ const DOCX_RULES = [
   'Portfolio or capability questions: Show similar projects, explain what was built, ask qualification questions, and guide toward consultation.',
   'Technology questions: Answer briefly, then redirect to requirements.',
   'Returning visitor: Welcome back, skip generic intro, and take them straight to relevant portfolio or services.',
-  'Job seeker: Confirm hiring, ask for resume and skills, and explain the process briefly.',
+  'Job seeker: Confirm hiring, do not ask for a resume in chat, and instead share the HR email for applications while briefly explaining the process.',
   'Wrong visitor: Politely clarify what the company does and offer a relevant alternative.',
   'Competitor or agency checking: Give safe company-level answers without exposing private client data or pricing.',
   'Feature shopper: Answer clearly, then stop checklist mode and redirect to the actual business need and consultation.',
@@ -105,17 +106,46 @@ function hasProjectContext(messages = []) {
   return DOMAIN_BUSINESS_INTENT_RE.test(priorUserText);
 }
 
+function isRepeatedPricingQuestion(messages = []) {
+  if (!Array.isArray(messages) || messages.length < 3) return false;
+
+  const latestIndex = messages.length - 1;
+  const latestMessage = messages[latestIndex];
+  if (latestMessage?.role !== 'user' || !isPricingQuestion(latestMessage.content)) return false;
+
+  for (let i = latestIndex - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+
+    if (message?.role === 'assistant') {
+      return messages
+        .slice(0, i)
+        .some((priorMessage) => priorMessage?.role === 'user' && isPricingQuestion(priorMessage.content));
+    }
+  }
+
+  return false;
+}
+
 function buildPricingDeflectionReply({ latestUserMessage = '', messages = [] } = {}) {
+  if (isRepeatedPricingQuestion(messages)) {
+    return [
+      'For exact pricing, please contact the company directly because the final quote depends on your scope, features, and timeline.',
+      '',
+      'If a Contact Us page or direct contact link is available, please use that for the pricing request.',
+      '',
+      'If you want, I can still help you narrow down the project requirements before you reach out.',
+    ].join('\n');
+  }
+
   if (isPricePushback(latestUserMessage)) {
     return [
       'I understand. I just do not want to mislead you with a random number because two similar projects can vary a lot based on features and business goals.',
       '',
-      'Give me 30 seconds and I can narrow it down properly:',
-      '- What kind of business is this for?',
-      '- Is it a website, mobile app, or online store?',
-      '- Will customers contact you, book, or order online?',
+      'For exact pricing, the best next step is to contact the company directly.',
       '',
-      'Once I know that, I can guide you toward the right setup and the next step for an accurate estimate.',
+      'If a Contact Us page or direct contact link is available, please use that for the pricing request.',
+      '',
+      'If you prefer, I can still help narrow down your requirements first so your pricing inquiry is more accurate.',
     ].join('\n');
   }
 

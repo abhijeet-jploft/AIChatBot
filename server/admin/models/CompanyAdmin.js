@@ -2,7 +2,9 @@ const pool = require('../../db/index');
 
 async function findByCompanyId(companyId) {
   const { rows } = await pool.query(
-    `SELECT id, company_id, name, display_name, icon_url, greeting_message, password_hash
+    `SELECT id, company_id, name, display_name, icon_url, greeting_message, password_hash,
+            theme_primary_color, theme_primary_dark_color,
+            theme_secondary_color, theme_secondary_light_color
      FROM chatbots WHERE company_id = $1`,
     [companyId]
   );
@@ -16,7 +18,15 @@ async function setPassword(companyId, passwordHash) {
   );
 }
 
-async function updateSettings(companyId, { display_name, icon_url, greeting_message }) {
+async function updateSettings(companyId, {
+  display_name,
+  icon_url,
+  greeting_message,
+  theme_primary_color,
+  theme_primary_dark_color,
+  theme_secondary_color,
+  theme_secondary_light_color,
+}) {
   const updates = [];
   const values = [];
   let i = 1;
@@ -31,6 +41,22 @@ async function updateSettings(companyId, { display_name, icon_url, greeting_mess
   if (greeting_message !== undefined) {
     updates.push(`greeting_message = $${i++}`);
     values.push(greeting_message);
+  }
+  if (theme_primary_color !== undefined) {
+    updates.push(`theme_primary_color = $${i++}`);
+    values.push(theme_primary_color);
+  }
+  if (theme_primary_dark_color !== undefined) {
+    updates.push(`theme_primary_dark_color = $${i++}`);
+    values.push(theme_primary_dark_color);
+  }
+  if (theme_secondary_color !== undefined) {
+    updates.push(`theme_secondary_color = $${i++}`);
+    values.push(theme_secondary_color);
+  }
+  if (theme_secondary_light_color !== undefined) {
+    updates.push(`theme_secondary_light_color = $${i++}`);
+    values.push(theme_secondary_light_color);
   }
   if (updates.length === 0) return;
   values.push(companyId);

@@ -6,6 +6,10 @@ export default function Settings() {
   const [displayName, setDisplayName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
+  const [themePrimaryColor, setThemePrimaryColor] = useState('#D72638');
+  const [themePrimaryDarkColor, setThemePrimaryDarkColor] = useState('#8F1020');
+  const [themeSecondaryColor, setThemeSecondaryColor] = useState('#050505');
+  const [themeSecondaryLightColor, setThemeSecondaryLightColor] = useState('#1F1F1F');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -16,6 +20,10 @@ export default function Settings() {
         setDisplayName(d.displayName || d.name || '');
         setIconUrl(d.iconUrl || '');
         setGreetingMessage(d.greetingMessage || '');
+        setThemePrimaryColor(d.theme?.primaryColor || '#D72638');
+        setThemePrimaryDarkColor(d.theme?.primaryDarkColor || '#8F1020');
+        setThemeSecondaryColor(d.theme?.secondaryColor || '#050505');
+        setThemeSecondaryLightColor(d.theme?.secondaryLightColor || '#1F1F1F');
       })
       .catch(() => setMessage('Failed to load settings'));
   }, [authFetch]);
@@ -32,6 +40,12 @@ export default function Settings() {
           displayName: displayName.trim() || undefined,
           iconUrl: iconUrl.trim() || undefined,
           greetingMessage: greetingMessage.trim() || undefined,
+          theme: {
+            primaryColor: themePrimaryColor,
+            primaryDarkColor: themePrimaryDarkColor,
+            secondaryColor: themeSecondaryColor,
+            secondaryLightColor: themeSecondaryLightColor,
+          },
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -84,6 +98,30 @@ export default function Settings() {
             placeholder="Custom welcome message"
             style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
           />
+        </div>
+        <div className="mb-3">
+          <label className="form-label">Theme colors</label>
+          <div className="row g-3">
+            <div className="col-sm-6">
+              <label className="form-label small">Primary</label>
+              <input type="color" className="form-control form-control-color" value={themePrimaryColor} onChange={(e) => setThemePrimaryColor(e.target.value)} />
+            </div>
+            <div className="col-sm-6">
+              <label className="form-label small">Primary dark shade</label>
+              <input type="color" className="form-control form-control-color" value={themePrimaryDarkColor} onChange={(e) => setThemePrimaryDarkColor(e.target.value)} />
+            </div>
+            <div className="col-sm-6">
+              <label className="form-label small">Secondary</label>
+              <input type="color" className="form-control form-control-color" value={themeSecondaryColor} onChange={(e) => setThemeSecondaryColor(e.target.value)} />
+            </div>
+            <div className="col-sm-6">
+              <label className="form-label small">Secondary light shade</label>
+              <input type="color" className="form-control form-control-color" value={themeSecondaryLightColor} onChange={(e) => setThemeSecondaryLightColor(e.target.value)} />
+            </div>
+          </div>
+          <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+            These company colors control the chatbot theme shown to visitors.
+          </div>
         </div>
         {message && <div className="mb-2 text-small">{message}</div>}
         <button type="submit" className="btn btn-primary" disabled={saving}>

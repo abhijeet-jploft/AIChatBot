@@ -1,9 +1,10 @@
 const { getCompanies, loadCompanyContext } = require('../services/trainingLoader');
 const pool = require('../db/index');
+const { mergeCompanyTheme } = require('../services/companyTheme');
 
 /**
  * GET /api/train/companies
- * Returns companies from train_data, enriched with display_name, icon_url, greeting_message from DB
+ * Returns companies from train_data, enriched with display_name, icon_url, greeting_message, theme from DB
  */
 async function getCompaniesList(req, res) {
   try {
@@ -13,7 +14,10 @@ async function getCompaniesList(req, res) {
     }
     const companyIds = companies.map((c) => c.id);
     const { rows } = await pool.query(
-      `SELECT company_id, display_name, icon_url, greeting_message FROM chatbots
+      `SELECT company_id, display_name, icon_url, greeting_message,
+              theme_primary_color, theme_primary_dark_color,
+              theme_secondary_color, theme_secondary_light_color
+         FROM chatbots
        WHERE company_id = ANY($1::text[])`,
       [companyIds]
     );
@@ -24,6 +28,12 @@ async function getCompaniesList(req, res) {
       displayName: dbMap[c.id]?.display_name || c.name,
       iconUrl: dbMap[c.id]?.icon_url || null,
       greetingMessage: dbMap[c.id]?.greeting_message || null,
+      theme: mergeCompanyTheme(c.id, {
+        primaryColor: dbMap[c.id]?.theme_primary_color,
+        primaryDarkColor: dbMap[c.id]?.theme_primary_dark_color,
+        secondaryColor: dbMap[c.id]?.theme_secondary_color,
+        secondaryLightColor: dbMap[c.id]?.theme_secondary_light_color,
+      }),
     }));
     res.json(enriched);
   } catch (err) {
