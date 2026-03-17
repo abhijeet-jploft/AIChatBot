@@ -9,28 +9,41 @@ const STATUS_CLASS = {
 };
 
 export default function Training() {
-  const { authFetch } = useAuth();
+  const { authFetch, company } = useAuth();
   const [url, setUrl] = useState('');
   const [jobId, setJobId] = useState(null);
   const [job, setJob] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
+
+  const logRef = useRef(null);
   const pollRef = useRef(null);
 
   useEffect(() => {
-    if (!jobId) return;
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [job?.log]);
+
+  useEffect(() => {
+    if (!jobId) return undefined;
+
     const poll = async () => {
       try {
         const res = await authFetch(`/training/scrape/status/${jobId}`);
         if (!res.ok) return;
+
         const data = await res.json();
         setJob(data);
         if (data.status === 'completed' || data.status === 'failed') {
           clearInterval(pollRef.current);
         }
-      } catch {}
+      } catch {
+        // Keep polling across transient network issues.
+      }
     };
+
     poll();
     pollRef.current = setInterval(poll, 1500);
     return () => clearInterval(pollRef.current);
@@ -43,6 +56,7 @@ export default function Training() {
     setJob(null);
     setJobId(null);
     setSubmitting(true);
+
     try {
       const res = await authFetch('/training/scrape/start', {
         method: 'POST',
@@ -50,7 +64,11 @@ export default function Training() {
         body: JSON.stringify({ url: url.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to start');
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to start scrape job');
+      }
+
       setJobId(data.jobId);
     } catch (err) {
       setError(err.message);
@@ -62,54 +80,253 @@ export default function Training() {
   const handleSave = async () => {
     if (!jobId) return;
     setSaveMsg('');
+
     try {
-      const res = await authFetch(`/training/scrape/save/${jobId}`, { method: 'POST' });
+      const res = await authFetch(`/training/scrape/save/${jobId}`, {
+        method: 'POST',
+      });
       const data = await res.json();
-      setSaveMsg(data.saved ? `Saved ${data.lines} lines, ${data.links} links` : 'Save failed');
+
+      if (data.saved) {
+        const linkInfo = typeof data.links === 'number' ? ` and ${data.links} links` : '';
+        setSaveMsg(`Saved ${data.lines} lines${linkInfo} to ${data.companyId}`);
+      } else {
+        setSaveMsg('Save failed. See server logs.');
+      }
     } catch {
-      setSaveMsg('Network error');
+      setSaveMsg('Network error while saving.');
     }
   };
 
-  return (
-    <div className="p-4">
-      <h5 className="mb-4" style={{ color: 'var(--chat-text-heading)' }}>Train data (website scrape)</h5>
-      <form onSubmit={handleSubmit} className="mb-4" style={{ maxWidth: 500 }}>
-        <div className="mb-2">
-          <label className="form-label">Website URL</label>
-          <input
-            type="url"
-            className="form-control"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://www.example.com"
-            style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-            required
-          />
-        </div>
-        {error && <div className="alert alert-danger py-2 mb-2">{error}</div>}
-        <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? 'Starting…' : 'Start scrape'}
-        </button>
-      </form>
+  const isRunning = job?.status === 'running' || submitting;
+  const companyLabel = company?.displayName || company?.companyId || 'this company';
 
-      {job && (
-        <div className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
-          <div className="card-body">
-            <span className={`badge ${STATUS_CLASS[job.status] || 'bg-secondary'}`}>{job.status}</span>
-            {job.pages?.length > 0 && <span className="ms-2 text-muted">{job.pages.length} pages</span>}
-            {job.status === 'completed' && (
-              <button className="btn btn-sm btn-success ms-2" onClick={handleSave}>Save to training</button>
-            )}
-            {saveMsg && <div className="mt-2 text-small">{saveMsg}</div>}
-            {job.log?.length > 0 && (
-              <pre className="mt-2 mb-0 p-2 rounded small overflow-auto" style={{ maxHeight: 200, background: 'var(--chat-bg)', fontSize: 11 }}>
-                {job.log.slice(-30).join('\n')}
-              </pre>
-            )}
+  return (
+    <div
+      className="flex-grow-1 overflow-auto"
+      style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)' }}
+    >
+      <div className="py-4 px-3 px-md-5 mx-auto" style={{ maxWidth: 960 }}>
+        <h5 className="fw-bold mb-1" style={{ color: 'var(--chat-text-heading)' }}>
+          Website Scraper - Training Data
+        </h5>
+        <p className="text-muted mb-4" style={{ fontSize: 13 }}>
+          Crawl a full website, deduplicate repeating headers and footers, and save
+          the generated training data directly to <strong>{companyLabel}</strong>.
+        </p>
+
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-3 p-3 p-md-4 mb-4"
+          style={{
+            background: 'var(--chat-surface)',
+            border: '1px solid var(--chat-border)',
+          }}
+        >
+          <div className="row g-3">
+            <div className="col-12">
+              <label
+                className="form-label small fw-semibold mb-1"
+                style={{ color: 'var(--chat-text)' }}
+              >
+                Website URL <span className="text-danger">*</span>
+              </label>
+              <input
+                type="url"
+                className="form-control"
+                placeholder="https://example.com"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                required
+                disabled={isRunning}
+                style={{
+                  background: 'var(--chat-bg)',
+                  color: 'var(--chat-text)',
+                  borderColor: 'var(--chat-border)',
+                }}
+              />
+            </div>
+
+            <div className="col-12 col-md-8">
+              <div
+                className="rounded-3 h-100 d-flex align-items-center px-3 py-2 small"
+                style={{
+                  background: 'var(--chat-bg)',
+                  border: '1px solid var(--chat-border)',
+                  color: 'var(--chat-muted)',
+                }}
+              >
+                Training target:
+                <strong className="ms-1" style={{ color: 'var(--chat-text)' }}>
+                  {companyLabel}
+                </strong>
+              </div>
+            </div>
+
+            <div className="col-12 col-md-4 d-flex align-items-end">
+              <button
+                type="submit"
+                className="btn btn-primary px-4 w-100"
+                disabled={!url.trim() || isRunning}
+              >
+                {isRunning ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" />
+                    {job?.status === 'running'
+                      ? `Scraping - ${job.pages?.length || 0} pages found...`
+                      : 'Starting...'}
+                  </>
+                ) : (
+                  'Start Scraping'
+                )}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        </form>
+
+        {error && <div className="alert alert-danger py-2 small mb-3">{error}</div>}
+
+        {job && (
+          <div>
+            <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+              <span
+                className={`badge ${STATUS_CLASS[job.status] || 'bg-secondary'}`}
+                style={{ fontSize: 11 }}
+              >
+                {job.status.toUpperCase()}
+              </span>
+              <span className="small text-muted">
+                {job.pages?.length || 0} pages scraped
+                {job.jsonlLines ? ` | ${job.jsonlLines} JSONL lines` : ''}
+                {job.errors?.length ? ` | ${job.errors.length} errors` : ''}
+              </span>
+            </div>
+
+            {job.status === 'completed' && (
+              <div className="d-flex gap-2 mb-3 flex-wrap">
+                <button className="btn btn-sm btn-success" onClick={handleSave}>
+                  Save to Training Data
+                </button>
+              </div>
+            )}
+
+            {saveMsg && (
+              <div className="alert alert-info py-2 small mb-3">{saveMsg}</div>
+            )}
+
+            {job.status === 'completed' && (
+              <div
+                className="rounded-3 p-3 mb-3 small"
+                style={{
+                  background: 'var(--chat-surface)',
+                  border: '1px solid var(--chat-border)',
+                  fontSize: 12,
+                  color: 'var(--chat-muted)',
+                }}
+              >
+                <strong style={{ color: 'var(--chat-text)' }}>Output format:</strong>{' '}
+                each line becomes a training conversation entry. Shared header and
+                footer content is deduplicated automatically before save.
+              </div>
+            )}
+
+            {job.pages?.length > 0 && (
+              <div className="mb-3">
+                <div
+                  className="small fw-semibold mb-1"
+                  style={{ color: 'var(--chat-text-heading)' }}
+                >
+                  Pages Scraped ({job.pages.length})
+                </div>
+                <div
+                  style={{
+                    maxHeight: 180,
+                    overflowY: 'auto',
+                    background: 'var(--chat-surface)',
+                    border: '1px solid var(--chat-border)',
+                    borderRadius: 8,
+                    padding: '8px 14px',
+                  }}
+                >
+                  {job.pages.map((page, index) => (
+                    <div
+                      key={`${page.url || 'page'}-${index}`}
+                      className="small"
+                      style={{ lineHeight: 1.9, color: 'var(--chat-muted)' }}
+                    >
+                      <span style={{ color: 'var(--chat-accent)', marginRight: 6 }}>
+                        {index + 1}.
+                      </span>
+                      <span style={{ color: 'var(--chat-text)' }}>{page.title}</span>
+                      <span style={{ opacity: 0.45, marginLeft: 6, fontSize: 11 }}>
+                        {page.url}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {job.errors?.length > 0 && (
+              <div className="mb-3">
+                <div className="small fw-semibold mb-1" style={{ color: '#f87171' }}>
+                  Errors ({job.errors.length})
+                </div>
+                <div
+                  style={{
+                    maxHeight: 100,
+                    overflowY: 'auto',
+                    background: 'var(--chat-surface)',
+                    border: '1px solid #f871713a',
+                    borderRadius: 8,
+                    padding: '8px 14px',
+                  }}
+                >
+                  {job.errors.map((entry, index) => (
+                    <div
+                      key={`${entry.url || 'error'}-${index}`}
+                      className="small"
+                      style={{ color: '#f87171', lineHeight: 1.8 }}
+                    >
+                      {entry.url} - {entry.error}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div
+                className="small fw-semibold mb-1"
+                style={{ color: 'var(--chat-text-heading)' }}
+              >
+                Scraper Log
+              </div>
+              <div
+                ref={logRef}
+                style={{
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                  background: '#0b0b0e',
+                  border: '1px solid var(--chat-border)',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  color: '#86efac',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {(job.log || []).map((line, index) => (
+                  <div key={`${line}-${index}`}>{line}</div>
+                ))}
+                {job.status === 'running' && <div style={{ opacity: 0.4 }}>... crawling ...</div>}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import ChatSidebar from './components/ChatSidebar';
 import ChatMain from './components/ChatMain';
-import TrainOrgData from './pages/TrainOrgData';
 import Landing from './pages/Landing';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -448,9 +447,6 @@ export default function App() {
     return (
       <div className="chat-shell d-flex overflow-hidden">
         <ChatSidebar
-          companies={companies}
-          companyId={companyId}
-          onSelectCompany={handleSelectCompany}
           onNewChat={clearChat}
           theme={theme}
           onThemeChange={setTheme}
@@ -462,18 +458,14 @@ export default function App() {
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
         />
-        {currentPage === 'chat' ? (
-          <ChatMain
-            messages={messages}
-            loading={loading}
-            onSend={sendMessage}
-            companyName={companyName}
-            companyIconUrl={companyIconUrl}
-            greetingMessage={greetingMessage}
-          />
-        ) : (
-          <TrainOrgData />
-        )}
+        <ChatMain
+          messages={messages}
+          loading={loading}
+          onSend={sendMessage}
+          companyName={companyName}
+          companyIconUrl={companyIconUrl}
+          greetingMessage={greetingMessage}
+        />
 
         <button
           type="button"

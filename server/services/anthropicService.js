@@ -110,7 +110,7 @@ async function sendMessage(companyId, messages, options = {}) {
   const response = await anthropic.messages.create(params);
   const textBlock = response.content.find((b) => b.type === 'text');
   const modelText = textBlock ? textBlock.text : '';
-  return enforceOutputRules({ latestUserMessage, modelText });
+  return enforceOutputRules({ latestUserMessage, modelText, messages });
 }
 
 module.exports = { sendMessage, buildSystemBlocks };
