@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useAdminToast } from '../context/AdminToastContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export default function Login() {
-  const { login, setup, error, setError } = useAuth();
+  const { login, setup, setError } = useAuth();
+  const { showToast } = useAdminToast();
   const navigate = useNavigate();
   const [companyId, setCompanyId] = useState('');
   const [password, setPassword] = useState('');
@@ -31,8 +33,8 @@ export default function Login() {
         await login(companyId.trim(), password);
       }
       navigate('/admin', { replace: true });
-    } catch {
-      // error set in context
+    } catch (err) {
+      showToast(err?.message || (isSetup ? 'Setup failed' : 'Login failed'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -73,9 +75,6 @@ export default function Login() {
                 required
               />
             </div>
-            {error && (
-              <div className="alert alert-danger py-2 mb-3">{error}</div>
-            )}
             <button type="submit" className="btn btn-primary w-100 mb-2" disabled={submitting}>
               {submitting ? 'Please wait…' : isSetup ? 'Set password & login' : 'Login'}
             </button>

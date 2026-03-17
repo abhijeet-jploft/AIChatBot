@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useAdminToast } from '../context/AdminToastContext';
 
 const STATUS_CLASS = {
   pending: 'bg-secondary',
@@ -10,12 +11,11 @@ const STATUS_CLASS = {
 
 export default function Training() {
   const { authFetch, company } = useAuth();
+  const { showToast } = useAdminToast();
   const [url, setUrl] = useState('');
   const [jobId, setJobId] = useState(null);
   const [job, setJob] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [saveMsg, setSaveMsg] = useState('');
 
   const logRef = useRef(null);
   const pollRef = useRef(null);
@@ -51,8 +51,6 @@ export default function Training() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSaveMsg('');
     setJob(null);
     setJobId(null);
     setSubmitting(true);
@@ -71,7 +69,7 @@ export default function Training() {
 
       setJobId(data.jobId);
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -79,7 +77,6 @@ export default function Training() {
 
   const handleSave = async () => {
     if (!jobId) return;
-    setSaveMsg('');
 
     try {
       const res = await authFetch(`/training/scrape/save/${jobId}`, {
@@ -89,12 +86,12 @@ export default function Training() {
 
       if (data.saved) {
         const linkInfo = typeof data.links === 'number' ? ` and ${data.links} links` : '';
-        setSaveMsg(`Saved ${data.lines} lines${linkInfo} to ${data.companyId}`);
+        showToast(`Saved ${data.lines} lines${linkInfo} to ${data.companyId}`, 'success');
       } else {
-        setSaveMsg('Save failed. See server logs.');
+        showToast('Save failed. See server logs.', 'error');
       }
     } catch {
-      setSaveMsg('Network error while saving.');
+      showToast('Network error while saving.', 'error');
     }
   };
 
@@ -184,8 +181,6 @@ export default function Training() {
           </div>
         </form>
 
-        {error && <div className="alert alert-danger py-2 small mb-3">{error}</div>}
-
         {job && (
           <div>
             <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
@@ -208,10 +203,6 @@ export default function Training() {
                   Save to Training Data
                 </button>
               </div>
-            )}
-
-            {saveMsg && (
-              <div className="alert alert-info py-2 small mb-3">{saveMsg}</div>
             )}
 
             {job.status === 'completed' && (

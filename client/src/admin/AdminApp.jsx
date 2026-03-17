@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { AdminToastProvider } from './context/AdminToastContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
@@ -50,45 +51,47 @@ export default function AdminApp() {
   const { token } = useAuth();
 
   return (
-    <Routes>
-      <Route path="login" element={token ? <Navigate to="/admin/" replace /> : <Login />} />
-      <Route
-        index
-        element={
-          token ? (
-            <AdminLayout>
-              <Dashboard />
-            </AdminLayout>
-          ) : (
-            <Navigate to="/admin/login" replace />
-          )
-        }
-      />
-      <Route
-        path="settings"
-        element={
-          token ? (
-            <AdminLayout>
-              <Settings />
-            </AdminLayout>
-          ) : (
-            <Navigate to="/admin/login" replace />
-          )
-        }
-      />
-      <Route
-        path="training"
-        element={
-          token ? (
-            <AdminLayout>
-              <Training />
-            </AdminLayout>
-          ) : (
-            <Navigate to="/admin/login" replace />
-          )
-        }
-      />
-      <Route path="*" element={<Navigate to="/admin/" replace />} />
-    </Routes>
+    <AdminToastProvider>
+      <Routes>
+        <Route path="login" element={token ? <Navigate to="/admin/" replace /> : <Login />} />
+        <Route
+          index
+          element={
+            token ? (
+              <AdminLayout>
+                <Dashboard />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            token ? (
+              <AdminLayout>
+                <Settings />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="training"
+          element={
+            token ? (
+              <AdminLayout>
+                <Training />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route path="*" element={<Navigate to="/admin/" replace />} />
+      </Routes>
+    </AdminToastProvider>
   );
 }

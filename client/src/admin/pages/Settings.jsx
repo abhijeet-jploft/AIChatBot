@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useAdminToast } from '../context/AdminToastContext';
 
 export default function Settings() {
-  const { company, authFetch } = useAuth();
+  const { authFetch } = useAuth();
+  const { showToast } = useAdminToast();
   const [displayName, setDisplayName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
@@ -11,7 +13,6 @@ export default function Settings() {
   const [themeSecondaryColor, setThemeSecondaryColor] = useState('#050505');
   const [themeSecondaryLightColor, setThemeSecondaryLightColor] = useState('#1F1F1F');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     authFetch('/settings')
@@ -25,13 +26,12 @@ export default function Settings() {
         setThemeSecondaryColor(d.theme?.secondaryColor || '#050505');
         setThemeSecondaryLightColor(d.theme?.secondaryLightColor || '#1F1F1F');
       })
-      .catch(() => setMessage('Failed to load settings'));
-  }, [authFetch]);
+      .catch(() => showToast('Failed to load settings', 'error'));
+  }, [authFetch, showToast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setMessage('');
     try {
       const res = await authFetch('/settings', {
         method: 'PUT',
@@ -49,9 +49,9 @@ export default function Settings() {
         }),
       });
       if (!res.ok) throw new Error('Save failed');
-      setMessage('Settings saved');
+      showToast('Settings saved', 'success');
     } catch {
-      setMessage('Failed to save settings');
+      showToast('Failed to save settings', 'error');
     } finally {
       setSaving(false);
     }
@@ -123,7 +123,6 @@ export default function Settings() {
             These company colors control the chatbot theme shown to visitors.
           </div>
         </div>
-        {message && <div className="mb-2 text-small">{message}</div>}
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? 'Saving…' : 'Save'}
         </button>
