@@ -4,10 +4,15 @@ import remarkGfm from 'remark-gfm';
 function MessageContent({ content, isUser }) {
   if (isUser) return <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</span>;
   return (
-    <div className="message-markdown" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+    <div className="message-markdown" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          a: ({ href, children, ...props }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+              {children}
+            </a>
+          ),
           strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
           em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
           code: ({ className, children, ...props }) => {
@@ -31,11 +36,11 @@ function MessageContent({ content, isUser }) {
               }} {...props}>{children}</code>
             );
           },
-          pre: ({ children }) => <pre style={{ margin: '0.5em 0', overflow: 'auto' }}>{children}</pre>,
-          p: ({ children }) => <p style={{ margin: '0 0 0.5em 0' }}>{children}</p>,
-          ul: ({ children }) => <ul style={{ margin: '0.5em 0', paddingLeft: '1.25em' }}>{children}</ul>,
-          ol: ({ children }) => <ol style={{ margin: '0.5em 0', paddingLeft: '1.25em' }}>{children}</ol>,
-          li: ({ children }) => <li style={{ marginBottom: '0.25em' }}>{children}</li>,
+          pre: ({ children }) => <pre style={{ margin: '0.4em 0', overflow: 'auto' }}>{children}</pre>,
+          p: ({ children }) => <p style={{ margin: '0 0 0.4em 0', lineHeight: 1.55 }}>{children}</p>,
+          ul: ({ children }) => <ul style={{ margin: '0.35em 0 0.45em', paddingLeft: '1.2em' }}>{children}</ul>,
+          ol: ({ children }) => <ol style={{ margin: '0.35em 0 0.45em', paddingLeft: '1.2em' }}>{children}</ol>,
+          li: ({ children }) => <li style={{ marginBottom: '0.2em', lineHeight: 1.55 }}>{children}</li>,
         }}
       >
         {content}

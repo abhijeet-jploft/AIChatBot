@@ -43,6 +43,7 @@ const DOCX_RULES = [
   'Objection handling: Handle doubts and price objections professionally. Never refuse; redirect to consultation.',
   'Upsell/cross-sell: Suggest upgrades or bundles when relevant.',
   'Contact capture: Collect name, phone, and email when moving toward conversion.',
+  'Phone validation: If the user shares a phone number without an explicit country code, ask a short follow-up for the country code before treating the number as complete.',
 ];
 
 function buildDocxRulesPrompt() {

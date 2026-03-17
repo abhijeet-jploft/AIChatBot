@@ -18,6 +18,7 @@ const SCROLL_THRESHOLD = 0.4;
 const THEME_KEY = 'ai-chat-theme';
 const CHAT_VIEW_MODE_KEY = 'ai-chat-view-mode';
 const WIDGET_BUTTON_POS_KEY = 'ai-chat-widget-button-position';
+const CHAT_STATE_KEY = 'ai-chat-state';
 const DEFAULT_COMPANY_ID = '_JP_Loft';
 const DEFAULT_COMPANY_NAME = 'JP Loft';
 const MOBILE_BREAKPOINT = 768;
@@ -72,13 +73,37 @@ function getDefaultWidgetButtonPosition(viewportWidth, viewportHeight) {
   );
 }
 
+function readPersistedChatState() {
+  try {
+    const raw = localStorage.getItem(CHAT_STATE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readInitialChatState() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const historyState = window.history.state?.aiChat;
+    if (historyState && typeof historyState === 'object') return historyState;
+  } catch {}
+
+  return readPersistedChatState();
+}
+
 export default function App() {
   const location = useLocation();
   const isWebsiteView = location.pathname === '/' || location.pathname === '';
+  const initialChatState = readInitialChatState();
 
-  const [widgetActivated, setWidgetActivated] = useState(!isWebsiteView);
-  const [autoPopupHandled, setAutoPopupHandled] = useState(!isWebsiteView);
-  const [openingMessageShown, setOpeningMessageShown] = useState(false);
+  const [widgetActivated, setWidgetActivated] = useState(() => initialChatState?.widgetActivated ?? !isWebsiteView);
+  const [autoPopupHandled, setAutoPopupHandled] = useState(() => initialChatState?.autoPopupHandled ?? !isWebsiteView);
+  const [openingMessageShown, setOpeningMessageShown] = useState(() => initialChatState?.openingMessageShown ?? false);
 
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
@@ -86,12 +111,15 @@ export default function App() {
   const [isSmallScreen, setIsSmallScreen] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= TABLET_BREAKPOINT : false
   );
-  const [currentPage, setCurrentPage] = useState('chat');
+  const [currentPage, setCurrentPage] = useState(() => initialChatState?.currentPage || 'chat');
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem(THEME_KEY) || 'light'; } catch { return 'light'; }
   });
   const [chatViewMode, setChatViewMode] = useState(() => {
     const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
+    if (Object.values(CHAT_VIEW_MODES).includes(initialChatState?.chatViewMode)) {
+      return initialChatState.chatViewMode;
+    }
     try {
       const stored = localStorage.getItem(CHAT_VIEW_MODE_KEY);
       return Object.values(CHAT_VIEW_MODES).includes(stored) ? stored : fallback;
@@ -118,11 +146,11 @@ export default function App() {
     }
   });
   const [isDraggingWidgetButton, setIsDraggingWidgetButton] = useState(false);
-  const [companyId, setCompanyId]   = useState(DEFAULT_COMPANY_ID);
+  const [companyId, setCompanyId]   = useState(() => initialChatState?.companyId || DEFAULT_COMPANY_ID);
   const [companies, setCompanies]   = useState([]);
-  const [messages, setMessages]     = useState([]);
+  const [messages, setMessages]     = useState(() => Array.isArray(initialChatState?.messages) ? initialChatState.messages : []);
   const [loading, setLoading]       = useState(false);
-  const [sessionId, setSessionId]   = useState(null);
+  const [sessionId, setSessionId]   = useState(() => initialChatState?.sessionId || null);
   const [sessions, setSessions]     = useState([]);
 
   const dragStateRef = useRef({
@@ -149,17 +177,72 @@ export default function App() {
     try { localStorage.setItem(WIDGET_BUTTON_POS_KEY, JSON.stringify(widgetButtonPos)); } catch {}
   }, [widgetButtonPos]);
 
+  useEffect(() => {
+    const chatState = {
+      widgetActivated,
+      autoPopupHandled,
+      openingMessageShown,
+      currentPage,
+      companyId,
+      messages,
+      sessionId,
+      chatViewMode,
+    };
+
+    try { localStorage.setItem(CHAT_STATE_KEY, JSON.stringify(chatState)); } catch {}
+
+    try {
+      window.history.replaceState(
+        { ...(window.history.state || {}), aiChat: chatState },
+        ''
+      );
+    } catch {}
+  }, [
+    widgetActivated,
+    autoPopupHandled,
+    openingMessageShown,
+    currentPage,
+    companyId,
+    messages,
+    sessionId,
+    chatViewMode,
+  ]);
+
+  useEffect(() => {
+    const onPopState = (event) => {
+      const chatState = event.state?.aiChat || readPersistedChatState();
+      if (!chatState || typeof chatState !== 'object') return;
+
+      setWidgetActivated(chatState.widgetActivated ?? !isWebsiteView);
+      setAutoPopupHandled(chatState.autoPopupHandled ?? !isWebsiteView);
+      setOpeningMessageShown(chatState.openingMessageShown ?? false);
+      setCurrentPage(chatState.currentPage || 'chat');
+      setCompanyId(chatState.companyId || DEFAULT_COMPANY_ID);
+      setMessages(Array.isArray(chatState.messages) ? chatState.messages : []);
+      setSessionId(chatState.sessionId || null);
+      setChatViewMode(
+        Object.values(CHAT_VIEW_MODES).includes(chatState.chatViewMode)
+          ? chatState.chatViewMode
+          : CHAT_VIEW_MODES.WIDGET_CLOSED
+      );
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [isWebsiteView]);
+
   // ── Website view: reset activation when entering landing ───────────────────
   useEffect(() => {
     if (isWebsiteView) {
-      setWidgetActivated(false);
-      setAutoPopupHandled(false);
-      setChatViewMode(CHAT_VIEW_MODES.WIDGET_CLOSED);
+      if (chatViewMode !== CHAT_VIEW_MODES.WIDGET_CLOSED) {
+        setWidgetActivated(true);
+        setAutoPopupHandled(true);
+      }
     } else {
       setWidgetActivated(true);
       setAutoPopupHandled(true);
     }
-  }, [isWebsiteView]);
+  }, [isWebsiteView, chatViewMode]);
 
   // ── Widget activation (doc: 6–10s OR 40% scroll OR 8s idle) ─────────────────
   useEffect(() => {
@@ -253,6 +336,29 @@ export default function App() {
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
+  useEffect(() => {
+    if (!sessionId || messages.length > 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/sessions/${sessionId}/messages`);
+        const data = await res.json();
+
+        if (!cancelled) {
+          setMessages(Array.isArray(data) ? data.map((m) => ({ role: m.role, content: m.content })) : []);
+        }
+      } catch {
+        if (!cancelled) setMessages([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, messages.length]);
+
   // ── Select a session: load its messages ───────────────────────────────────
   const handleSelectSession = async (id) => {
     setSessionId(id);
@@ -273,13 +379,18 @@ export default function App() {
   };
 
   // ── New chat ───────────────────────────────────────────────────────────────
-  const clearChat = () => { setSessionId(null); setMessages([]); };
+  const clearChat = () => {
+    setSessionId(null);
+    setMessages([]);
+    setOpeningMessageShown(false);
+  };
 
   // ── Change company ─────────────────────────────────────────────────────────
   const handleSelectCompany = (id) => {
     setCompanyId(id);
     setSessionId(null);
     setMessages([]);
+    setOpeningMessageShown(false);
   };
 
   // ── Send message ───────────────────────────────────────────────────────────

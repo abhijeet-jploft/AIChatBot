@@ -91,6 +91,14 @@ textarea::placeholder {
   color: var(--input-placeholder);
 }
 
+.message-markdown {
+  line-height: 1.55;
+}
+
+.message-markdown > * {
+  margin-top: 0;
+}
+
 .message-markdown p:last-child { margin-bottom: 0; }
 .message-markdown > *:last-child { margin-bottom: 0; }
 

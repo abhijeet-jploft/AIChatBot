@@ -12,10 +12,28 @@ export default function ChatMain({
   showHeader = true,
   compact = false,
 }) {
-  const bottomRef = useRef(null);
+  const scrollRef = useRef(null);
+  const prevLoadingRef = useRef(loading);
+  const prevMessageCountRef = useRef(messages.length);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const scrollEl = scrollRef.current;
+    const lastMessage = messages[messages.length - 1];
+    const messageCountChanged = messages.length !== prevMessageCountRef.current;
+    const loadingStarted = loading && !prevLoadingRef.current;
+
+    if (!scrollEl) {
+      prevLoadingRef.current = loading;
+      prevMessageCountRef.current = messages.length;
+      return;
+    }
+
+    if ((messageCountChanged && lastMessage?.role === 'user') || loadingStarted) {
+      scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: 'smooth' });
+    }
+
+    prevLoadingRef.current = loading;
+    prevMessageCountRef.current = messages.length;
   }, [messages, loading]);
 
   return (
@@ -39,11 +57,11 @@ export default function ChatMain({
       )}
 
       <div
+        ref={scrollRef}
         className={`chat-main-scroll flex-grow-1 overflow-auto ${compact ? 'py-3 px-3' : 'py-4 px-3 px-md-4'}`}
         style={{ overflowX: 'hidden' }}
       >
         <ChatMessages messages={messages} loading={loading} greetingMessage={greetingMessage} />
-        <div ref={bottomRef} />
       </div>
 
       <ChatInput onSend={onSend} disabled={loading} />
