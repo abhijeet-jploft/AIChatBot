@@ -1,4 +1,6 @@
 const { sendMessage } = require('../services/anthropicService');
+const { captureLeadFromConversation } = require('../services/leadCaptureService');
+const { sendNewLeadNotification } = require('../services/leadNotificationService');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
@@ -52,6 +54,30 @@ async function postMessage(req, res) {
       } catch (dbErr) {
         console.error('[chat] DB post-write (non-fatal):', dbErr.message);
       }
+
+      captureLeadFromConversation({
+        companyId,
+        sessionId: sid,
+        messages: [...messages, { role: 'assistant', content: response }],
+        requestMeta: {
+          referer: req.headers.referer,
+          origin: req.headers.origin,
+          pageUrl: req.headers['x-page-url'],
+          userAgent: req.headers['user-agent'],
+        },
+      })
+        .then(async (leadCaptureResult) => {
+          if (leadCaptureResult?.captured && leadCaptureResult?.inserted && leadCaptureResult?.lead) {
+            try {
+              await sendNewLeadNotification({ companyId, lead: leadCaptureResult.lead });
+            } catch (notifyErr) {
+              console.error('[lead-notify] non-fatal:', notifyErr.message);
+            }
+          }
+        })
+        .catch((leadErr) => {
+          console.error('[lead-capture] non-fatal:', leadErr.message);
+        });
     }
 
     res.json({ content: response, sessionId: sid });

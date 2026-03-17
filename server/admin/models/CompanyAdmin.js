@@ -5,7 +5,9 @@ async function findByCompanyId(companyId) {
     `SELECT id, company_id, name, display_name, icon_url, greeting_message, password_hash,
             ai_mode,
             theme_primary_color, theme_primary_dark_color,
-            theme_secondary_color, theme_secondary_light_color
+            theme_secondary_color, theme_secondary_light_color,
+            lead_email_notifications_enabled,
+            lead_notification_email
      FROM chatbots WHERE company_id = $1`,
     [companyId]
   );
@@ -28,6 +30,8 @@ async function updateSettings(companyId, {
   theme_primary_dark_color,
   theme_secondary_color,
   theme_secondary_light_color,
+  lead_email_notifications_enabled,
+  lead_notification_email,
 }) {
   const updates = [];
   const values = [];
@@ -63,6 +67,14 @@ async function updateSettings(companyId, {
   if (theme_secondary_light_color !== undefined) {
     updates.push(`theme_secondary_light_color = $${i++}`);
     values.push(theme_secondary_light_color);
+  }
+  if (lead_email_notifications_enabled !== undefined) {
+    updates.push(`lead_email_notifications_enabled = $${i++}`);
+    values.push(Boolean(lead_email_notifications_enabled));
+  }
+  if (lead_notification_email !== undefined) {
+    updates.push(`lead_notification_email = $${i++}`);
+    values.push(lead_notification_email || null);
   }
   if (updates.length === 0) return;
   values.push(companyId);

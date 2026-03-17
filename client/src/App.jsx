@@ -531,7 +531,10 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/chat/message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '',
+        },
         body: JSON.stringify({
           companyId:  companyId || DEFAULT_COMPANY_ID,
           sessionId:  sessionId || undefined,
@@ -555,7 +558,7 @@ export default function App() {
     } catch (err) {
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: 'Bal: We are having technical issue' },
+        { role: 'assistant', content: 'Bal: We are facing some technical issue' },
       ]);
     } finally {
       setLoading(false);

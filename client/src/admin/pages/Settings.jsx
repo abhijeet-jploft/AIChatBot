@@ -12,6 +12,8 @@ export default function Settings() {
   const [themePrimaryDarkColor, setThemePrimaryDarkColor] = useState('#8F1020');
   const [themeSecondaryColor, setThemeSecondaryColor] = useState('#050505');
   const [themeSecondaryLightColor, setThemeSecondaryLightColor] = useState('#1F1F1F');
+  const [leadEmailNotificationsEnabled, setLeadEmailNotificationsEnabled] = useState(false);
+  const [leadNotificationEmail, setLeadNotificationEmail] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,8 @@ export default function Settings() {
         setThemePrimaryDarkColor(d.theme?.primaryDarkColor || '#8F1020');
         setThemeSecondaryColor(d.theme?.secondaryColor || '#050505');
         setThemeSecondaryLightColor(d.theme?.secondaryLightColor || '#1F1F1F');
+        setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
+        setLeadNotificationEmail(d.leadNotifications?.email || '');
       })
       .catch(() => showToast('Failed to load settings', 'error'));
   }, [authFetch, showToast]);
@@ -47,6 +51,10 @@ export default function Settings() {
             primaryDarkColor: themePrimaryDarkColor,
             secondaryColor: themeSecondaryColor,
             secondaryLightColor: themeSecondaryLightColor,
+          },
+          leadNotifications: {
+            emailEnabled: leadEmailNotificationsEnabled,
+            email: leadNotificationEmail.trim() || null,
           },
         }),
       });
@@ -123,6 +131,33 @@ export default function Settings() {
           </div>
           <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
             These company colors control the chatbot theme shown to visitors.
+          </div>
+        </div>
+        <div className="mb-3">
+          <label className="form-label">Lead notifications</label>
+          <div className="form-check mb-2">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              id="leadEmailEnabled"
+              checked={leadEmailNotificationsEnabled}
+              onChange={(e) => setLeadEmailNotificationsEnabled(e.target.checked)}
+            />
+            <label className="form-check-label" htmlFor="leadEmailEnabled">
+              Send email notification when a new lead is captured
+            </label>
+          </div>
+          <input
+            type="email"
+            className="form-control"
+            value={leadNotificationEmail}
+            onChange={(e) => setLeadNotificationEmail(e.target.value)}
+            placeholder="owner@company.com"
+            disabled={!leadEmailNotificationsEnabled}
+            style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+          />
+          <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+            Email includes lead name, requested service, and urgency level.
           </div>
         </div>
         <button type="submit" className="btn btn-primary" disabled={saving}>

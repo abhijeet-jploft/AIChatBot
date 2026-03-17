@@ -3,6 +3,7 @@ import { useAuth } from './context/AuthContext';
 import { AdminToastProvider } from './context/AdminToastContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Leads from './pages/Leads';
 import Settings from './pages/Settings';
 import ConversationMode from './pages/ConversationMode';
 import Training from './pages/Training';
@@ -35,6 +36,7 @@ function AdminLayout({ children }) {
         </div>
         <nav className="nav flex-column p-2">
           <a className={`nav-link py-2 ${location.pathname === '/admin' || location.pathname === '/admin/' ? 'fw-bold' : ''}`} href="/admin" style={{ color: 'var(--chat-text)' }}>Dashboard</a>
+          <a className={`nav-link py-2 ${location.pathname === '/admin/leads' ? 'fw-bold' : ''}`} href="/admin/leads" style={{ color: 'var(--chat-text)' }}>Leads</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/settings' ? 'fw-bold' : ''}`} href="/admin/settings" style={{ color: 'var(--chat-text)' }}>Settings</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/modes' ? 'fw-bold' : ''}`} href="/admin/modes" style={{ color: 'var(--chat-text)' }}>AI Mode</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/training' ? 'fw-bold' : ''}`} href="/admin/training" style={{ color: 'var(--chat-text)' }}>Training</a>
@@ -62,6 +64,18 @@ export default function AdminApp() {
             token ? (
               <AdminLayout>
                 <Dashboard />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="leads"
+          element={
+            token ? (
+              <AdminLayout>
+                <Leads />
               </AdminLayout>
             ) : (
               <Navigate to="/admin/login" replace />

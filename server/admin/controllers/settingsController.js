@@ -7,6 +7,17 @@ const {
   normalizeConversationModeId,
 } = require('../../services/conversationModes');
 
+function normalizeNotificationEmail(value) {
+  if (value === undefined) return undefined;
+  const email = String(value || '').trim().toLowerCase();
+  return email || null;
+}
+
+function isValidEmail(email) {
+  if (!email) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 async function getSettings(req, res) {
   try {
     const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
@@ -21,6 +32,10 @@ async function getSettings(req, res) {
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
       aiMode: modeCatalog.active,
+      leadNotifications: {
+        emailEnabled: Boolean(company.lead_email_notifications_enabled),
+        email: company.lead_notification_email || null,
+      },
       theme: mergeCompanyTheme(company.company_id, {
         primaryColor: company.theme_primary_color,
         primaryDarkColor: company.theme_primary_dark_color,
@@ -36,10 +51,19 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
   try {
-    const { displayName, iconUrl, greetingMessage, aiMode, theme } = req.body;
+    const { displayName, iconUrl, greetingMessage, aiMode, theme, leadNotifications } = req.body;
 
     if (aiMode !== undefined && !isValidConversationModeId(aiMode)) {
       return res.status(400).json({ error: 'Invalid aiMode value' });
+    }
+
+    const emailEnabled = leadNotifications?.emailEnabled;
+    const email = normalizeNotificationEmail(leadNotifications?.email);
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Invalid lead notification email' });
+    }
+    if (emailEnabled === true && !email) {
+      return res.status(400).json({ error: 'Lead notification email is required when email notifications are enabled' });
     }
 
     await CompanyAdmin.updateSettings(req.adminCompanyId, {
@@ -51,6 +75,8 @@ async function updateSettings(req, res) {
       theme_primary_dark_color: theme?.primaryDarkColor !== undefined ? theme.primaryDarkColor : undefined,
       theme_secondary_color: theme?.secondaryColor !== undefined ? theme.secondaryColor : undefined,
       theme_secondary_light_color: theme?.secondaryLightColor !== undefined ? theme.secondaryLightColor : undefined,
+      lead_email_notifications_enabled: emailEnabled !== undefined ? Boolean(emailEnabled) : undefined,
+      lead_notification_email: email !== undefined ? email : undefined,
     });
 
     const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
@@ -62,6 +88,10 @@ async function updateSettings(req, res) {
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
       aiMode: modeCatalog.active,
+      leadNotifications: {
+        emailEnabled: Boolean(company.lead_email_notifications_enabled),
+        email: company.lead_notification_email || null,
+      },
       theme: mergeCompanyTheme(company.company_id, {
         primaryColor: company.theme_primary_color,
         primaryDarkColor: company.theme_primary_dark_color,
