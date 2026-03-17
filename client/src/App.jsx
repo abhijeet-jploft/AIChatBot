@@ -87,6 +87,10 @@ function buildCompanyThemeStyle(theme, mode = 'light') {
 
   if (!primary || !secondary) return null;
 
+  const headerBg = theme.headerBackground || null;
+  const headerShadowVal = theme.headerShadow || null;
+  const headerText = theme.headerTextColor || null;
+
   if (mode === 'dark') {
     const background = mixHexColors(primaryDark, '#050505', 0.78) || '#111111';
     const sidebar = mixHexColors(background, '#FFFFFF', 0.05) || background;
@@ -96,7 +100,7 @@ function buildCompanyThemeStyle(theme, mode = 'light') {
     const bodyText = '#F3F4F6';
     const mutedText = '#B2B7C2';
 
-    return {
+    const darkVars = {
       '--chat-bg': background,
       '--chat-sidebar': sidebar,
       '--chat-surface': surface,
@@ -113,6 +117,9 @@ function buildCompanyThemeStyle(theme, mode = 'light') {
       '--session-hover-bg': withAlpha('#FFFFFF', 0.08),
       '--session-active-bg': withAlpha(primary, 0.2),
       '--session-active-color': mixHexColors(primary, '#FFFFFF', 0.2) || primary,
+      '--chat-header-bg': headerBg || `linear-gradient(120deg, ${primary}, ${primaryDark})`,
+      '--chat-header-shadow': headerShadowVal || 'none',
+      '--chat-header-text': headerText || '#FFFFFF',
       '--chat-header-gradient-start': primary,
       '--chat-header-gradient-end': primaryDark,
       '--chat-launcher-gradient-start': primary,
@@ -122,6 +129,7 @@ function buildCompanyThemeStyle(theme, mode = 'light') {
       '--chat-host-glow-2': withAlpha(primaryDark, 0.12),
       '--chat-host-bg-base': background,
     };
+    return darkVars;
   }
 
   const background = secondaryLight || mixHexColors(secondary, '#F5F5FC', 0.45) || '#F5F5FC';
@@ -149,6 +157,9 @@ function buildCompanyThemeStyle(theme, mode = 'light') {
     '--session-hover-bg': withAlpha('#FFFFFF', 0.08),
     '--session-active-bg': withAlpha(primary, 0.2),
     '--session-active-color': mixHexColors(primary, '#FFFFFF', 0.2) || primary,
+    '--chat-header-bg': headerBg || `linear-gradient(120deg, ${primary}, ${primaryDark})`,
+    '--chat-header-shadow': headerShadowVal || 'none',
+    '--chat-header-text': headerText || '#FFFFFF',
     '--chat-header-gradient-start': primary,
     '--chat-header-gradient-end': primaryDark,
     '--chat-launcher-gradient-start': primary,

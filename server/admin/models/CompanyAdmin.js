@@ -6,6 +6,7 @@ async function findByCompanyId(companyId) {
             ai_mode,
             theme_primary_color, theme_primary_dark_color,
             theme_secondary_color, theme_secondary_light_color,
+            theme_header_background, theme_header_shadow, theme_header_text_color,
             lead_email_notifications_enabled,
             lead_notification_email
      FROM chatbots WHERE company_id = $1`,
@@ -30,6 +31,9 @@ async function updateSettings(companyId, {
   theme_primary_dark_color,
   theme_secondary_color,
   theme_secondary_light_color,
+  theme_header_background,
+  theme_header_shadow,
+  theme_header_text_color,
   lead_email_notifications_enabled,
   lead_notification_email,
 }) {
@@ -68,6 +72,18 @@ async function updateSettings(companyId, {
     updates.push(`theme_secondary_light_color = $${i++}`);
     values.push(theme_secondary_light_color);
   }
+  if (theme_header_background !== undefined) {
+    updates.push(`theme_header_background = $${i++}`);
+    values.push(theme_header_background || null);
+  }
+  if (theme_header_shadow !== undefined) {
+    updates.push(`theme_header_shadow = $${i++}`);
+    values.push(theme_header_shadow || null);
+  }
+  if (theme_header_text_color !== undefined) {
+    updates.push(`theme_header_text_color = $${i++}`);
+    values.push(theme_header_text_color || null);
+  }
   if (lead_email_notifications_enabled !== undefined) {
     updates.push(`lead_email_notifications_enabled = $${i++}`);
     values.push(Boolean(lead_email_notifications_enabled));
@@ -75,6 +91,54 @@ async function updateSettings(companyId, {
   if (lead_notification_email !== undefined) {
     updates.push(`lead_notification_email = $${i++}`);
     values.push(lead_notification_email || null);
+  }
+  if (updates.length === 0) return;
+  values.push(companyId);
+  await pool.query(
+    `UPDATE chatbots SET ${updates.join(', ')} WHERE company_id = $${i}`,
+    values
+  );
+}
+
+async function updateThemeSettings(companyId, {
+  primaryColor,
+  primaryDarkColor,
+  secondaryColor,
+  secondaryLightColor,
+  headerBackground,
+  headerShadow,
+  headerTextColor,
+}) {
+  const updates = [];
+  const values = [];
+  let i = 1;
+  if (primaryColor !== undefined) {
+    updates.push(`theme_primary_color = $${i++}`);
+    values.push(primaryColor || null);
+  }
+  if (primaryDarkColor !== undefined) {
+    updates.push(`theme_primary_dark_color = $${i++}`);
+    values.push(primaryDarkColor || null);
+  }
+  if (secondaryColor !== undefined) {
+    updates.push(`theme_secondary_color = $${i++}`);
+    values.push(secondaryColor || null);
+  }
+  if (secondaryLightColor !== undefined) {
+    updates.push(`theme_secondary_light_color = $${i++}`);
+    values.push(secondaryLightColor || null);
+  }
+  if (headerBackground !== undefined) {
+    updates.push(`theme_header_background = $${i++}`);
+    values.push(headerBackground || null);
+  }
+  if (headerShadow !== undefined) {
+    updates.push(`theme_header_shadow = $${i++}`);
+    values.push(headerShadow || null);
+  }
+  if (headerTextColor !== undefined) {
+    updates.push(`theme_header_text_color = $${i++}`);
+    values.push(headerTextColor || null);
   }
   if (updates.length === 0) return;
   values.push(companyId);
@@ -110,6 +174,7 @@ module.exports = {
   findByCompanyId,
   setPassword,
   updateSettings,
+  updateThemeSettings,
   createSession,
   findSessionByToken,
   deleteSession,

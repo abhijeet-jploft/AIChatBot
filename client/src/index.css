@@ -10,6 +10,9 @@
   --chat-muted: #71717a;
   --chat-accent: #6366f1;
   --chat-accent-hover: #818cf8;
+  --chat-header-bg: #000000;
+  --chat-header-shadow: 0 4px 12px rgba(224, 47, 58, 0.25);
+  --chat-header-text: #ffffff;
   --chat-header-gradient-start: #6366f1;
   --chat-header-gradient-end: #818cf8;
   --chat-launcher-gradient-start: #6366f1;
@@ -38,6 +41,9 @@
   --chat-muted: #71717a;
   --chat-accent: #4f46e5;
   --chat-accent-hover: #4338ca;
+  --chat-header-bg: #000000;
+  --chat-header-shadow: 0 4px 12px rgba(224, 47, 58, 0.25);
+  --chat-header-text: #ffffff;
   --chat-header-gradient-start: #4f46e5;
   --chat-header-gradient-end: #4338ca;
   --chat-launcher-gradient-start: #4f46e5;
@@ -185,8 +191,9 @@ textarea::placeholder {
   height: 52px;
   min-height: 52px;
   padding: 0 10px;
-  background: linear-gradient(120deg, var(--chat-header-gradient-start), var(--chat-header-gradient-end));
-  color: #ffffff;
+  background: var(--chat-header-bg, linear-gradient(120deg, var(--chat-header-gradient-start), var(--chat-header-gradient-end)));
+  color: var(--chat-header-text, #ffffff);
+  box-shadow: var(--chat-header-shadow, none);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -346,6 +353,9 @@ textarea::placeholder {
 .chat-main-header {
   min-height: var(--chat-header-height);
   height: var(--chat-header-height);
+  background: var(--chat-header-bg, var(--chat-sidebar, transparent));
+  color: var(--chat-header-text, var(--chat-text-heading));
+  box-shadow: var(--chat-header-shadow, none);
   border-bottom: 1px solid var(--chat-border);
 }
 

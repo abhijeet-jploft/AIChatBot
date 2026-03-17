@@ -16,7 +16,8 @@ async function getCompaniesList(req, res) {
     const { rows } = await pool.query(
       `SELECT company_id, display_name, icon_url, greeting_message,
               theme_primary_color, theme_primary_dark_color,
-              theme_secondary_color, theme_secondary_light_color
+              theme_secondary_color, theme_secondary_light_color,
+              theme_header_background, theme_header_shadow, theme_header_text_color
          FROM chatbots
        WHERE company_id = ANY($1::text[])`,
       [companyIds]
@@ -33,6 +34,9 @@ async function getCompaniesList(req, res) {
         primaryDarkColor: dbMap[c.id]?.theme_primary_dark_color,
         secondaryColor: dbMap[c.id]?.theme_secondary_color,
         secondaryLightColor: dbMap[c.id]?.theme_secondary_light_color,
+        headerBackground: dbMap[c.id]?.theme_header_background,
+        headerShadow: dbMap[c.id]?.theme_header_shadow,
+        headerTextColor: dbMap[c.id]?.theme_header_text_color,
       }),
     }));
     res.json(enriched);

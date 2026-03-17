@@ -41,6 +41,9 @@ async function getSettings(req, res) {
         primaryDarkColor: company.theme_primary_dark_color,
         secondaryColor: company.theme_secondary_color,
         secondaryLightColor: company.theme_secondary_light_color,
+        headerBackground: company.theme_header_background,
+        headerShadow: company.theme_header_shadow,
+        headerTextColor: company.theme_header_text_color,
       }),
     });
   } catch (err) {
@@ -97,6 +100,9 @@ async function updateSettings(req, res) {
         primaryDarkColor: company.theme_primary_dark_color,
         secondaryColor: company.theme_secondary_color,
         secondaryLightColor: company.theme_secondary_light_color,
+        headerBackground: company.theme_header_background,
+        headerShadow: company.theme_header_shadow,
+        headerTextColor: company.theme_header_text_color,
       }),
     });
   } catch (err) {

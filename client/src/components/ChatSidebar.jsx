@@ -53,16 +53,24 @@ export default function ChatSidebar({
         transition: 'width 0.2s ease',
       }}
     >
-      <div className="chat-sidebar-header d-flex align-items-center justify-content-between px-3">
+      <div
+        className="chat-sidebar-header d-flex align-items-center justify-content-between px-3"
+        style={{
+          background: 'var(--chat-header-bg, var(--chat-sidebar))',
+          color: 'var(--chat-header-text, var(--chat-text-heading))',
+          boxShadow: 'var(--chat-header-shadow, none)',
+        }}
+      >
         {!collapsed && (
-          <span className="fw-semibold" style={{ color: 'var(--chat-text-heading)' }}>
+          <span className="fw-semibold" style={{ color: 'inherit' }}>
             AI Chat Agent
           </span>
         )}
-        <div className="d-flex align-items-center gap-1">
+        <div className="d-flex align-items-center gap-1" style={{ color: 'inherit' }}>
           <button
             type="button"
-            className="btn btn-link text-secondary p-1"
+            className="btn btn-link p-1"
+            style={{ color: 'inherit', opacity: 0.9 }}
             onClick={() => onThemeChange?.(theme === 'dark' ? 'light' : 'dark')}
             aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           >
@@ -87,7 +95,8 @@ export default function ChatSidebar({
 
           <button
             type="button"
-            className="btn btn-link text-secondary p-0 px-2"
+            className="btn btn-link p-0 px-2"
+            style={{ color: 'inherit', opacity: 0.9 }}
             onClick={() => setCollapsed(!collapsed)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >

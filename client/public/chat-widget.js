@@ -296,11 +296,11 @@
 
   function createStyles() {
     var css = [
-      '#jploft-chat-root{--chat-bg:#f4f4f5;--chat-surface:#ffffff;--chat-border:#d4d4d8;--chat-text:#18181b;--chat-muted:#71717a;--chat-accent:#4f46e5;font-family:Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
+      '#jploft-chat-root{--chat-bg:#f4f4f5;--chat-surface:#ffffff;--chat-border:#d4d4d8;--chat-text:#18181b;--chat-muted:#71717a;--chat-accent:#E02F3A;--chat-header-bg:#000000;--chat-header-shadow:0 4px 12px rgba(224,47,58,0.25);--chat-header-text:#ffffff;font-family:Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
       '#jploft-chat-root *{box-sizing:border-box}',
       '#jploft-chat-root button,#jploft-chat-root textarea{font:inherit}',
 
-      '#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{position:fixed;right:24px;bottom:24px;width:56px;height:56px;border:0;border-radius:999px;background:linear-gradient(135deg,#4f46e5,#6d28d9);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 18px 38px -20px rgba(79,70,229,.85);z-index:99998;transition:transform .2s,box-shadow .2s}',
+      '#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{position:fixed;right:24px;bottom:24px;width:56px;height:56px;border:0;border-radius:999px;background:var(--chat-accent,linear-gradient(135deg,#4f46e5,#6d28d9));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 18px 38px -20px rgba(79,70,229,.85);z-index:99998;transition:transform .2s,box-shadow .2s}',
       '#jploft-chat-root .jploft-btn:hover,#jploft-chat-root .jploft-close-fab:hover{transform:translateY(-2px);box-shadow:0 24px 45px -22px rgba(79,70,229,.9)}',
       '#jploft-chat-root .jploft-draggable{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}',
       '#jploft-chat-root .jploft-draggable.is-dragging{cursor:grabbing;transition:none;transform:none}',
@@ -309,15 +309,15 @@
       '#jploft-chat-root .jploft-panel{position:fixed;right:24px;bottom:96px;width:min(370px,calc(100vw - 48px));height:min(610px,calc(100dvh - 128px));max-height:calc(100dvh - 128px);border:1px solid var(--chat-border);border-radius:14px;background:var(--chat-surface);box-shadow:0 28px 65px -26px rgba(0,0,0,.45);z-index:99999;display:flex;flex-direction:column;overflow:hidden}',
       '#jploft-chat-root .jploft-panel.is-fullscreen{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}',
 
-      '#jploft-chat-root .jploft-header{height:52px;min-height:52px;padding:0 10px;background:linear-gradient(120deg,#4f46e5,#6d28d9);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:2;flex-shrink:0}',
+      '#jploft-chat-root .jploft-header{height:52px;min-height:52px;padding:0 10px;background:var(--chat-header-bg,linear-gradient(120deg,#4f46e5,#6d28d9));color:var(--chat-header-text,#fff);box-shadow:var(--chat-header-shadow,none);display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:2;flex-shrink:0}',
       '#jploft-chat-root .jploft-title-wrap{display:flex;flex-direction:column;align-items:center;min-width:0;flex:1}',
       '#jploft-chat-root .jploft-title{font-size:13px;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '#jploft-chat-root .jploft-subtitle{font-size:10px;opacity:.86;letter-spacing:.03em}',
       '#jploft-chat-root .jploft-right{display:flex;align-items:center;gap:8px}',
-      '#jploft-chat-root .jploft-icon-btn{width:28px;height:28px;border:0;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#fff;background:transparent;cursor:pointer;transition:background .2s ease}',
+      '#jploft-chat-root .jploft-icon-btn{width:28px;height:28px;border:0;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:var(--chat-header-text,#fff);background:transparent;cursor:pointer;transition:background .2s ease}',
       '#jploft-chat-root .jploft-icon-btn:hover{background:rgba(255,255,255,.14)}',
       '#jploft-chat-root .jploft-avatar{width:36px;height:36px;border-radius:8px;overflow:hidden;position:relative;flex-shrink:0;background:#fff;display:inline-flex;align-items:center;justify-content:center}',
-      '#jploft-chat-root .jploft-avatar-text{font-size:14px;font-weight:600;color:#4f46e5}',
+      '#jploft-chat-root .jploft-avatar-text{font-size:14px;font-weight:600;color:var(--chat-accent,#4f46e5)}',
 
       '#jploft-chat-root .jploft-main{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--chat-surface)}',
       '#jploft-chat-root .jploft-body{flex:1;min-height:0;overflow-y:auto;padding:12px;background:var(--chat-bg)}',
@@ -551,6 +551,24 @@
     root.appendChild(panel);
     root.appendChild(closeFab);
     document.body.appendChild(root);
+
+    fetchThemeAndApply(root);
+  }
+
+  function fetchThemeAndApply(widgetRoot) {
+    fetch(apiUrl + '/train/companies')
+      .then(function (r) { return r.json(); })
+      .then(function (companies) {
+        if (!Array.isArray(companies)) return;
+        var company = companies.find(function (c) { return c.id === companyId; });
+        var theme = company && company.theme;
+        if (!theme || !widgetRoot) return;
+        if (theme.headerBackground) widgetRoot.style.setProperty('--chat-header-bg', theme.headerBackground);
+        if (theme.headerShadow) widgetRoot.style.setProperty('--chat-header-shadow', theme.headerShadow);
+        if (theme.headerTextColor) widgetRoot.style.setProperty('--chat-header-text', theme.headerTextColor);
+        if (theme.primaryColor) widgetRoot.style.setProperty('--chat-accent', theme.primaryColor);
+      })
+      .catch(function () {});
   }
 
   function activate() {

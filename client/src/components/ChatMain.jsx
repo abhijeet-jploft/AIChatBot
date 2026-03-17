@@ -44,14 +44,18 @@ export default function ChatMain({
       {showHeader && (
         <header
           className="chat-main-header d-flex align-items-center px-3 px-md-4 gap-2"
-          style={{ background: 'var(--chat-surface)' }}
+          style={{
+            background: 'var(--chat-header-bg, var(--chat-surface))',
+            color: 'var(--chat-header-text, var(--chat-text-heading))',
+            boxShadow: 'var(--chat-header-shadow, none)',
+          }}
         >
           {companyIconUrl && (
             <img src={companyIconUrl} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
           )}
           <div>
-            <span className="fw-semibold">{companyName}</span>
-            <span className="ms-2 text-muted small">AI Sales Agent</span>
+            <span className="fw-semibold" style={{ color: 'inherit' }}>{companyName}</span>
+            <span className="ms-2 small opacity-85" style={{ color: 'inherit' }}>AI Sales Agent</span>
           </div>
         </header>
       )}

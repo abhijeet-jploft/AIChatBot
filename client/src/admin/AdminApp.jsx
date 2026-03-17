@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
 import Settings from './pages/Settings';
+import Theme from './pages/Theme';
 import ConversationMode from './pages/ConversationMode';
 import Training from './pages/Training';
 import './index.css';
@@ -38,6 +39,7 @@ function AdminLayout({ children }) {
           <a className={`nav-link py-2 ${location.pathname === '/admin' || location.pathname === '/admin/' ? 'fw-bold' : ''}`} href="/admin" style={{ color: 'var(--chat-text)' }}>Dashboard</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/leads' ? 'fw-bold' : ''}`} href="/admin/leads" style={{ color: 'var(--chat-text)' }}>Leads</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/settings' ? 'fw-bold' : ''}`} href="/admin/settings" style={{ color: 'var(--chat-text)' }}>Settings</a>
+          <a className={`nav-link py-2 ${location.pathname === '/admin/theme' ? 'fw-bold' : ''}`} href="/admin/theme" style={{ color: 'var(--chat-text)' }}>Theme</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/modes' ? 'fw-bold' : ''}`} href="/admin/modes" style={{ color: 'var(--chat-text)' }}>AI Mode</a>
           <a className={`nav-link py-2 ${location.pathname === '/admin/training' ? 'fw-bold' : ''}`} href="/admin/training" style={{ color: 'var(--chat-text)' }}>Training</a>
         </nav>
@@ -88,6 +90,18 @@ export default function AdminApp() {
             token ? (
               <AdminLayout>
                 <Settings />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="theme"
+          element={
+            token ? (
+              <AdminLayout>
+                <Theme />
               </AdminLayout>
             ) : (
               <Navigate to="/admin/login" replace />

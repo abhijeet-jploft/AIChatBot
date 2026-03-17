@@ -50,6 +50,9 @@ ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_primary_color VARCHAR(7);
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_primary_dark_color VARCHAR(7);
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_secondary_color VARCHAR(7);
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_secondary_light_color VARCHAR(7);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_header_background VARCHAR(255);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_header_shadow VARCHAR(255);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_header_text_color VARCHAR(7);
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_email_notifications_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_notification_email TEXT;
 

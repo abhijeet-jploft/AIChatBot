@@ -1,6 +1,7 @@
 const express = require('express');
 const authController = require('../controllers/authController');
 const settingsController = require('../controllers/settingsController');
+const themeController = require('../controllers/themeController');
 const leadsController = require('../controllers/leadsController');
 const trainingController = require('../controllers/trainingController');
 const { requireAuth } = require('../middleware/requireAuth');
@@ -19,6 +20,9 @@ router.get('/auth/me', requireAuth, authController.me);
 router.get('/settings', requireAuth, settingsController.getSettings);
 router.put('/settings', requireAuth, settingsController.updateSettings);
 router.get('/settings/modes', requireAuth, settingsController.getModeSettings);
+
+router.get('/theme', requireAuth, themeController.getTheme);
+router.put('/theme', requireAuth, themeController.updateTheme);
 
 router.get('/leads', requireAuth, leadsController.listLeads);
 router.get('/leads/summary', requireAuth, leadsController.getSummary);
