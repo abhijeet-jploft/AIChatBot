@@ -2,6 +2,8 @@ const express = require('express');
 const authController = require('../controllers/authController');
 const settingsController = require('../controllers/settingsController');
 const themeController = require('../controllers/themeController');
+const dashboardController = require('../controllers/dashboardController');
+const agentController = require('../controllers/agentController');
 const leadsController = require('../controllers/leadsController');
 const trainingController = require('../controllers/trainingController');
 const { requireAuth } = require('../middleware/requireAuth');
@@ -23,6 +25,12 @@ router.get('/settings/modes', requireAuth, settingsController.getModeSettings);
 
 router.get('/theme', requireAuth, themeController.getTheme);
 router.put('/theme', requireAuth, themeController.updateTheme);
+
+router.get('/dashboard', requireAuth, dashboardController.getDashboard);
+router.get('/dashboard/live', requireAuth, dashboardController.getLive);
+
+router.get('/agent/status', requireAuth, agentController.getStatus);
+router.patch('/agent/status', requireAuth, agentController.updateStatus);
 
 router.get('/leads', requireAuth, leadsController.listLeads);
 router.get('/leads/summary', requireAuth, leadsController.getSummary);

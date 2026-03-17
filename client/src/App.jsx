@@ -300,6 +300,9 @@ export default function App() {
     moved: false,
   });
   const ignoreButtonClickRef = useRef(false);
+  const presenceWsRef = useRef(null);
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -473,6 +476,77 @@ export default function App() {
   }, [companyId]);
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  // ── Active visitor presence via WebSocket (for dashboard live activity) ───────
+  useEffect(() => {
+    if (!companyId) return;
+    const getWsUrl = () => {
+      if (typeof window === 'undefined' || !window.location) return null;
+      const base = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`;
+      const u = new URL(base);
+      return (u.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + u.host + '/api/ws';
+    };
+    let reconnectTimer = null;
+    const sendRegister = (sock, sid, pageUrl) => {
+      if (!sock || sock.readyState !== WebSocket.OPEN) return;
+      try {
+        sock.send(JSON.stringify({
+          type: 'register',
+          companyId,
+          sessionId: sid ?? undefined,
+          pageUrl: pageUrl ?? window.location?.href ?? '',
+        }));
+      } catch (_) {}
+    };
+    const connect = () => {
+      const url = getWsUrl();
+      if (!url) return;
+      try {
+        const sock = new WebSocket(url);
+        presenceWsRef.current = sock;
+        sock.onopen = () => sendRegister(sock, sessionIdRef.current, window.location?.href);
+        sock.onclose = () => {
+          presenceWsRef.current = null;
+          reconnectTimer = setTimeout(connect, 5000);
+        };
+        sock.onerror = () => {};
+      } catch (_) {}
+    };
+    connect();
+    const onLocationChange = () => {
+      const sock = presenceWsRef.current;
+      if (sock?.readyState === WebSocket.OPEN) {
+        try {
+          sock.send(JSON.stringify({ type: 'page', pageUrl: window.location?.href ?? '' }));
+        } catch (_) {}
+        sendRegister(sock, sessionIdRef.current, window.location?.href);
+      }
+    };
+    window.addEventListener('popstate', onLocationChange);
+    window.addEventListener('hashchange', onLocationChange);
+    return () => {
+      window.removeEventListener('popstate', onLocationChange);
+      window.removeEventListener('hashchange', onLocationChange);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (presenceWsRef.current) {
+        presenceWsRef.current.close();
+        presenceWsRef.current = null;
+      }
+    };
+  }, [companyId]);
+
+  useEffect(() => {
+    const sock = presenceWsRef.current;
+    if (!sock || sock.readyState !== WebSocket.OPEN) return;
+    try {
+      sock.send(JSON.stringify({
+        type: 'register',
+        companyId,
+        sessionId: sessionId ?? undefined,
+        pageUrl: window.location?.href ?? '',
+      }));
+    } catch (_) {}
+  }, [companyId, sessionId, location.pathname]);
 
   useEffect(() => {
     if (!sessionId || messages.length > 0) return;

@@ -1,6 +1,7 @@
 const { sendMessage } = require('../services/anthropicService');
 const { captureLeadFromConversation } = require('../services/leadCaptureService');
 const { sendNewLeadNotification } = require('../services/leadNotificationService');
+const { record: recordActiveVisitor } = require('../services/activeVisitorsService');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
@@ -42,6 +43,14 @@ async function postMessage(req, res) {
       } else {
         await ChatSession.touch(sid);
       }
+
+      if (chatbot?.agent_paused) {
+        const pausedMessage = 'Our AI agent is currently paused. Please leave your name and contact details, and we will get back to you shortly.';
+        await ChatMessage.create(sid, 'assistant', pausedMessage);
+        return res.json({ content: pausedMessage, sessionId: sid });
+      }
+
+      recordActiveVisitor(companyId, sid, req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl, true);
     } catch (dbErr) {
       console.error('[chat] DB pre-write (non-fatal):', dbErr.message);
     }
@@ -87,4 +96,23 @@ async function postMessage(req, res) {
   }
 }
 
-module.exports = { postMessage };
+/**
+ * POST /api/chat/ping
+ * Body: { companyId, sessionId?, pageUrl? }
+ * Heartbeat for active visitor tracking. Call periodically from widget/app.
+ */
+async function ping(req, res) {
+  try {
+    const { companyId, sessionId, pageUrl } = req.body || {};
+    if (!companyId) {
+      return res.status(400).json({ error: 'companyId is required' });
+    }
+    recordActiveVisitor(companyId, sessionId || null, pageUrl || null, false);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[chat] ping:', err);
+    res.status(500).json({ error: err.message || 'Ping failed' });
+  }
+}
+
+module.exports = { postMessage, ping };

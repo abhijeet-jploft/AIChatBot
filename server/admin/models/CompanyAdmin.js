@@ -8,7 +8,8 @@ async function findByCompanyId(companyId) {
             theme_secondary_color, theme_secondary_light_color,
             theme_header_background, theme_header_shadow, theme_header_text_color,
             lead_email_notifications_enabled,
-            lead_notification_email
+            lead_notification_email,
+            agent_paused
      FROM chatbots WHERE company_id = $1`,
     [companyId]
   );
@@ -170,11 +171,19 @@ async function deleteSession(token) {
   await pool.query(`DELETE FROM admin_sessions WHERE token = $1`, [token]);
 }
 
+async function setAgentPaused(companyId, paused) {
+  await pool.query(
+    `UPDATE chatbots SET agent_paused = $1 WHERE company_id = $2`,
+    [Boolean(paused), companyId]
+  );
+}
+
 module.exports = {
   findByCompanyId,
   setPassword,
   updateSettings,
   updateThemeSettings,
+  setAgentPaused,
   createSession,
   findSessionByToken,
   deleteSession,

@@ -41,6 +41,9 @@
   var messages = [];
   var sessionId = null;
   var loading = false;
+  var presenceWs = null;
+  var wsReconnectTimer = null;
+  var WS_RECONNECT_MS = 5000;
 
   var root = null;
   var launcher = null;
@@ -416,6 +419,7 @@
     setSendButtonState();
     renderMessages();
 
+    var pageUrl = typeof window !== 'undefined' && window.location ? window.location.href : '';
     fetch(apiUrl + '/chat/message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -423,11 +427,13 @@
         companyId: companyId,
         sessionId: sessionId || undefined,
         messages: msgs.map(function (m) { return { role: m.role, content: m.content }; }),
+        pageUrl: pageUrl,
       }),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.sessionId) sessionId = data.sessionId;
+        sendPresenceRegister(sessionId);
         messages.push({ role: 'user', content: userContent });
         messages.push({ role: 'assistant', content: data.content || '' });
         loading = false;
@@ -552,7 +558,68 @@
     root.appendChild(closeFab);
     document.body.appendChild(root);
 
+    connectPresenceWs();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('popstate', sendPageUpdate);
+      window.addEventListener('hashchange', sendPageUpdate);
+    }
     fetchThemeAndApply(root);
+  }
+
+  function sendPageUpdate() {
+    if (!presenceWs || presenceWs.readyState !== 1) return;
+    var url = typeof window !== 'undefined' && window.location ? window.location.href : '';
+    try {
+      presenceWs.send(JSON.stringify({ type: 'page', pageUrl: url }));
+    } catch (e) {}
+  }
+
+  function getWsUrl() {
+    if (!apiUrl) return '';
+    var a = document.createElement('a');
+    a.href = apiUrl;
+    var protocol = (a.protocol === 'https:') ? 'wss:' : 'ws:';
+    return protocol + '//' + a.host + '/api/ws';
+  }
+
+  function sendPresenceRegister(sid, page) {
+    if (!presenceWs || presenceWs.readyState !== 1) return;
+    var url = (typeof page === 'string') ? page : (typeof window !== 'undefined' && window.location ? window.location.href : '');
+    try {
+      presenceWs.send(JSON.stringify({
+        type: 'register',
+        companyId: companyId,
+        sessionId: sid || undefined,
+        pageUrl: url,
+      }));
+    } catch (e) {}
+  }
+
+  function connectPresenceWs() {
+    if (!apiUrl || !companyId) return;
+    var wsUrl = getWsUrl();
+    if (!wsUrl) return;
+    try {
+      if (presenceWs) {
+        presenceWs.close();
+        presenceWs = null;
+      }
+      presenceWs = new WebSocket(wsUrl);
+      presenceWs.onopen = function () {
+        if (wsReconnectTimer) {
+          clearTimeout(wsReconnectTimer);
+          wsReconnectTimer = null;
+        }
+        sendPresenceRegister(sessionId, window.location ? window.location.href : '');
+      };
+      presenceWs.onclose = function () {
+        presenceWs = null;
+        if (!wsReconnectTimer) {
+          wsReconnectTimer = setTimeout(connectPresenceWs, WS_RECONNECT_MS);
+        }
+      };
+      presenceWs.onerror = function () {};
+    } catch (e) {}
   }
 
   function fetchThemeAndApply(widgetRoot) {

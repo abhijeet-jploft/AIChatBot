@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AdminToastProvider } from './context/AdminToastContext';
 import Login from './pages/Login';
@@ -14,6 +14,32 @@ function AdminLayout({ children }) {
   const { company, logout, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const companyName = company?.displayName || 'Admin';
+
+  const navGroups = [
+    {
+      label: 'Main',
+      items: [
+        { to: '/admin', label: 'Dashboard' },
+        { to: '/admin/leads', label: 'Leads' },
+        { to: '/admin/training', label: 'Training' },
+      ],
+    },
+    {
+      label: 'Configuration',
+      items: [
+        { to: '/admin/settings', label: 'Settings' },
+        { to: '/admin/theme', label: 'Theme' },
+        { to: '/admin/modes', label: 'AI Mode' },
+      ],
+    },
+  ];
+
+  const currentPageLabel = (
+    navGroups
+      .flatMap((group) => group.items)
+      .find((item) => item.to === location.pathname)?.label || 'Dashboard'
+  );
 
   if (loading) {
     return (
@@ -29,26 +55,63 @@ function AdminLayout({ children }) {
   };
 
   return (
-    <div className="d-flex min-vh-100" style={{ background: 'var(--chat-bg)' }}>
-      <aside className="d-flex flex-column border-end" style={{ width: 220, background: 'var(--chat-sidebar)', borderColor: 'var(--chat-border)' }}>
-        <div className="p-3 border-bottom" style={{ borderColor: 'var(--chat-border)' }}>
-          <h6 className="mb-0" style={{ color: 'var(--chat-text-heading)' }}>{company?.displayName || 'Admin'}</h6>
-          <small className="text-muted">Admin panel</small>
-        </div>
-        <nav className="nav flex-column p-2">
-          <a className={`nav-link py-2 ${location.pathname === '/admin' || location.pathname === '/admin/' ? 'fw-bold' : ''}`} href="/admin" style={{ color: 'var(--chat-text)' }}>Dashboard</a>
-          <a className={`nav-link py-2 ${location.pathname === '/admin/leads' ? 'fw-bold' : ''}`} href="/admin/leads" style={{ color: 'var(--chat-text)' }}>Leads</a>
-          <a className={`nav-link py-2 ${location.pathname === '/admin/settings' ? 'fw-bold' : ''}`} href="/admin/settings" style={{ color: 'var(--chat-text)' }}>Settings</a>
-          <a className={`nav-link py-2 ${location.pathname === '/admin/theme' ? 'fw-bold' : ''}`} href="/admin/theme" style={{ color: 'var(--chat-text)' }}>Theme</a>
-          <a className={`nav-link py-2 ${location.pathname === '/admin/modes' ? 'fw-bold' : ''}`} href="/admin/modes" style={{ color: 'var(--chat-text)' }}>AI Mode</a>
-          <a className={`nav-link py-2 ${location.pathname === '/admin/training' ? 'fw-bold' : ''}`} href="/admin/training" style={{ color: 'var(--chat-text)' }}>Training</a>
-        </nav>
-        <div className="mt-auto p-3 border-top" style={{ borderColor: 'var(--chat-border)' }}>
-          <a className="nav-link py-2" href="/" style={{ color: 'var(--chat-muted)', fontSize: 13 }}>← Back to chat</a>
-          <button className="btn btn-link nav-link p-0 text-danger" onClick={handleLogout}>Logout</button>
-        </div>
-      </aside>
-      <main className="flex-grow-1 overflow-auto">{children}</main>
+    <div className="admin-shell">
+      <div className="admin-board">
+        <aside className="admin-sidebar">
+          <div className="admin-brand-wrap">
+            <div className="admin-brand-badge">AI</div>
+            <div>
+              <h6 className="mb-0 admin-brand-title">{companyName}</h6>
+              <small className="admin-brand-subtitle">Admin workspace</small>
+            </div>
+          </div>
+
+          {navGroups.map((group) => (
+            <div key={group.label} className="admin-nav-group">
+              <div className="admin-nav-group-title">{group.label}</div>
+              <nav className="nav flex-column">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/admin'}
+                    className={({ isActive }) => `admin-nav-link ${isActive ? 'is-active' : ''}`}
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
+          ))}
+
+          <div className="admin-sidebar-footer">
+            <NavLink className="admin-sidebar-muted-link" to="/">
+              Back to chat
+            </NavLink>
+            <button className="admin-logout-btn" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        </aside>
+
+        <main className="admin-main">
+          <header className="admin-topbar">
+            <div>
+              <p className="admin-welcome mb-1">Welcome,</p>
+              <h5 className="mb-0 admin-page-title">{currentPageLabel}</h5>
+            </div>
+            <div className="admin-topbar-search-wrap">
+              <input
+                className="admin-topbar-search"
+                type="search"
+                placeholder="Find settings, leads, or pages"
+                aria-label="Search admin pages"
+              />
+            </div>
+          </header>
+          <div className="admin-content">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

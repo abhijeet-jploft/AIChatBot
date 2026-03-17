@@ -21,11 +21,18 @@ async function findOrCreate(companyId) {
  */
 async function findByCompanyId(companyId) {
   const { rows } = await pool.query(
-    `SELECT company_id, ai_mode FROM chatbots WHERE company_id = $1`,
+    `SELECT company_id, ai_mode, agent_paused FROM chatbots WHERE company_id = $1`,
     [companyId]
   );
 
   return rows[0] || null;
 }
 
-module.exports = { findOrCreate, findByCompanyId };
+async function setAgentPaused(companyId, paused) {
+  await pool.query(
+    `UPDATE chatbots SET agent_paused = $1 WHERE company_id = $2`,
+    [Boolean(paused), companyId]
+  );
+}
+
+module.exports = { findOrCreate, findByCompanyId, setAgentPaused };

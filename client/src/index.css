@@ -113,6 +113,10 @@ textarea::placeholder {
   color: var(--input-placeholder);
 }
 
+.form-control:focus{
+  box-shadow: none !important;
+}
+
 .message-markdown {
   line-height: 1.55;
 }
