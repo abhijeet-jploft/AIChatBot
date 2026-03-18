@@ -125,9 +125,12 @@ export default function Dashboard() {
     if (!token) return;
     const getWsUrl = () => {
       if (typeof window === 'undefined' || !window.location) return null;
-      const base = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`;
+      const base = API_BASE.startsWith('http')
+        ? API_BASE
+        : `${window.location.origin}${API_BASE}`;
       const u = new URL(base);
-      return (u.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + u.host + '/api/admin/ws?token=' + encodeURIComponent(token);
+      const wsProtocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProtocol}//${u.host}/api/admin/ws?token=${encodeURIComponent(token)}`;
     };
     fetchLive();
     const connect = () => {
