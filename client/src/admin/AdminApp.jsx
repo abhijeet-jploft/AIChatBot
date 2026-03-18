@@ -26,7 +26,7 @@ function AdminLayout({ children }) {
       label: 'Main',
       items: [
         { to: '/admin', label: 'Dashboard' },
-        { to: '/admin/leads', label: 'Leads' },
+        { to: '/admin/leads', label: 'Leads', end: false },
         { to: '/admin/conversations', label: 'Conversations' },
         { to: '/admin/missed-conversations', label: 'Missed conversations' },
         { to: '/admin/support-requests', label: 'Support requests' },
@@ -48,7 +48,11 @@ function AdminLayout({ children }) {
   const currentPageLabel = (
     navGroups
       .flatMap((group) => group.items)
-      .find((item) => item.to === location.pathname)?.label || 'Dashboard'
+      .find(
+        (item) =>
+          item.to === location.pathname ||
+          (item.end === false && location.pathname.startsWith(item.to + '/'))
+      )?.label || 'Dashboard'
   );
 
   if (loading) {
@@ -84,7 +88,7 @@ function AdminLayout({ children }) {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.to === '/admin'}
+                    end={item.to === '/admin' ? true : item.end === false ? false : true}
                     className={({ isActive }) => `admin-nav-link ${isActive ? 'is-active' : ''}`}
                   >
                     {item.label}
@@ -146,7 +150,7 @@ export default function AdminApp() {
           }
         />
         <Route
-          path="leads"
+          path="leads/:leadId?"
           element={
             token ? (
               <AdminLayout>

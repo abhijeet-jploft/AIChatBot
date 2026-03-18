@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 
@@ -76,6 +77,8 @@ function parseFilename(contentDisposition, fallbackName) {
 export default function Leads() {
   const { authFetch } = useAuth();
   const { showToast } = useAdminToast();
+  const { leadId: leadIdFromUrl } = useParams();
+  const navigate = useNavigate();
 
   const [filters, setFilters] = useState({
     status: 'all',
@@ -145,7 +148,10 @@ export default function Leads() {
       if (!rows.length) {
         setSelectedLeadId(null);
         setDetail(null);
-      } else if (!selectedLeadId || !rows.some((row) => row.id === selectedLeadId)) {
+      } else if (
+        !selectedLeadId ||
+        (!rows.some((row) => row.id === selectedLeadId) && selectedLeadId !== leadIdFromUrl)
+      ) {
         setSelectedLeadId(rows[0].id);
       }
     } catch {
@@ -157,7 +163,7 @@ export default function Leads() {
     } finally {
       setLoadingList(false);
     }
-  }, [appliedFilters, authFetch, selectedLeadId, showToast]);
+  }, [appliedFilters, authFetch, selectedLeadId, leadIdFromUrl, showToast]);
 
   const loadLeadDetail = useCallback(async (leadId) => {
     if (!leadId) {
@@ -179,6 +185,12 @@ export default function Leads() {
       setLoadingDetail(false);
     }
   }, [authFetch, showToast]);
+
+  useEffect(() => {
+    if (leadIdFromUrl) {
+      setSelectedLeadId(leadIdFromUrl);
+    }
+  }, [leadIdFromUrl]);
 
   useEffect(() => {
     loadLeads(appliedFilters);
@@ -488,6 +500,7 @@ export default function Leads() {
       showToast('Lead deleted', 'success');
       setDetail(null);
       setSelectedLeadId(null);
+      navigate('/admin/leads', { replace: true });
       await loadLeads(appliedFilters);
     } catch (err) {
       showToast(err.message || 'Failed to delete lead', 'error');
@@ -640,7 +653,10 @@ export default function Leads() {
                               : '1px solid var(--chat-border)',
                           color: 'var(--chat-text)',
                         }}
-                        onClick={() => setSelectedLeadId(lead.id)}
+                        onClick={() => {
+                          setSelectedLeadId(lead.id);
+                          navigate(`/admin/leads/${lead.id}`, { replace: true });
+                        }}
                       >
                         <div className="d-flex justify-content-between align-items-start gap-2">
                           <label className="m-0" onClick={(e) => e.stopPropagation()}>
