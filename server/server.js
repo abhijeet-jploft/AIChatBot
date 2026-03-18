@@ -10,6 +10,9 @@ const adminRoutes = require('./admin/routes');
 const { migrate } = require('./db/migrate');
 const { attachPresenceWs } = require('./ws/presence');
 
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 

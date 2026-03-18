@@ -3,6 +3,8 @@ const CompanyAdmin = require('../models/CompanyAdmin');
 const Lead = require('../../models/Lead');
 const ChatSession = require('../../models/ChatSession');
 const { getActiveForCompany } = require('../../services/activeVisitorsService');
+const { getActiveJobForCompany } = require('../../services/scraperService');
+const { getLastTrainingCompleted } = require('../../services/trainingNotificationStore');
 
 /**
  * GET /admin/dashboard
@@ -43,7 +45,7 @@ async function getDashboard(req, res) {
         [companyId]
       ),
       pool.query(
-        `SELECT id, name, project_summary, landing_page, created_at, status
+        `SELECT id, session_id, name, project_summary, landing_page, created_at, status
          FROM leads WHERE company_id = $1 AND deleted_at IS NULL
          ORDER BY created_at DESC LIMIT 8`,
         [companyId]
@@ -100,6 +102,7 @@ async function getDashboard(req, res) {
 
     const recentLeads = (recentLeadsResult.rows || []).map((r) => ({
       id: r.id,
+      sessionId: r.session_id || null,
       name: r.name || 'Unnamed',
       requirement: r.project_summary || r.status || '—',
       sourcePage: r.landing_page || '—',
@@ -127,6 +130,9 @@ async function getDashboard(req, res) {
     if (leadSummary?.reminder_due_today_count > 0) {
       notifications.push({ type: 'reminder_due', message: `${leadSummary.reminder_due_today_count} reminder(s) due today`, link: '/admin/leads' });
     }
+    if (getLastTrainingCompleted(companyId)) {
+      notifications.push({ type: 'training_completed', message: 'Training completed. AI learned from your content.', link: '/admin/training' });
+    }
 
     const aiInsights = [];
     if (recentLeads.length > 0) {
@@ -143,10 +149,12 @@ async function getDashboard(req, res) {
       aiInsights.push('Your AI agent is live. Share your website to start receiving visitors.');
     }
 
+    const trainingJob = getActiveJobForCompany(companyId);
     const systemStatus = {
       agentName: company?.display_name || company?.name || 'AI Agent',
-      status: company?.agent_paused ? 'Paused' : 'Online',
+      status: trainingJob ? 'Training' : (company?.agent_paused ? 'Paused' : 'Online'),
       paused: Boolean(company?.agent_paused),
+      trainingInProgress: Boolean(trainingJob),
       connectedDomain: '—',
       lastTrainingDate: null,
       activeLanguages: 'English',

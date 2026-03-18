@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAdminToast } from '../context/AdminToastContext';
 
 const REFRESH_INTERVAL_MS = 30000;
 const LIVE_POLL_MS = 15000;
@@ -25,14 +26,21 @@ function formatTimeAgoTs(ts) {
 }
 
 export default function Dashboard() {
-  const { authFetch, token } = useAuth();
+  const { authFetch, token, company } = useAuth();
+  const { showToast } = useAdminToast();
   const [data, setData] = useState(null);
   const [liveData, setLiveData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [agentPausedUpdating, setAgentPausedUpdating] = useState(false);
+  const [markingContactedId, setMarkingContactedId] = useState(null);
+  const [noteModalLead, setNoteModalLead] = useState(null);
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const liveWsRef = useRef(null);
   const liveReconnectRef = useRef(null);
+  const prevLiveDataRef = useRef({ activeCount: 0, currentlyChatting: 0 });
+  const liveDataInitializedRef = useRef(false);
 
   const fetchDashboard = useCallback(() => {
     authFetch('/dashboard')
@@ -58,6 +66,38 @@ export default function Dashboard() {
       })
       .catch(() => setLiveData(null));
   }, [authFetch]);
+
+  const addLeadNote = useCallback((leadId, note) => {
+    if (!leadId || !note?.trim()) return;
+    setSavingNote(true);
+    authFetch(`/leads/${leadId}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: note.trim() }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          showToast('Note added', 'success');
+          setNoteModalLead(null);
+          setNoteText('');
+          fetchDashboard();
+        } else throw new Error('Failed to add note');
+      })
+      .catch(() => showToast('Failed to add note', 'error'))
+      .finally(() => setSavingNote(false));
+  }, [authFetch, fetchDashboard, showToast]);
+
+  const markLeadContacted = useCallback((leadId) => {
+    if (!leadId) return;
+    setMarkingContactedId(leadId);
+    authFetch(`/leads/${leadId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'contacted' }),
+    })
+      .then((res) => { if (res.ok) return fetchDashboard(); })
+      .finally(() => setMarkingContactedId(null));
+  }, [authFetch, fetchDashboard]);
 
   const setAgentPaused = useCallback((paused) => {
     setAgentPausedUpdating(true);
@@ -100,6 +140,7 @@ export default function Dashboard() {
           try {
             const msg = JSON.parse(ev.data);
             if (msg.type === 'visitors' && msg.data) setLiveData(msg.data);
+            if (msg.type === 'alert' && msg.message) showToast(msg.message, 'success');
           } catch (_) {}
         };
         ws.onclose = () => {
@@ -121,7 +162,22 @@ export default function Dashboard() {
       }
       clearInterval(pollFallback);
     };
-  }, [token, fetchLive]);
+  }, [token, fetchLive, showToast]);
+
+  // Live alerts: toast when "currently chatting" or active count increases (skip first load)
+  useEffect(() => {
+    if (!liveData) return;
+    const prev = prevLiveDataRef.current;
+    const curChatting = liveData.currentlyChatting ?? 0;
+    const curActive = liveData.activeCount ?? 0;
+    if (liveDataInitializedRef.current) {
+      if (curChatting > prev.currentlyChatting) showToast('New chat started', 'info');
+      else if (curActive > prev.activeCount && prev.activeCount > 0) showToast('New visitor on site', 'info');
+    } else {
+      liveDataInitializedRef.current = true;
+    }
+    prevLiveDataRef.current = { activeCount: curActive, currentlyChatting: curChatting };
+  }, [liveData, showToast]);
 
   if (loading && !data) {
     return (
@@ -167,7 +223,7 @@ export default function Dashboard() {
           <span
             className="badge"
             style={{
-              background: sys.status === 'Online' ? 'var(--chat-accent)' : 'var(--chat-muted)',
+              background: sys.status === 'Online' ? 'var(--chat-accent)' : sys.status === 'Training' ? '#0d6efd' : 'var(--chat-muted)',
               color: '#fff',
             }}
           >
@@ -187,10 +243,10 @@ export default function Dashboard() {
               {agentPausedUpdating ? '…' : 'Pause AI'}
             </button>
           )}
-          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={fetchDashboard} title="Refresh">
+          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={fetchDashboard} title="Refresh dashboard data">
             Refresh
           </button>
-          <Link to="/admin/training" className="btn btn-sm btn-primary">Training</Link>
+          <Link to="/admin/training" className="btn btn-sm btn-primary" title="Refresh training / Open knowledge base">Training</Link>
         </div>
       </div>
 
@@ -322,12 +378,57 @@ export default function Dashboard() {
                 <ul className="list-group list-group-flush">
                   {recentLeads.slice(0, 5).map((lead) => (
                     <li key={lead.id} className="list-group-item d-flex justify-content-between align-items-start border-0 px-3 py-2" style={{ background: 'transparent', borderColor: 'var(--chat-border)' }}>
-                      <div className="ms-0 flex-grow-1 min-width-0">
-                        <div className="fw-semibold text-truncate" style={{ color: 'var(--chat-text)' }}>{lead.name}</div>
-                        <div className="small text-truncate" style={{ color: 'var(--chat-muted)' }}>{lead.requirement}</div>
-                        <div className="small" style={{ color: 'var(--chat-muted)' }}>{lead.sourcePage} · {formatTimeAgo(lead.timeReceived)}</div>
+                      <div className="ms-0 flex-grow-1 min-width-0 overflow-hidden">
+                        <div className="fw-semibold text-truncate" style={{ color: 'var(--chat-text)' }} title={lead.name}>{lead.name}</div>
+                        <div
+                          className="small"
+                          style={{
+                            color: 'var(--chat-muted)',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'break-word',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}
+                          title={lead.requirement}
+                        >
+                          {lead.requirement}
+                        </div>
+                        <div className="small text-truncate" style={{ color: 'var(--chat-muted)' }} title={lead.sourcePage}>
+                          {lead.sourcePage} · {formatTimeAgo(lead.timeReceived)}
+                        </div>
                       </div>
-                      <Link to={`/admin/leads/${lead.id}`} className="btn btn-sm btn-outline-primary ms-2">Open</Link>
+                      <div className="d-flex flex-wrap gap-1 ms-2">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => { setNoteModalLead(lead); setNoteText(''); }}
+                          title="Add note"
+                        >
+                          Add note
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-success"
+                          disabled={markingContactedId === lead.id}
+                          onClick={() => markLeadContacted(lead.id)}
+                          title="Mark contacted"
+                        >
+                          {markingContactedId === lead.id ? '…' : 'Mark contacted'}
+                        </button>
+                        {lead.sessionId && (
+                          <a
+                            href={`/?sessionId=${encodeURIComponent(lead.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}&scrollTo=lead`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-sm btn-outline-primary"
+                          >
+                            Open chat
+                          </a>
+                        )}
+                        <Link to={`/admin/leads/${lead.id}`} className="btn btn-sm btn-outline-secondary">View lead</Link>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -341,6 +442,7 @@ export default function Dashboard() {
           <div className="card h-100" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
             <div className="card-header d-flex align-items-center justify-content-between py-2" style={{ background: 'var(--chat-sidebar)', borderColor: 'var(--chat-border)', color: 'var(--chat-text-heading)' }}>
               <span>Conversation snapshot</span>
+              <Link to="/admin/conversations" className="btn btn-sm btn-link p-0" style={{ color: 'var(--chat-accent)' }}>View all</Link>
             </div>
             <div className="card-body p-0">
               {recentConversations.length === 0 ? (
@@ -349,11 +451,22 @@ export default function Dashboard() {
                 <ul className="list-group list-group-flush">
                   {recentConversations.slice(0, 5).map((conv) => (
                     <li key={conv.id} className="list-group-item d-flex justify-content-between align-items-start border-0 px-3 py-2" style={{ background: 'transparent', borderColor: 'var(--chat-border)' }}>
-                      <div className="ms-0 flex-grow-1 min-width-0">
-                        <div className="small text-truncate" style={{ color: 'var(--chat-text)' }}>{conv.firstMessage}</div>
+                      <div className="ms-0 flex-grow-1 min-width-0 overflow-hidden">
+                        <div className="small text-truncate" style={{ color: 'var(--chat-text)' }} title={conv.firstMessage}>{conv.firstMessage}</div>
                         <div className="small" style={{ color: 'var(--chat-muted)' }}>{conv.duration} · Lead: {conv.leadCaptured ? 'Yes' : 'No'} · {conv.status}</div>
                       </div>
-                      <Link to={conv.leadId ? `/admin/leads/${conv.leadId}` : '/'} className="btn btn-sm btn-outline-secondary ms-2">{conv.leadCaptured ? 'View lead' : 'Open chat'}</Link>
+                      {conv.leadCaptured ? (
+                        <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-secondary ms-2">View lead</Link>
+                      ) : (
+                        <a
+                          href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-sm btn-outline-secondary ms-2"
+                        >
+                          Open chat
+                        </a>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -408,6 +521,36 @@ export default function Dashboard() {
       <div className="mt-3 small" style={{ color: 'var(--chat-muted)' }}>
         Dashboard refreshes every 30 seconds. Use Refresh to update now.
       </div>
+
+      {/* Add note modal (Lead snapshot) */}
+      {noteModalLead && (
+        <div className="modal d-block" style={{ background: 'rgba(0,0,0,0.5)' }} aria-modal="true" role="dialog">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
+              <div className="modal-header" style={{ borderColor: 'var(--chat-border)' }}>
+                <h6 className="modal-title" style={{ color: 'var(--chat-text-heading)' }}>Add note — {noteModalLead.name}</h6>
+                <button type="button" className="btn-close" aria-label="Close" onClick={() => { setNoteModalLead(null); setNoteText(''); }} />
+              </div>
+              <div className="modal-body">
+                <textarea
+                  className="form-control"
+                  rows={3}
+                  placeholder="Enter note..."
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  style={{ background: 'var(--chat-bg)', borderColor: 'var(--chat-border)', color: 'var(--chat-text)' }}
+                />
+              </div>
+              <div className="modal-footer" style={{ borderColor: 'var(--chat-border)' }}>
+                <button type="button" className="btn btn-outline-secondary" onClick={() => { setNoteModalLead(null); setNoteText(''); }}>Cancel</button>
+                <button type="button" className="btn btn-primary" disabled={savingNote || !noteText.trim()} onClick={() => addLeadNote(noteModalLead.id, noteText)}>
+                  {savingNote ? 'Saving…' : 'Save note'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

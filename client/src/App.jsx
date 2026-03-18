@@ -226,6 +226,20 @@ function readPersistedChatState() {
 function readInitialChatState() {
   if (typeof window === 'undefined') return null;
 
+  const params = new URLSearchParams(window.location.search);
+  const urlSessionId = params.get('sessionId') || params.get('session_id');
+  const urlCompanyId = params.get('companyId') || params.get('company_id');
+  if (urlSessionId) {
+    const persisted = readPersistedChatState();
+    return {
+      ...persisted,
+      sessionId: urlSessionId,
+      companyId: urlCompanyId || persisted?.companyId || DEFAULT_COMPANY_ID,
+      messages: [],
+      openingMessageShown: true,
+    };
+  }
+
   try {
     const historyState = window.history.state?.aiChat;
     if (historyState && typeof historyState === 'object') return historyState;
@@ -348,6 +362,18 @@ export default function App() {
     sessionId,
     chatViewMode,
   ]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const hasScrollToLead = params.get('scrollTo') === 'lead';
+    if (params.has('sessionId') && (location.pathname === '/' || location.pathname === '') && !hasScrollToLead) {
+      window.history.replaceState(window.history.state, '', window.location.pathname || '/');
+    }
+  }, [location.search, location.pathname]);
+
+  const handleScrolledToLead = useCallback(() => {
+    window.history.replaceState(window.history.state, '', window.location.pathname || '/');
+  }, []);
 
   useEffect(() => {
     const onPopState = (event) => {
@@ -792,6 +818,8 @@ export default function App() {
           companyName={companyName}
           companyIconUrl={companyIconUrl}
           greetingMessage={greetingMessage}
+          scrollToLead={new URLSearchParams(location.search).get('scrollTo') === 'lead'}
+          onScrolledToLead={handleScrolledToLead}
         />
 
         <button
@@ -876,6 +904,8 @@ export default function App() {
                 greetingMessage={greetingMessage}
                 showHeader={false}
                 compact
+                scrollToLead={new URLSearchParams(location.search).get('scrollTo') === 'lead'}
+                onScrolledToLead={handleScrolledToLead}
               />
             </div>
           </section>

@@ -47,6 +47,8 @@ function formatDateTimeInput(value) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+const LEADS_PAGE_SIZE = 20;
+
 function buildQuery(filters = {}) {
   const params = new URLSearchParams();
 
@@ -57,6 +59,10 @@ function buildQuery(filters = {}) {
   if (filters.fromDate) params.set('fromDate', filters.fromDate);
   if (filters.toDate) params.set('toDate', filters.toDate);
   if (filters.sort) params.set('sort', filters.sort);
+  const limit = Number(filters.limit) || LEADS_PAGE_SIZE;
+  const page = Math.max(1, Number(filters.page) || 1);
+  params.set('limit', String(limit));
+  params.set('offset', String((page - 1) * limit));
 
   return params.toString();
 }
@@ -79,6 +85,8 @@ export default function Leads() {
     fromDate: '',
     toDate: '',
     sort: 'newest',
+    page: 1,
+    limit: LEADS_PAGE_SIZE,
   });
   const [appliedFilters, setAppliedFilters] = useState({
     status: 'all',
@@ -88,6 +96,8 @@ export default function Leads() {
     fromDate: '',
     toDate: '',
     sort: 'newest',
+    page: 1,
+    limit: LEADS_PAGE_SIZE,
   });
 
   const [leads, setLeads] = useState([]);
@@ -192,7 +202,7 @@ export default function Leads() {
 
   const applyFilters = (event) => {
     event.preventDefault();
-    setAppliedFilters({ ...filters, search: filters.search.trim() });
+    setAppliedFilters({ ...filters, search: filters.search.trim(), page: 1 });
   };
 
   const resetFilters = () => {
@@ -204,10 +214,22 @@ export default function Leads() {
       fromDate: '',
       toDate: '',
       sort: 'newest',
+      page: 1,
+      limit: LEADS_PAGE_SIZE,
     };
     setFilters(defaults);
     setAppliedFilters(defaults);
   };
+
+  const goToPage = (pageNum) => {
+    const p = Math.max(1, Math.min(Math.ceil(total / (appliedFilters.limit || LEADS_PAGE_SIZE)), pageNum));
+    setFilters((prev) => ({ ...prev, page: p }));
+    setAppliedFilters((prev) => ({ ...prev, page: p }));
+  };
+
+  const totalPages = Math.max(1, Math.ceil(total / (appliedFilters.limit || LEADS_PAGE_SIZE)));
+  const fromRow = total === 0 ? 0 : (appliedFilters.page - 1) * (appliedFilters.limit || LEADS_PAGE_SIZE) + 1;
+  const toRow = Math.min(appliedFilters.page * (appliedFilters.limit || LEADS_PAGE_SIZE), total);
 
   const toggleSelectLead = (leadId) => {
     setSelectedIds((prev) => {
@@ -598,6 +620,7 @@ export default function Leads() {
               ) : !leads.length ? (
                 <div className="small text-muted">No leads found for current filters.</div>
               ) : (
+                <>
                 <div style={{ maxHeight: 680, overflowY: 'auto' }}>
                   {leads.map((lead) => {
                     const selected = selectedLeadId === lead.id;
@@ -650,6 +673,35 @@ export default function Leads() {
                     );
                   })}
                 </div>
+                {total > 0 && (
+                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-2 border-top" style={{ borderColor: 'var(--chat-border)' }}>
+                    <div className="small" style={{ color: 'var(--chat-muted)' }}>
+                      Showing {fromRow}–{toRow} of {total}
+                    </div>
+                    <div className="d-flex gap-1">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={appliedFilters.page <= 1}
+                        onClick={() => goToPage(appliedFilters.page - 1)}
+                      >
+                        Previous
+                      </button>
+                      <span className="d-flex align-items-center px-2 small" style={{ color: 'var(--chat-text)' }}>
+                        Page {appliedFilters.page} of {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={appliedFilters.page >= totalPages}
+                        onClick={() => goToPage(appliedFilters.page + 1)}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </div>
           </div>

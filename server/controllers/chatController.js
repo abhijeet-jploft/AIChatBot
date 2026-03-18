@@ -1,7 +1,7 @@
 const { sendMessage } = require('../services/anthropicService');
 const { captureLeadFromConversation } = require('../services/leadCaptureService');
 const { sendNewLeadNotification } = require('../services/leadNotificationService');
-const { record: recordActiveVisitor } = require('../services/activeVisitorsService');
+const { record: recordActiveVisitor, broadcastAlert } = require('../services/activeVisitorsService');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
@@ -81,6 +81,17 @@ async function postMessage(req, res) {
               await sendNewLeadNotification({ companyId, lead: leadCaptureResult.lead });
             } catch (notifyErr) {
               console.error('[lead-notify] non-fatal:', notifyErr.message);
+            }
+            try {
+              const lead = leadCaptureResult.lead;
+              const meetingRequested = (lead?.ai_detected_intent || '') === 'meeting_booking';
+              broadcastAlert(companyId, {
+                kind: 'lead_captured',
+                message: meetingRequested ? 'Meeting requested — new lead captured' : 'New lead captured',
+                link: '/admin/leads',
+              });
+            } catch (alertErr) {
+              /* ignore */
             }
           }
         })

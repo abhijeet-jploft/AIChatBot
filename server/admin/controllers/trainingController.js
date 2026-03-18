@@ -1,5 +1,6 @@
 const { createJob, getJob, runJob } = require('../../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../../services/trainingLoader');
+const { setLastTrainingCompleted } = require('../../services/trainingNotificationStore');
 const path = require('path');
 const fs = require('fs');
 
@@ -83,6 +84,8 @@ async function scrapeSave(req, res) {
     .filter(Boolean);
   const uniqueLinks = [...new Set(linkLines)];
   fs.writeFileSync(linksPath, uniqueLinks.join('\n'), 'utf8');
+
+  setLastTrainingCompleted(job.companyId);
 
   res.json({
     saved: true,

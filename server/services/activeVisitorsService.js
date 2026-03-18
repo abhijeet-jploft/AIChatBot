@@ -144,6 +144,21 @@ function unsubscribe(companyId, ws) {
 }
 
 /**
+ * Send a live alert to all admin dashboard subscribers for this company.
+ * Payload: { kind, message, link? } — sent as { type: 'alert', ...payload }.
+ */
+function broadcastAlert(companyId, payload) {
+  const subs = subscribers.get(companyId);
+  if (!subs || subs.size === 0) return;
+  const msg = JSON.stringify({ type: 'alert', ...payload });
+  for (const ws of subs) {
+    if (ws.readyState === OPEN) {
+      try { ws.send(msg); } catch (e) { /* ignore */ }
+    }
+  }
+}
+
+/**
  * Get active visitors for a company.
  * Active = (socket open) OR (no socket and lastSeen within TTL).
  */
@@ -182,4 +197,5 @@ module.exports = {
   updatePageSocket,
   subscribe,
   unsubscribe,
+  broadcastAlert,
 };

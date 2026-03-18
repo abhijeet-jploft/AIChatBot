@@ -11,10 +11,13 @@ export default function ChatMain({
   greetingMessage,
   showHeader = true,
   compact = false,
+  scrollToLead = false,
+  onScrolledToLead,
 }) {
   const scrollRef = useRef(null);
   const prevLoadingRef = useRef(loading);
   const prevMessageCountRef = useRef(messages.length);
+  const scrollToLeadDoneRef = useRef(false);
 
   useEffect(() => {
     const scrollEl = scrollRef.current;
@@ -28,13 +31,22 @@ export default function ChatMain({
       return;
     }
 
+    if (scrollToLead && messages.length > 0 && !loading && !scrollToLeadDoneRef.current) {
+      scrollToLeadDoneRef.current = true;
+      scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: 'smooth' });
+      if (typeof onScrolledToLead === 'function') {
+        const t = setTimeout(onScrolledToLead, 400);
+        return () => clearTimeout(t);
+      }
+    }
+
     if ((messageCountChanged && lastMessage?.role === 'user') || loadingStarted) {
       scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: 'smooth' });
     }
 
     prevLoadingRef.current = loading;
     prevMessageCountRef.current = messages.length;
-  }, [messages, loading]);
+  }, [messages, loading, scrollToLead, onScrolledToLead]);
 
   return (
     <main

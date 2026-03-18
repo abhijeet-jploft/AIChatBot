@@ -469,4 +469,14 @@ function getJob(jobId) {
   return jobs.get(jobId) || null;
 }
 
-module.exports = { createJob, getJob, runJob };
+/** Returns the first active (pending or running) job for the company, if any. */
+function getActiveJobForCompany(companyId) {
+  for (const job of jobs.values()) {
+    if (job.companyId === companyId && (job.status === 'pending' || job.status === 'running')) {
+      return job;
+    }
+  }
+  return null;
+}
+
+module.exports = { createJob, getJob, runJob, getActiveJobForCompany };

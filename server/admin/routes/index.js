@@ -5,6 +5,7 @@ const themeController = require('../controllers/themeController');
 const dashboardController = require('../controllers/dashboardController');
 const agentController = require('../controllers/agentController');
 const leadsController = require('../controllers/leadsController');
+const conversationsController = require('../controllers/conversationsController');
 const trainingController = require('../controllers/trainingController');
 const { requireAuth } = require('../middleware/requireAuth');
 
@@ -33,6 +34,7 @@ router.get('/agent/status', requireAuth, agentController.getStatus);
 router.patch('/agent/status', requireAuth, agentController.updateStatus);
 
 router.get('/leads', requireAuth, leadsController.listLeads);
+router.get('/conversations', requireAuth, conversationsController.listConversations);
 router.get('/leads/summary', requireAuth, leadsController.getSummary);
 router.get('/leads/export.csv', requireAuth, leadsController.exportCsv);
 router.get('/leads/:leadId', requireAuth, leadsController.getLeadDetail);
