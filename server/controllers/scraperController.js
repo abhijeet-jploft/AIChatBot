@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { createJob, getJob, runJob } = require('../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../services/trainingLoader');
+const { mergeScrapedContent } = require('../services/trainingDataService');
 
 /**
  * POST /api/scrape/start
@@ -90,8 +91,7 @@ function save(req, res) {
   const dir = path.join(TRAIN_DATA_DIR, job.companyId);
   fs.mkdirSync(dir, { recursive: true });
 
-  const filePath = path.join(dir, 'scraped_website.jsonl');
-  fs.writeFileSync(filePath, job.jsonlContent, 'utf8');
+  const { appended, skipped } = mergeScrapedContent(job.companyId, job.jsonlContent);
 
   const linksPath = path.join(dir, 'scraped_website_links.txt');
   const linkLines = (job.pages || [])
@@ -108,7 +108,8 @@ function save(req, res) {
   res.json({
     saved: true,
     companyId: job.companyId,
-    lines: job.jsonlContent.split('\n').filter(Boolean).length,
+    linesAppended: appended,
+    linesSkipped: skipped,
     links: uniqueLinks.length,
   });
 }

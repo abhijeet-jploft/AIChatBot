@@ -215,7 +215,56 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
               buckets.regular.push(`\n--- ${label} ---\n${data}\n`);
             }
           } else if (ext === '.jsonl') {
-            if (/conversational_instructions\.jsonl$/i.test(entry.name)) {
+            if (/scraped_website\.jsonl$/i.test(entry.name)) {
+              const lines = data.split(/\r?\n/).filter((l) => l.trim());
+              const scrapedLines = [];
+              const conversationalParts = [];
+              const structuredParts = [];
+              const docParts = [];
+              const manualParts = [];
+
+              for (const line of lines) {
+                try {
+                  const o = JSON.parse(line);
+                  if (!o || typeof o !== 'object') continue;
+                  if (o.type === 'conversational') {
+                    if (o.text) conversationalParts.push(`Instruction: ${o.text}`);
+                    else if (o.userMessage || o.assistantMessage) {
+                      conversationalParts.push(`Q: ${o.userMessage || ''}\nA: ${o.assistantMessage || ''}`.trim());
+                    }
+                  } else if (o.type === 'structured' && o.data != null) {
+                    structuredParts.push(typeof o.data === 'object' ? JSON.stringify(o.data) : String(o.data));
+                  } else if (o.type === 'doc' && o.content != null) {
+                    docParts.push(`Document (${o.name || 'doc'}): ${o.content}`);
+                  } else if (o.type === 'manual' && o.content != null) {
+                    manualParts.push(String(o.content));
+                  } else if (o.messages && (o.source || o.system)) {
+                    scrapedLines.push(line);
+                  }
+                } catch {
+                  // skip malformed lines
+                }
+              }
+
+              if (scrapedLines.length > 0) {
+                const scrapedData = scrapedLines.join('\n');
+                const { priority, regular } = buildJsonlContext(scrapedData, label, queryTokens);
+                if (priority) buckets.priority.push(priority);
+                if (regular) buckets.regular.push(regular);
+              }
+              if (conversationalParts.length > 0) {
+                buckets.regular.push(`\n--- ${label} (Owner instructions / Q&A) ---\n${conversationalParts.join('\n\n')}\n`);
+              }
+              if (structuredParts.length > 0) {
+                buckets.regular.push(`\n--- ${label} (Structured data) ---\n${structuredParts.join('\n')}\n`);
+              }
+              if (docParts.length > 0) {
+                buckets.regular.push(`\n--- ${label} (Documents) ---\n${docParts.join('\n\n')}\n`);
+              }
+              if (manualParts.length > 0) {
+                buckets.regular.push(`\n--- ${label} (Manual knowledge) ---\n${manualParts.join('\n\n')}\n`);
+              }
+            } else if (/conversational_instructions\.jsonl$/i.test(entry.name)) {
               const lines = data.split(/\r?\n/).filter((l) => l.trim());
               const parts = lines.map((line) => {
                 try {
@@ -233,7 +282,7 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
               const parts = lines.map((line) => {
                 try {
                   const o = JSON.parse(line);
-                  return typeof o === 'object' ? JSON.stringify(o) : line;
+                  return typeof o === 'object' ? (o.data != null ? JSON.stringify(o.data) : JSON.stringify(o)) : line;
                 } catch { return line; }
               });
               buckets.regular.push(`\n--- ${label} (Structured data) ---\n${parts.join('\n')}\n`);

@@ -9,6 +9,7 @@ const {
   getManualKnowledge,
   setManualKnowledge,
   listTrainingFiles,
+  mergeScrapedContent,
 } = require('../../services/trainingDataService');
 const { extractFromBuffer } = require('../../services/documentExtractor');
 const path = require('path');
@@ -83,8 +84,7 @@ async function scrapeSave(req, res) {
     const dir = path.join(TRAIN_DATA_DIR, job.companyId);
     fs.mkdirSync(dir, { recursive: true });
 
-    const filePath = path.join(dir, 'scraped_website.jsonl');
-    fs.writeFileSync(filePath, job.jsonlContent, 'utf8');
+    const { appended, skipped } = mergeScrapedContent(job.companyId, job.jsonlContent);
 
     const linksPath = path.join(dir, 'scraped_website_links.txt');
     const linkLines = (job.pages || [])
@@ -103,7 +103,8 @@ async function scrapeSave(req, res) {
     res.json({
       saved: true,
       companyId: job.companyId,
-      lines: job.jsonlContent.split('\n').filter(Boolean).length,
+      linesAppended: appended,
+      linesSkipped: skipped,
       links: uniqueLinks.length,
     });
   } catch (err) {
@@ -146,7 +147,8 @@ async function saveDocuments(req, res) {
     for (const f of files) {
       const text = await extractFromBuffer(f.buffer, f.originalname, f.mimetype);
       const name = saveUploadedDoc(companyId, f.originalname, text);
-      saved.push({ originalName: f.originalname, savedAs: name });
+      if (name) saved.push({ originalName: f.originalname, savedAs: name, appended: true });
+      else saved.push({ originalName: f.originalname, savedAs: 'scraped_website.jsonl', appended: false });
     }
     setLastTrainingCompleted(companyId);
     res.json({ saved: true, mode: 'documents', files: saved });
@@ -157,7 +159,7 @@ async function saveDocuments(req, res) {
   }
 }
 
-// ─── Structured data (JSON array, CSV, or Excel — append to structured_data.jsonl) ─────────────────
+// ─── Structured data (JSON array, CSV, or Excel — append to scraped_website.jsonl if not already present) ─────────────────
 async function saveStructured(req, res) {
   try {
     const companyId = req.adminCompanyId;

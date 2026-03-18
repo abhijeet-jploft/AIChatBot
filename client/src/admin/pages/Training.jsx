@@ -137,7 +137,10 @@ export default function Training() {
       const res = await authFetch(`/training/scrape/save/${jobId}`, { method: 'POST' });
       const data = await res.json();
       if (data.saved) {
-        showToast(`Saved ${data.lines} lines and ${data.links} links`, 'success');
+        const msg = data.linesAppended != null
+          ? `Appended ${data.linesAppended} lines to scraped_website.jsonl${data.linesSkipped ? ` (${data.linesSkipped} already present)` : ''}. ${data.links ?? 0} links saved.`
+          : `Saved ${data.lines ?? 0} lines and ${data.links ?? 0} links`;
+        showToast(msg, 'success');
         loadFiles();
       } else showToast('Save failed.', 'error');
     } catch {
@@ -295,7 +298,7 @@ export default function Training() {
           Training — Knowledge base
         </h5>
         <p className="text-muted mb-3" style={{ fontSize: 13 }}>
-          All modes append to existing data. <strong>scraped_website.jsonl</strong> and <strong>scraped_website_links.txt</strong> are only updated by Website scraping.
+          All training methods use a single file: <strong>scraped_website.jsonl</strong>. Data is appended only if not already present. Website scraping also writes <strong>scraped_website_links.txt</strong> for page links.
         </p>
 
         {/* Tabs */}
@@ -393,7 +396,7 @@ export default function Training() {
         {/* Tab: Conversational */}
         {activeTab === 'conversational' && (
           <form onSubmit={handleConversationalSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
-            <p className="small text-muted mb-3">Append an instruction or a Q&A pair. Appends to existing conversational data.</p>
+            <p className="small text-muted mb-3">Append an instruction or a Q&A pair. Appends to <strong>scraped_website.jsonl</strong> only if not already present.</p>
             <div className="mb-3">
               <label className="form-label small">Single instruction (e.g. &quot;We do not provide template websites.&quot;)</label>
               <textarea className="form-control" rows={2} value={convText} onChange={(e) => setConvText(e.target.value)} placeholder="Optional: one instruction" style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }} />
@@ -413,7 +416,7 @@ export default function Training() {
         {/* Tab: Documents */}
         {activeTab === 'documents' && (
           <form onSubmit={handleDocumentsSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
-            <p className="small text-muted mb-3">Upload PDF, DOCX, or TXT. Each file is saved as a new document in training data (appends to existing).</p>
+            <p className="small text-muted mb-3">Upload PDF, DOCX, or TXT. Content is appended to <strong>scraped_website.jsonl</strong> only if not already present.</p>
             <div className="mb-3">
               <input id="training-doc-input" type="file" accept=".pdf,.doc,.docx,.txt,.md" multiple className="form-control" onChange={(e) => setDocFiles(e.target.files)} style={{ background: 'var(--chat-bg)', borderColor: 'var(--chat-border)' }} />
             </div>
@@ -426,7 +429,7 @@ export default function Training() {
         {/* Tab: Structured */}
         {activeTab === 'structured' && (
           <form onSubmit={handleStructuredSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
-            <p className="small text-muted mb-3">Paste a JSON array of objects, or upload CSV/Excel. Appends to structured_data.jsonl.</p>
+            <p className="small text-muted mb-3">Paste a JSON array of objects, or upload CSV/Excel. Data is appended to <strong>scraped_website.jsonl</strong> only if not already present.</p>
             <div className="mb-3">
               <label className="form-label small">JSON array (e.g. products, services)</label>
               <textarea className="form-control font-monospace" rows={6} value={structuredJson} onChange={(e) => setStructuredJson(e.target.value)} placeholder='[{"name":"Service A","price":"..."}, ...]' style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)', fontSize: 13 }} />
@@ -444,7 +447,7 @@ export default function Training() {
         {/* Tab: Manual */}
         {activeTab === 'manual' && (
           <form onSubmit={handleManualSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
-            <p className="small text-muted mb-3">FAQs, policies, business description. Saving overwrites manual_knowledge.txt.</p>
+            <p className="small text-muted mb-3">FAQs, policies, business description. Stored in <strong>scraped_website.jsonl</strong> (manual section); replaces previous manual knowledge.</p>
             {manualLoading ? <div className="text-muted small">Loading...</div> : (
               <>
                 <textarea className="form-control mb-3" rows={12} value={manualContent} onChange={(e) => setManualContent(e.target.value)} placeholder="Enter FAQs, policies, instructions..." style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }} />
