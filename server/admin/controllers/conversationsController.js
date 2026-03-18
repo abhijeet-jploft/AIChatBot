@@ -1,4 +1,7 @@
 const pool = require('../../db/index');
+const ChatMessage = require('../../models/ChatMessage');
+const ChatSession = require('../../models/ChatSession');
+const { pushMessageToSession } = require('../../services/activeVisitorsService');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -96,4 +99,39 @@ async function listConversations(req, res) {
   }
 }
 
-module.exports = { listConversations };
+/**
+ * POST /admin/conversations/:sessionId/send
+ * Body: { content }
+ * Saves message as assistant, pushes to visitor WebSocket if connected (take-over).
+ */
+async function sendMessage(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const sessionId = req.params.sessionId;
+    const content = req.body?.content != null ? String(req.body.content) : '';
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId required' });
+    }
+
+    const sessionRow = await pool.query(
+      'SELECT id FROM chat_sessions WHERE id = $1 AND company_id = $2',
+      [sessionId, companyId]
+    );
+    if (!sessionRow.rows?.length) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    await ChatMessage.create(sessionId, 'assistant', content);
+    await ChatSession.touch(sessionId);
+
+    const pushed = pushMessageToSession(companyId, sessionId, content);
+
+    res.json({ sent: true, pushedToLive: pushed });
+  } catch (err) {
+    console.error('[admin conversations] send:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+module.exports = { listConversations, sendMessage };

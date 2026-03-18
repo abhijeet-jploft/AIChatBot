@@ -1,6 +1,7 @@
 const { createJob, getJob, runJob } = require('../../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../../services/trainingLoader');
 const { setLastTrainingCompleted } = require('../../services/trainingNotificationStore');
+const { appendSystemLog } = require('../../services/adminLogStore');
 const path = require('path');
 const fs = require('fs');
 
@@ -31,6 +32,7 @@ async function startScrape(req, res) {
     res.json({ jobId, companyId });
   } catch (err) {
     console.error('[admin training] start scrape:', err);
+    appendSystemLog('error', `Training scrape start: ${err.message}`, { companyId: req.adminCompanyId });
     res.status(500).json({ error: err.message });
   }
 }
@@ -58,41 +60,47 @@ async function scrapeStatus(req, res) {
 }
 
 async function scrapeSave(req, res) {
-  const job = getJob(req.params.jobId);
-  if (!job) return res.status(404).json({ error: 'Job not found' });
-  if (job.companyId !== req.adminCompanyId) {
-    return res.status(403).json({ error: 'Access denied' });
+  try {
+    const job = getJob(req.params.jobId);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    if (job.companyId !== req.adminCompanyId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (job.status !== 'completed') {
+      return res.status(400).json({ error: 'Job is not complete yet' });
+    }
+
+    const dir = path.join(TRAIN_DATA_DIR, job.companyId);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const filePath = path.join(dir, 'scraped_website.jsonl');
+    fs.writeFileSync(filePath, job.jsonlContent, 'utf8');
+
+    const linksPath = path.join(dir, 'scraped_website_links.txt');
+    const linkLines = (job.pages || [])
+      .map((p) => {
+        const title = String(p?.title || '').trim();
+        const url = String(p?.url || '').trim();
+        if (!url) return '';
+        return title ? `${title} | ${url}` : url;
+      })
+      .filter(Boolean);
+    const uniqueLinks = [...new Set(linkLines)];
+    fs.writeFileSync(linksPath, uniqueLinks.join('\n'), 'utf8');
+
+    setLastTrainingCompleted(job.companyId);
+
+    res.json({
+      saved: true,
+      companyId: job.companyId,
+      lines: job.jsonlContent.split('\n').filter(Boolean).length,
+      links: uniqueLinks.length,
+    });
+  } catch (err) {
+    console.error('[admin training] scrape save:', err);
+    appendSystemLog('error', `Training save: ${err.message}`, { jobId: req.params.jobId, companyId: req.adminCompanyId });
+    res.status(500).json({ error: err.message });
   }
-  if (job.status !== 'completed') {
-    return res.status(400).json({ error: 'Job is not complete yet' });
-  }
-
-  const dir = path.join(TRAIN_DATA_DIR, job.companyId);
-  fs.mkdirSync(dir, { recursive: true });
-
-  const filePath = path.join(dir, 'scraped_website.jsonl');
-  fs.writeFileSync(filePath, job.jsonlContent, 'utf8');
-
-  const linksPath = path.join(dir, 'scraped_website_links.txt');
-  const linkLines = (job.pages || [])
-    .map((p) => {
-      const title = String(p?.title || '').trim();
-      const url = String(p?.url || '').trim();
-      if (!url) return '';
-      return title ? `${title} | ${url}` : url;
-    })
-    .filter(Boolean);
-  const uniqueLinks = [...new Set(linkLines)];
-  fs.writeFileSync(linksPath, uniqueLinks.join('\n'), 'utf8');
-
-  setLastTrainingCompleted(job.companyId);
-
-  res.json({
-    saved: true,
-    companyId: job.companyId,
-    lines: job.jsonlContent.split('\n').filter(Boolean).length,
-    links: uniqueLinks.length,
-  });
 }
 
 module.exports = { startScrape, scrapeStatus, scrapeSave };

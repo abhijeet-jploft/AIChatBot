@@ -531,6 +531,14 @@ export default function App() {
         const sock = new WebSocket(url);
         presenceWsRef.current = sock;
         sock.onopen = () => sendRegister(sock, sessionIdRef.current, window.location?.href);
+        sock.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'message' && msg.content != null) {
+              setMessages((prev) => [...prev, { role: 'assistant', content: String(msg.content) }]);
+            }
+          } catch (_) {}
+        };
         sock.onclose = () => {
           presenceWsRef.current = null;
           reconnectTimer = setTimeout(connect, 5000);
@@ -664,6 +672,18 @@ export default function App() {
       // Update active session ID (server returns the created/used session)
       if (data.sessionId && data.sessionId !== sessionId) {
         setSessionId(data.sessionId);
+        // Re-register presence with this sessionId immediately so take-over can push messages to this socket
+        const sock = presenceWsRef.current;
+        if (sock?.readyState === WebSocket.OPEN) {
+          try {
+            sock.send(JSON.stringify({
+              type: 'register',
+              companyId: companyId || DEFAULT_COMPANY_ID,
+              sessionId: data.sessionId,
+              pageUrl: window.location?.href ?? '',
+            }));
+          } catch (_) {}
+        }
       }
       loadSessions(); // refresh history list
     } catch (err) {

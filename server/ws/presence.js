@@ -12,6 +12,7 @@ const {
   subscribe,
   unsubscribe,
 } = require('../services/activeVisitorsService');
+const { addIfMissed } = require('../services/missedConversationsStore');
 
 const VISITOR_PATH = '/api/ws';
 const ADMIN_PATH = '/api/admin/ws';
@@ -35,11 +36,12 @@ function handleVisitorWs(ws) {
       // ignore invalid JSON
     }
   });
+  const onUnregister = (companyId, sessionId, data) => addIfMissed(companyId, sessionId, data);
   ws.on('close', () => {
-    if (registered) unregisterSocket(ws);
+    if (registered) unregisterSocket(ws, onUnregister);
   });
   ws.on('error', () => {
-    if (registered) unregisterSocket(ws);
+    if (registered) unregisterSocket(ws, onUnregister);
   });
 }
 

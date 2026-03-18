@@ -28,6 +28,18 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'AI Chat Agent API running' });
 });
 
+// System error logging (admin logs module)
+const { appendSystemLog } = require('./services/adminLogStore');
+app.use((err, _req, res, next) => {
+  appendSystemLog('error', err.message || 'Unhandled error', {
+    stack: err.stack,
+    path: _req?.path,
+    method: _req?.method,
+  });
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
 const server = http.createServer(app);
 
 function start() {

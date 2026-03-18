@@ -2,6 +2,8 @@ const { sendMessage } = require('../services/anthropicService');
 const { captureLeadFromConversation } = require('../services/leadCaptureService');
 const { sendNewLeadNotification } = require('../services/leadNotificationService');
 const { record: recordActiveVisitor, broadcastAlert } = require('../services/activeVisitorsService');
+const { appendChatLog } = require('../services/adminLogStore');
+const { add: addSupportRequest, isSupportRequest } = require('../services/supportRequestsStore');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
@@ -51,8 +53,22 @@ async function postMessage(req, res) {
       }
 
       recordActiveVisitor(companyId, sid, req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl, true);
+
+      if (isSupportRequest(userMsg.content)) {
+        addSupportRequest(companyId, { sessionId: sid, message: userMsg.content });
+        try {
+          broadcastAlert(companyId, {
+            kind: 'support_request',
+            message: 'Support requested',
+            link: '/admin/support-requests',
+          });
+        } catch (alertErr) {
+          /* ignore */
+        }
+      }
     } catch (dbErr) {
       console.error('[chat] DB pre-write (non-fatal):', dbErr.message);
+      appendChatLog('error', `Chat DB pre-write: ${dbErr.message}`, { sessionId: sid, companyId });
     }
 
     const response = await sendMessage(companyId, messages, { modeId: selectedModeId });
@@ -62,6 +78,7 @@ async function postMessage(req, res) {
         await ChatMessage.create(sid, 'assistant', response);
       } catch (dbErr) {
         console.error('[chat] DB post-write (non-fatal):', dbErr.message);
+        appendChatLog('error', `Chat DB post-write: ${dbErr.message}`, { sessionId: sid, companyId });
       }
 
       captureLeadFromConversation({
@@ -97,12 +114,14 @@ async function postMessage(req, res) {
         })
         .catch((leadErr) => {
           console.error('[lead-capture] non-fatal:', leadErr.message);
+          appendChatLog('warn', `Lead capture: ${leadErr.message}`, { sessionId: sid, companyId });
         });
     }
 
     res.json({ content: response, sessionId: sid });
   } catch (err) {
     console.error('[chat] error:', err);
+    appendChatLog('error', `Chat error: ${err.message || 'Failed to get AI response'}`, { companyId, stack: err.stack });
     res.status(500).json({ error: err.message || 'Failed to get AI response' });
   }
 }

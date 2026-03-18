@@ -96,12 +96,24 @@ function registerSocket(companyId, sessionId, pageUrl, socket) {
 
 /**
  * Unregister a visitor when their WebSocket closes.
+ * Optional onUnregister(companyId, sessionId, { pageUrl, messageCount }) is called before removing (for missed-conversation tracking).
  */
-function unregisterSocket(socket) {
+function unregisterSocket(socket, onUnregister) {
   const key = socketToKey.get(socket);
   if (!key) return;
-  socketToKey.delete(socket);
   const sessions = store.get(key.companyId);
+  const entry = sessions?.get(key.sessionId);
+  if (typeof onUnregister === 'function' && entry) {
+    try {
+      onUnregister(key.companyId, key.sessionId, {
+        pageUrl: entry.pageUrl || '',
+        messageCount: entry.messageCount || 0,
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+  socketToKey.delete(socket);
   if (sessions) {
     sessions.delete(key.sessionId);
     if (sessions.size === 0) store.delete(key.companyId);
@@ -140,6 +152,30 @@ function unsubscribe(companyId, ws) {
   if (subs) {
     subs.delete(ws);
     if (subs.size === 0) subscribers.delete(companyId);
+  }
+}
+
+/**
+ * Get the visitor WebSocket for a session (if connected).
+ */
+function getSocketForSession(companyId, sessionId) {
+  const sessions = store.get(companyId);
+  const entry = sessions?.get(sessionId);
+  return entry?.socket && entry.socket.readyState === OPEN ? entry.socket : null;
+}
+
+/**
+ * Push a message to a visitor's chat (admin take-over). Sends { type: 'message', content } on their WebSocket.
+ * Returns true if sent, false if no socket or not open.
+ */
+function pushMessageToSession(companyId, sessionId, content) {
+  const socket = getSocketForSession(companyId, sessionId);
+  if (!socket) return false;
+  try {
+    socket.send(JSON.stringify({ type: 'message', content: String(content || '') }));
+    return true;
+  } catch (e) {
+    return false;
   }
 }
 
@@ -192,6 +228,8 @@ function getActiveForCompany(companyId) {
 module.exports = {
   record,
   getActiveForCompany,
+  getSocketForSession,
+  pushMessageToSession,
   registerSocket,
   unregisterSocket,
   updatePageSocket,

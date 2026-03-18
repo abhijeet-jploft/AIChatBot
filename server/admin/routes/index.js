@@ -6,6 +6,9 @@ const dashboardController = require('../controllers/dashboardController');
 const agentController = require('../controllers/agentController');
 const leadsController = require('../controllers/leadsController');
 const conversationsController = require('../controllers/conversationsController');
+const logsController = require('../controllers/logsController');
+const missedConversationsController = require('../controllers/missedConversationsController');
+const supportRequestsController = require('../controllers/supportRequestsController');
 const trainingController = require('../controllers/trainingController');
 const { requireAuth } = require('../middleware/requireAuth');
 
@@ -35,6 +38,10 @@ router.patch('/agent/status', requireAuth, agentController.updateStatus);
 
 router.get('/leads', requireAuth, leadsController.listLeads);
 router.get('/conversations', requireAuth, conversationsController.listConversations);
+router.post('/conversations/:sessionId/send', requireAuth, conversationsController.sendMessage);
+router.get('/logs', requireAuth, logsController.listLogs);
+router.get('/missed-conversations', requireAuth, missedConversationsController.listMissedConversations);
+router.get('/support-requests', requireAuth, supportRequestsController.listSupportRequestsHandler);
 router.get('/leads/summary', requireAuth, leadsController.getSummary);
 router.get('/leads/export.csv', requireAuth, leadsController.exportCsv);
 router.get('/leads/:leadId', requireAuth, leadsController.getLeadDetail);

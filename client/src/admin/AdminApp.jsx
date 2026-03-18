@@ -9,6 +9,10 @@ import Settings from './pages/Settings';
 import Theme from './pages/Theme';
 import ConversationMode from './pages/ConversationMode';
 import Training from './pages/Training';
+import Logs from './pages/Logs';
+import MissedConversations from './pages/MissedConversations';
+import SupportRequests from './pages/SupportRequests';
+import TakeOver from './pages/TakeOver';
 import './index.css';
 
 function AdminLayout({ children }) {
@@ -24,7 +28,11 @@ function AdminLayout({ children }) {
         { to: '/admin', label: 'Dashboard' },
         { to: '/admin/leads', label: 'Leads' },
         { to: '/admin/conversations', label: 'Conversations' },
+        { to: '/admin/missed-conversations', label: 'Missed conversations' },
+        { to: '/admin/support-requests', label: 'Support requests' },
+        { to: '/admin/take-over', label: 'Take over' },
         { to: '/admin/training', label: 'Training' },
+        { to: '/admin/logs', label: 'Logs' },
       ],
     },
     {
@@ -203,6 +211,54 @@ export default function AdminApp() {
             token ? (
               <AdminLayout>
                 <Training />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="logs"
+          element={
+            token ? (
+              <AdminLayout>
+                <Logs />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="missed-conversations"
+          element={
+            token ? (
+              <AdminLayout>
+                <MissedConversations />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="support-requests"
+          element={
+            token ? (
+              <AdminLayout>
+                <SupportRequests />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="take-over"
+          element={
+            token ? (
+              <AdminLayout>
+                <TakeOver />
               </AdminLayout>
             ) : (
               <Navigate to="/admin/login" replace />
