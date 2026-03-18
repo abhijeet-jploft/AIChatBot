@@ -150,15 +150,16 @@ async function getDashboard(req, res) {
     }
 
     const trainingJob = getActiveJobForCompany(companyId);
+    const lastTrainingTs = getLastTrainingCompleted(companyId);
     const systemStatus = {
       agentName: company?.display_name || company?.name || 'AI Agent',
       status: trainingJob ? 'Training' : (company?.agent_paused ? 'Paused' : 'Online'),
       paused: Boolean(company?.agent_paused),
       trainingInProgress: Boolean(trainingJob),
-      connectedDomain: '—',
-      lastTrainingDate: null,
-      activeLanguages: 'English',
-      voiceModeEnabled: false,
+      connectedDomain: company?.connected_domain || null,
+      lastTrainingDate: lastTrainingTs ? new Date(lastTrainingTs).toISOString() : null,
+      activeLanguages: company?.active_languages || 'English',
+      voiceModeEnabled: Boolean(company?.voice_mode_enabled),
     };
 
     res.json({

@@ -206,6 +206,21 @@ export default function Dashboard() {
   const aiInsights = data?.aiInsights || [];
   const isEmpty = !data?.summary?.total && recentConversations.length === 0;
 
+  const systemStatusParts = [];
+  if (sys.connectedDomain && String(sys.connectedDomain).trim() && sys.connectedDomain !== '—') {
+    systemStatusParts.push(`Domain: ${sys.connectedDomain}`);
+  }
+  if (sys.lastTrainingDate) {
+    systemStatusParts.push(`Last training: ${sys.lastTrainingDate}`);
+  }
+  if (sys.activeLanguages && String(sys.activeLanguages).trim()) {
+    systemStatusParts.push(sys.activeLanguages);
+  }
+  if (typeof sys.voiceModeEnabled === 'boolean') {
+    systemStatusParts.push(`Voice: ${sys.voiceModeEnabled ? 'On' : 'Off'}`);
+  }
+  const systemStatusLine = systemStatusParts.length > 0 ? systemStatusParts.join(' · ') : null;
+
   return (
     <div className="p-4">
       {/* System Status Header */}
@@ -229,9 +244,11 @@ export default function Dashboard() {
           >
             {sys.status}
           </span>
-          <span className="small" style={{ color: 'var(--chat-muted)' }}>
-            Domain: {sys.connectedDomain} · Last training: {sys.lastTrainingDate || '—'} · {sys.activeLanguages} · Voice: {sys.voiceModeEnabled ? 'On' : 'Off'}
-          </span>
+          {systemStatusLine ? (
+            <span className="small" style={{ color: 'var(--chat-muted)' }}>
+              {systemStatusLine}
+            </span>
+          ) : null}
         </div>
         <div className="d-flex align-items-center gap-2">
           {sys.paused ? (
