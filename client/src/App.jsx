@@ -6,7 +6,6 @@ import Landing from './pages/Landing';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-// Opening message per AI Chat Agent doc (JP Loft)
 const OPENING_MESSAGE = `Hi! Welcome to JP Loft!
 I'm Anaya, your digital consultant.
 Are you looking to build something or just exploring ideas?`;
@@ -253,8 +252,13 @@ export default function App() {
   const isWebsiteView = location.pathname === '/' || location.pathname === '';
   const initialChatState = readInitialChatState();
 
-  const [widgetActivated, setWidgetActivated] = useState(() => initialChatState?.widgetActivated ?? !isWebsiteView);
-  const [autoPopupHandled, setAutoPopupHandled] = useState(() => initialChatState?.autoPopupHandled ?? !isWebsiteView);
+  // On landing page always start with activation not yet triggered so 6–10s / 40% scroll / 8s idle run
+  const [widgetActivated, setWidgetActivated] = useState(() =>
+    isWebsiteView ? false : (initialChatState?.widgetActivated ?? true)
+  );
+  const [autoPopupHandled, setAutoPopupHandled] = useState(() =>
+    isWebsiteView ? false : (initialChatState?.autoPopupHandled ?? true)
+  );
   const [openingMessageShown, setOpeningMessageShown] = useState(() => initialChatState?.openingMessageShown ?? false);
 
   const [isMobile, setIsMobile] = useState(() =>
@@ -269,6 +273,8 @@ export default function App() {
   });
   const [chatViewMode, setChatViewMode] = useState(() => {
     const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
+    // On landing, always start closed so activation (6–10s / scroll / idle) runs
+    if (isWebsiteView) return fallback;
     if (Object.values(CHAT_VIEW_MODES).includes(initialChatState?.chatViewMode)) {
       return initialChatState.chatViewMode;
     }
@@ -398,7 +404,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, [isWebsiteView]);
 
-  // ── Website view: reset activation when entering landing ───────────────────
+  // ── Website view: when widget is open, keep activation/popup handled; when not website view, always activated ─
   useEffect(() => {
     if (isWebsiteView) {
       if (chatViewMode !== CHAT_VIEW_MODES.WIDGET_CLOSED) {
@@ -418,9 +424,16 @@ export default function App() {
     const delay = ACTIVATION_DELAY_MS_MIN + Math.random() * (ACTIVATION_DELAY_MS_MAX - ACTIVATION_DELAY_MS_MIN);
     const t1 = setTimeout(() => setWidgetActivated(true), delay);
 
+    const getScrollRatio = () => {
+      const doc = document.documentElement;
+      const scrollHeight = Math.max(doc.scrollHeight, doc.clientHeight, window.innerHeight);
+      const maxScroll = scrollHeight - window.innerHeight;
+      if (maxScroll <= 0) return 0;
+      return Math.min(1, window.scrollY / maxScroll);
+    };
+
     const onScroll = () => {
-      const scrolled = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) || 0;
-      if (scrolled >= SCROLL_THRESHOLD) setWidgetActivated(true);
+      if (getScrollRatio() >= SCROLL_THRESHOLD) setWidgetActivated(true);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
 
