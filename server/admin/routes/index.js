@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const authController = require('../controllers/authController');
 const settingsController = require('../controllers/settingsController');
 const themeController = require('../controllers/themeController');
@@ -11,6 +12,8 @@ const missedConversationsController = require('../controllers/missedConversation
 const supportRequestsController = require('../controllers/supportRequestsController');
 const trainingController = require('../controllers/trainingController');
 const { requireAuth } = require('../middleware/requireAuth');
+
+const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -56,5 +59,13 @@ router.delete('/leads/:leadId', requireAuth, leadsController.removeLead);
 router.post('/training/scrape/start', requireAuth, trainingController.startScrape);
 router.get('/training/scrape/status/:jobId', requireAuth, trainingController.scrapeStatus);
 router.post('/training/scrape/save/:jobId', requireAuth, trainingController.scrapeSave);
+
+router.post('/training/conversational', requireAuth, trainingController.saveConversational);
+router.post('/training/documents', requireAuth, uploadMemory.array('files', 10), trainingController.saveDocuments);
+router.post('/training/structured', requireAuth, trainingController.saveStructured);
+router.post('/training/structured/upload', requireAuth, uploadMemory.single('file'), trainingController.saveStructured);
+router.get('/training/manual', requireAuth, trainingController.getManual);
+router.put('/training/manual', requireAuth, trainingController.setManual);
+router.get('/training/files', requireAuth, trainingController.listFiles);
 
 module.exports = router;

@@ -215,9 +215,33 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
               buckets.regular.push(`\n--- ${label} ---\n${data}\n`);
             }
           } else if (ext === '.jsonl') {
-            const { priority, regular } = buildJsonlContext(data, label, queryTokens);
-            if (priority) buckets.priority.push(priority);
-            if (regular) buckets.regular.push(regular);
+            if (/conversational_instructions\.jsonl$/i.test(entry.name)) {
+              const lines = data.split(/\r?\n/).filter((l) => l.trim());
+              const parts = lines.map((line) => {
+                try {
+                  const o = JSON.parse(line);
+                  if (o.text) return `Instruction: ${o.text}`;
+                  if (o.userMessage || o.assistantMessage) {
+                    return `Q: ${o.userMessage || ''}\nA: ${o.assistantMessage || ''}`.trim();
+                  }
+                  return line;
+                } catch { return line; }
+              });
+              buckets.regular.push(`\n--- ${label} (Owner instructions / Q&A) ---\n${parts.join('\n\n')}\n`);
+            } else if (/structured_data\.jsonl$/i.test(entry.name)) {
+              const lines = data.split(/\r?\n/).filter((l) => l.trim());
+              const parts = lines.map((line) => {
+                try {
+                  const o = JSON.parse(line);
+                  return typeof o === 'object' ? JSON.stringify(o) : line;
+                } catch { return line; }
+              });
+              buckets.regular.push(`\n--- ${label} (Structured data) ---\n${parts.join('\n')}\n`);
+            } else {
+              const { priority, regular } = buildJsonlContext(data, label, queryTokens);
+              if (priority) buckets.priority.push(priority);
+              if (regular) buckets.regular.push(regular);
+            }
           } else if (/links\.txt$/i.test(entry.name) && /[|\t].*https?:\/\//m.test(data)) {
             // scraped_website_links.txt: Title | URL format — use for page redirects
             buckets.regular.push(
