@@ -252,12 +252,12 @@ export default function App() {
   const isWebsiteView = location.pathname === '/' || location.pathname === '';
   const initialChatState = readInitialChatState();
 
-  // On landing page always start with activation not yet triggered so 6–10s / 40% scroll / 8s idle run
+  // On landing page always start with activation not yet triggered so 6–10s / 40% scroll / 8s idle run; open from admin (sessionId in URL) = already activated
   const [widgetActivated, setWidgetActivated] = useState(() =>
-    isWebsiteView ? false : (initialChatState?.widgetActivated ?? true)
+    isWebsiteView && !initialChatState?.sessionId ? false : (initialChatState?.widgetActivated ?? true)
   );
   const [autoPopupHandled, setAutoPopupHandled] = useState(() =>
-    isWebsiteView ? false : (initialChatState?.autoPopupHandled ?? true)
+    isWebsiteView && !initialChatState?.sessionId ? false : (initialChatState?.autoPopupHandled ?? true)
   );
   const [openingMessageShown, setOpeningMessageShown] = useState(() => initialChatState?.openingMessageShown ?? false);
 
@@ -273,6 +273,8 @@ export default function App() {
   });
   const [chatViewMode, setChatViewMode] = useState(() => {
     const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
+    // Open from admin (URL has sessionId): always open maximized on chatbot side
+    if (isWebsiteView && initialChatState?.sessionId) return CHAT_VIEW_MODES.FULL_PAGE;
     // On landing, always start closed so activation (6–10s / scroll / idle) runs
     if (isWebsiteView) return fallback;
     if (Object.values(CHAT_VIEW_MODES).includes(initialChatState?.chatViewMode)) {
