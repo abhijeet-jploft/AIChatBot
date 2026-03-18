@@ -213,6 +213,7 @@ function getActiveForCompany(companyId) {
       pageUrl: data.pageUrl || '—',
       lastSeen: data.lastSeen,
       messageCount: data.messageCount || 0,
+      isOpen: Boolean(hasOpenSocket),
     });
     if ((data.messageCount || 0) > 0) currentlyChatting += 1;
     if (data.lastSeen && (!lastMessageAt || data.lastSeen > lastMessageAt)) lastMessageAt = data.lastSeen;

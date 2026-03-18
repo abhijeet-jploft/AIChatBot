@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const LIVE_POLL_MS = 8000;
+const WS_RECONNECT_MS = 5000;
 const PAGE_SIZE = 20;
 
 const TAB_LIVE = 'live';
@@ -25,7 +27,7 @@ function formatTimeAgo(dateStr) {
 }
 
 export default function TakeOver() {
-  const { authFetch, company } = useAuth();
+  const { authFetch, company, token } = useAuth();
   const [activeTab, setActiveTab] = useState(TAB_LIVE);
 
   // Live conversations
@@ -33,6 +35,8 @@ export default function TakeOver() {
   const [liveLoading, setLiveLoading] = useState(true);
   const [sending, setSending] = useState(null);
   const [draft, setDraft] = useState({});
+  const liveWsRef = useRef(null);
+  const liveReconnectRef = useRef(null);
 
   // All conversations (server-side search + pagination)
   const [search, setSearch] = useState('');
@@ -51,7 +55,9 @@ export default function TakeOver() {
       const res = await authFetch('/dashboard/live');
       if (!res.ok) return;
       const data = await res.json();
-      setLiveSessions(data.sessions || []);
+      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      const openOnly = sessions.filter((s) => s.isOpen && (s.messageCount || 0) > 0);
+      setLiveSessions(openOnly);
     } catch {
       setLiveSessions([]);
     } finally {
@@ -59,11 +65,73 @@ export default function TakeOver() {
     }
   }, [authFetch]);
 
+  // Live conversations: WebSocket for real-time updates, HTTP poll as fallback
   useEffect(() => {
+    if (!token) {
+      fetchLive();
+      return;
+    }
+
+    const getWsUrl = () => {
+      if (typeof window === 'undefined' || !window.location) return null;
+      const base = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`;
+      const u = new URL(base);
+      return (u.protocol === 'HTTPS:' ? 'wss:' : 'ws:') + '//' + u.host + '/api/admin/ws?token=' + encodeURIComponent(token);
+    };
+
+    const applySessions = (payload) => {
+      if (!payload || !Array.isArray(payload.sessions)) {
+        setLiveSessions([]);
+        return;
+      }
+      const openOnly = payload.sessions.filter(
+        (s) => s.isOpen && (s.messageCount || 0) > 0
+      );
+      setLiveSessions(openOnly);
+      setLiveLoading(false);
+    };
+
     fetchLive();
-    const id = setInterval(fetchLive, LIVE_POLL_MS);
-    return () => clearInterval(id);
-  }, [fetchLive]);
+
+    const connect = () => {
+      const url = getWsUrl();
+      if (!url) return;
+      try {
+        const ws = new WebSocket(url);
+        liveWsRef.current = ws;
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'visitors' && msg.data) {
+              applySessions(msg.data);
+            }
+          } catch (_) {}
+        };
+        ws.onclose = () => {
+          liveWsRef.current = null;
+          liveReconnectRef.current = setTimeout(connect, WS_RECONNECT_MS);
+        };
+        ws.onerror = () => {};
+      } catch (_) {}
+    };
+
+    connect();
+
+    const pollFallback = setInterval(() => {
+      if (!liveWsRef.current || liveWsRef.current.readyState !== WebSocket.OPEN) {
+        fetchLive();
+      }
+    }, LIVE_POLL_MS);
+
+    return () => {
+      if (liveReconnectRef.current) clearTimeout(liveReconnectRef.current);
+      if (liveWsRef.current) {
+        liveWsRef.current.close();
+        liveWsRef.current = null;
+      }
+      clearInterval(pollFallback);
+    };
+  }, [token, fetchLive]);
 
   const loadAllConversations = useCallback(async () => {
     setAllLoading(true);

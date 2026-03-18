@@ -190,6 +190,7 @@ async function getLive(req, res) {
         pageUrl: s.pageUrl,
         lastSeen: s.lastSeen,
         messageCount: s.messageCount,
+        isOpen: Boolean(s.isOpen),
       })),
     });
   } catch (err) {
