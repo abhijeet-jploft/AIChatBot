@@ -12,6 +12,7 @@ async function findByCompanyId(companyId) {
             agent_paused,
             voice_mode_enabled,
             voice_gender,
+            voice_profile,
             voice_ignore_emoji,
             voice_response_enabled,
             escalation_trigger_user_requests_human,
@@ -62,6 +63,7 @@ async function updateSettings(companyId, {
   lead_notification_email,
   voice_mode_enabled,
   voice_gender,
+  voice_profile,
   voice_ignore_emoji,
   voice_response_enabled,
   escalation_trigger_user_requests_human,
@@ -146,6 +148,11 @@ async function updateSettings(companyId, {
   if (voice_gender !== undefined) {
     updates.push(`voice_gender = $${i++}`);
     values.push(String(voice_gender || 'female').toLowerCase() === 'male' ? 'male' : 'female');
+  }
+  if (voice_profile !== undefined) {
+    updates.push(`voice_profile = $${i++}`);
+    const normalizedVoiceProfile = String(voice_profile || 'professional').trim().toLowerCase();
+    values.push(['professional', 'corporate', 'sales'].includes(normalizedVoiceProfile) ? normalizedVoiceProfile : 'professional');
   }
   if (voice_ignore_emoji !== undefined) {
     updates.push(`voice_ignore_emoji = $${i++}`);

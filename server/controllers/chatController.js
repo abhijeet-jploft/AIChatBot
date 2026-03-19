@@ -5,7 +5,7 @@ const { record: recordActiveVisitor, broadcastAlert } = require('../services/act
 const { evaluateEscalation } = require('../services/escalationService');
 const { appendChatLog } = require('../services/adminLogStore');
 const { add: addSupportRequest, isSupportRequest } = require('../services/supportRequestsStore');
-const { normalizeVoiceGender, synthesizeTextResponse } = require('../services/elevenlabsService');
+const { normalizeVoiceGender, normalizeVoiceProfile, synthesizeTextResponse } = require('../services/elevenlabsService');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
@@ -29,7 +29,7 @@ async function postMessage(req, res) {
     let selectedModeId = null;
     let safetyConfig = {};
     let escalationConfig = {};
-    let voiceConfig = { enabled: false, gender: 'female' };
+    let voiceConfig = { enabled: false, gender: 'female', profile: 'professional' };
     const userMsg = messages[messages.length - 1];
 
     // Persist pre-response data (non-fatal if DB is unavailable)
@@ -67,6 +67,7 @@ async function postMessage(req, res) {
         enabled: Boolean(chatbot?.voice_mode_enabled),
         responseEnabled: Boolean(chatbot?.voice_response_enabled !== false),
         gender: normalizeVoiceGender(chatbot?.voice_gender),
+        profile: normalizeVoiceProfile(chatbot?.voice_profile) || 'professional',
         ignoreEmoji: Boolean(chatbot?.voice_ignore_emoji),
       };
 
@@ -92,7 +93,11 @@ async function postMessage(req, res) {
         let pausedVoice = null;
         if (voiceConfig.enabled && voiceConfig.responseEnabled) {
           try {
-            pausedVoice = await synthesizeTextResponse(pausedMessage, { gender: voiceConfig.gender, ignoreEmoji: voiceConfig.ignoreEmoji });
+            pausedVoice = await synthesizeTextResponse(pausedMessage, {
+              gender: voiceConfig.gender,
+              profile: voiceConfig.profile,
+              ignoreEmoji: voiceConfig.ignoreEmoji,
+            });
           } catch (voiceErr) {
             console.error('[voice] paused message non-fatal:', voiceErr.message);
             appendChatLog('warn', `Voice synthesis failed: ${voiceErr.message}`, { sessionId: sid, companyId });
@@ -126,7 +131,11 @@ async function postMessage(req, res) {
 
     if (voiceConfig.enabled && voiceConfig.responseEnabled) {
       try {
-        voice = await synthesizeTextResponse(response, { gender: voiceConfig.gender, ignoreEmoji: voiceConfig.ignoreEmoji });
+        voice = await synthesizeTextResponse(response, {
+          gender: voiceConfig.gender,
+          profile: voiceConfig.profile,
+          ignoreEmoji: voiceConfig.ignoreEmoji,
+        });
         if (!voice && process.env.ELEVENLABS_API_KEY) {
           appendChatLog('warn', 'Voice synthesis returned no audio (text may be empty after sanitization)', { sessionId: sid, companyId });
         }

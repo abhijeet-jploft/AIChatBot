@@ -6,6 +6,14 @@ const {
   isValidConversationModeId,
   normalizeConversationModeId,
 } = require('../../services/conversationModes');
+const {
+  getVoiceList,
+  getVoicePreviewText,
+  getVoicePresetCatalog,
+  normalizeVoiceGender,
+  normalizeVoiceProfile,
+  synthesizeTextResponse,
+} = require('../../services/elevenlabsService');
 
 function normalizeNotificationEmail(value) {
   if (value === undefined) return undefined;
@@ -18,10 +26,22 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function normalizeVoiceGender(value) {
+function normalizeVoiceGenderInput(value) {
+  if (value === undefined) return undefined;
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'male' || normalized === 'female') return normalized;
   return null;
+}
+
+function buildVoicePayload(company) {
+  return {
+    enabled: Boolean(company?.voice_mode_enabled),
+    responseEnabled: Boolean(company?.voice_response_enabled !== false),
+    gender: normalizeVoiceGender(company?.voice_gender),
+    profile: normalizeVoiceProfile(company?.voice_profile) || 'professional',
+    ignoreEmoji: Boolean(company?.voice_ignore_emoji),
+    catalog: getVoicePresetCatalog(),
+  };
 }
 
 async function getSettings(req, res) {
@@ -42,12 +62,7 @@ async function getSettings(req, res) {
         emailEnabled: Boolean(company.lead_email_notifications_enabled),
         email: company.lead_notification_email || null,
       },
-      voice: {
-        enabled: Boolean(company.voice_mode_enabled),
-        responseEnabled: Boolean(company.voice_response_enabled !== false),
-        gender: company.voice_gender === 'male' ? 'male' : 'female',
-        ignoreEmoji: Boolean(company.voice_ignore_emoji),
-      },
+      voice: buildVoicePayload(company),
       escalation: {
         triggers: {
           userRequestsHuman: Boolean(company.escalation_trigger_user_requests_human),
@@ -112,9 +127,17 @@ async function updateSettings(req, res) {
 
     let normalizedVoiceGender;
     if (voice?.gender !== undefined) {
-      normalizedVoiceGender = normalizeVoiceGender(voice.gender);
+      normalizedVoiceGender = normalizeVoiceGenderInput(voice.gender);
       if (!normalizedVoiceGender) {
         return res.status(400).json({ error: 'Invalid voice gender. Allowed values: male, female' });
+      }
+    }
+
+    let normalizedVoiceProfile;
+    if (voice?.profile !== undefined) {
+      normalizedVoiceProfile = normalizeVoiceProfile(voice.profile);
+      if (!normalizedVoiceProfile) {
+        return res.status(400).json({ error: 'Invalid voice profile. Allowed values: professional, corporate, sales' });
       }
     }
 
@@ -132,6 +155,7 @@ async function updateSettings(req, res) {
       voice_mode_enabled: voice?.enabled !== undefined ? Boolean(voice.enabled) : undefined,
       voice_response_enabled: voice?.responseEnabled !== undefined ? Boolean(voice.responseEnabled) : undefined,
       voice_gender: normalizedVoiceGender !== undefined ? normalizedVoiceGender : undefined,
+      voice_profile: normalizedVoiceProfile !== undefined ? normalizedVoiceProfile : undefined,
       voice_ignore_emoji: voice?.ignoreEmoji !== undefined ? Boolean(voice.ignoreEmoji) : undefined,
       escalation_trigger_user_requests_human: escalation?.triggers?.userRequestsHuman !== undefined
         ? Boolean(escalation.triggers.userRequestsHuman)
@@ -198,12 +222,7 @@ async function updateSettings(req, res) {
         emailEnabled: Boolean(company.lead_email_notifications_enabled),
         email: company.lead_notification_email || null,
       },
-      voice: {
-        enabled: Boolean(company.voice_mode_enabled),
-        responseEnabled: Boolean(company.voice_response_enabled !== false),
-        gender: company.voice_gender === 'male' ? 'male' : 'female',
-        ignoreEmoji: Boolean(company.voice_ignore_emoji),
-      },
+      voice: buildVoicePayload(company),
       escalation: {
         triggers: {
           userRequestsHuman: Boolean(company.escalation_trigger_user_requests_human),
@@ -281,6 +300,67 @@ async function getModeSettings(req, res) {
   }
 }
 
+async function previewVoice(req, res) {
+  try {
+    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const requestedGender = normalizeVoiceGenderInput(req.body?.gender);
+    if (requestedGender === null) {
+      return res.status(400).json({ error: 'Invalid voice gender. Allowed values: male, female' });
+    }
+
+    const profileInputProvided = req.body?.profile !== undefined;
+    const requestedProfile = profileInputProvided ? normalizeVoiceProfile(req.body.profile) : undefined;
+    if (profileInputProvided && !requestedProfile) {
+      return res.status(400).json({ error: 'Invalid voice profile. Allowed values: professional, corporate, sales' });
+    }
+
+    const gender = requestedGender || normalizeVoiceGender(company.voice_gender);
+    const profile = requestedProfile || normalizeVoiceProfile(company.voice_profile) || 'professional';
+    const bodyText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    const previewText = bodyText ? bodyText.slice(0, 260) : getVoicePreviewText(profile, gender);
+
+    const voice = await synthesizeTextResponse(previewText, {
+      gender,
+      profile,
+      ignoreEmoji: true,
+    });
+
+    if (!voice) {
+      return res.status(503).json({ error: 'Voice preview unavailable. Check ELEVENLABS_API_KEY and voice configuration.' });
+    }
+
+    res.json({
+      profile,
+      gender,
+      previewText,
+      ...voice,
+    });
+  } catch (err) {
+    console.error('[admin settings] preview voice:', err);
+    if (err.status === 402) {
+      return res.status(402).json({ error: err.message });
+    }
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function listVoices(req, res) {
+  try {
+    const gender = req.query.gender || null;
+    const profile = req.query.profile || null;
+    const search = req.query.search || null;
+    const voices = getVoiceList({ gender, profile, search });
+    res.json({ voices });
+  } catch (err) {
+    console.error('[admin settings] list voices:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 async function listActiveSessions(req, res) {
   try {
     const sessions = await CompanyAdmin.listActiveSessions(req.adminCompanyId);
@@ -301,4 +381,4 @@ async function logoutAllSessions(req, res) {
   }
 }
 
-module.exports = { getSettings, updateSettings, listCompanies, getModeSettings, listActiveSessions, logoutAllSessions };
+module.exports = { getSettings, updateSettings, previewVoice, listVoices, listCompanies, getModeSettings, listActiveSessions, logoutAllSessions };

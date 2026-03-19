@@ -37,6 +37,13 @@ AIChatBot/
    PORT=5000
    ```
 
+   Optional voice setup (for admin voice preview and spoken AI replies):
+   ```
+   ELEVENLABS_API_KEY=your_elevenlabs_key_here
+   ELEVENLABS_DEFAULT_VOICE_PROFILE=professional
+   ```
+   The admin Voice Settings page now includes premade `professional`, `corporate`, and `sales` profiles with male/female choices and live preview.
+
 3. **Run the app**
    - Backend: `npm run server` (or `npm start`)
    - Frontend: `npm run client` (from project root)

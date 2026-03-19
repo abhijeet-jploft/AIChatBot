@@ -20,6 +20,7 @@ async function getCompaniesList(req, res) {
               theme_header_background, theme_header_shadow, theme_header_text_color,
               voice_mode_enabled,
               voice_gender,
+              voice_profile,
               voice_ignore_emoji,
               voice_response_enabled
          FROM chatbots
@@ -37,6 +38,7 @@ async function getCompaniesList(req, res) {
         enabled: Boolean(dbMap[c.id]?.voice_mode_enabled),
         responseEnabled: Boolean(dbMap[c.id]?.voice_response_enabled !== false),
         gender: dbMap[c.id]?.voice_gender === 'male' ? 'male' : 'female',
+        profile: dbMap[c.id]?.voice_profile || 'professional',
         ignoreEmoji: Boolean(dbMap[c.id]?.voice_ignore_emoji),
       },
       theme: mergeCompanyTheme(c.id, {

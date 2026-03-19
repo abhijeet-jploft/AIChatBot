@@ -27,6 +27,7 @@ async function findByCompanyId(companyId) {
       agent_paused,
       voice_mode_enabled,
       voice_gender,
+      voice_profile,
       voice_ignore_emoji,
       voice_response_enabled,
       escalation_trigger_user_requests_human,
