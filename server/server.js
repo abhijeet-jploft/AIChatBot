@@ -1,4 +1,7 @@
-require('dotenv').config();
+const path = require('path');
+// Always use .env in project root (never .env.example). Copy .env.example to .env and set real values.
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -9,9 +12,6 @@ const sessionRoutes = require('./routes/sessions');
 const adminRoutes = require('./admin/routes');
 const { migrate } = require('./db/migrate');
 const { attachPresenceWs } = require('./ws/presence');
-
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;

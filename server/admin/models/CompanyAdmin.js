@@ -11,6 +11,9 @@ async function findByCompanyId(companyId) {
             lead_notification_email,
             agent_paused,
             voice_mode_enabled,
+            voice_gender,
+            voice_ignore_emoji,
+            voice_response_enabled,
             escalation_trigger_user_requests_human,
             escalation_trigger_ai_confidence_low,
             escalation_trigger_urgent_keywords,
@@ -58,6 +61,9 @@ async function updateSettings(companyId, {
   lead_email_notifications_enabled,
   lead_notification_email,
   voice_mode_enabled,
+  voice_gender,
+  voice_ignore_emoji,
+  voice_response_enabled,
   escalation_trigger_user_requests_human,
   escalation_trigger_ai_confidence_low,
   escalation_trigger_urgent_keywords,
@@ -136,6 +142,18 @@ async function updateSettings(companyId, {
   if (voice_mode_enabled !== undefined) {
     updates.push(`voice_mode_enabled = $${i++}`);
     values.push(Boolean(voice_mode_enabled));
+  }
+  if (voice_gender !== undefined) {
+    updates.push(`voice_gender = $${i++}`);
+    values.push(String(voice_gender || 'female').toLowerCase() === 'male' ? 'male' : 'female');
+  }
+  if (voice_ignore_emoji !== undefined) {
+    updates.push(`voice_ignore_emoji = $${i++}`);
+    values.push(Boolean(voice_ignore_emoji));
+  }
+  if (voice_response_enabled !== undefined) {
+    updates.push(`voice_response_enabled = $${i++}`);
+    values.push(Boolean(voice_response_enabled));
   }
   if (escalation_trigger_user_requests_human !== undefined) {
     updates.push(`escalation_trigger_user_requests_human = $${i++}`);

@@ -18,7 +18,10 @@ async function getCompaniesList(req, res) {
               theme_primary_color, theme_primary_dark_color,
               theme_secondary_color, theme_secondary_light_color,
               theme_header_background, theme_header_shadow, theme_header_text_color,
-              voice_mode_enabled
+              voice_mode_enabled,
+              voice_gender,
+              voice_ignore_emoji,
+              voice_response_enabled
          FROM chatbots
        WHERE company_id = ANY($1::text[])`,
       [companyIds]
@@ -32,6 +35,9 @@ async function getCompaniesList(req, res) {
       greetingMessage: dbMap[c.id]?.greeting_message || null,
       voice: {
         enabled: Boolean(dbMap[c.id]?.voice_mode_enabled),
+        responseEnabled: Boolean(dbMap[c.id]?.voice_response_enabled !== false),
+        gender: dbMap[c.id]?.voice_gender === 'male' ? 'male' : 'female',
+        ignoreEmoji: Boolean(dbMap[c.id]?.voice_ignore_emoji),
       },
       theme: mergeCompanyTheme(c.id, {
         primaryColor: dbMap[c.id]?.theme_primary_color,

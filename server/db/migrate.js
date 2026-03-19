@@ -57,6 +57,9 @@ ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_email_notifications_enabled B
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_notification_email TEXT;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS agent_paused BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_gender VARCHAR(10) NOT NULL DEFAULT 'female';
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_ignore_emoji BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_response_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- 4.5.10 Escalation settings (human intervention triggers/actions)
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_user_requests_human BOOLEAN NOT NULL DEFAULT TRUE;

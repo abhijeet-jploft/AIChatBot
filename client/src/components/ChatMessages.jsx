@@ -49,7 +49,7 @@ function MessageContent({ content, isUser }) {
   );
 }
 
-export default function ChatMessages({ messages, loading, greetingMessage }) {
+export default function ChatMessages({ messages, loading, greetingMessage, onPlayVoice, onPauseVoice, playingMessageIndex, voiceEnabled, voiceResponseEnabled = true, onPlayBrowserVoice }) {
   if (!messages.length && !loading) {
     const hasCustom = greetingMessage?.trim();
     const title = hasCustom?.split('\n')[0]?.trim() || 'How can I help you today?';
@@ -97,6 +97,52 @@ export default function ChatMessages({ messages, loading, greetingMessage }) {
             <div className="message-content">
               <MessageContent content={msg.content} isUser={msg.role === 'user'} />
             </div>
+            {msg.role === 'assistant' && msg.content && voiceResponseEnabled && (msg.voiceUrl || typeof onPlayBrowserVoice === 'function' || (voiceEnabled && typeof onPlayVoice === 'function')) && (
+              <div className="mt-2 d-inline-flex align-items-center gap-2">
+                {playingMessageIndex === i ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-sm border-0 p-1 d-inline-flex align-items-center justify-content-center"
+                      style={{
+                        background: 'linear-gradient(135deg, var(--chat-launcher-gradient-start), var(--chat-launcher-gradient-end))',
+                        color: 'var(--chat-header-text, white)',
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                      }}
+                      onClick={() => onPauseVoice && onPauseVoice()}
+                      aria-label="Stop"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <path d="M6 6h12v12H6z" />
+                      </svg>
+                    </button>
+                    <span className="chat-mic-wave" style={{ color: 'var(--chat-accent)' }} aria-hidden>
+                      <span />
+                    </span>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-sm border-0 p-1 d-inline-flex align-items-center justify-content-center"
+                    style={{
+                      background: 'linear-gradient(135deg, var(--chat-launcher-gradient-start), var(--chat-launcher-gradient-end))',
+                      color: 'var(--chat-header-text, white)',
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                    }}
+                    onClick={() => { if (msg.voiceUrl && onPlayVoice) onPlayVoice(msg.voiceUrl, i); else if (onPlayBrowserVoice) onPlayBrowserVoice(msg.content, i); }}
+                    aria-label="Play response"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ))}

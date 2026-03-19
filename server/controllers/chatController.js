@@ -5,6 +5,7 @@ const { record: recordActiveVisitor, broadcastAlert } = require('../services/act
 const { evaluateEscalation } = require('../services/escalationService');
 const { appendChatLog } = require('../services/adminLogStore');
 const { add: addSupportRequest, isSupportRequest } = require('../services/supportRequestsStore');
+const { normalizeVoiceGender, synthesizeTextResponse } = require('../services/elevenlabsService');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
@@ -15,8 +16,10 @@ const ChatMessage = require('../models/ChatMessage');
  * Returns: { content, sessionId }
  */
 async function postMessage(req, res) {
+  let companyId = '_default';
   try {
-    const { messages, companyId = '_default', sessionId } = req.body;
+    const { messages, companyId: requestCompanyId = '_default', sessionId } = req.body;
+    companyId = requestCompanyId;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages array is required' });
@@ -26,6 +29,7 @@ async function postMessage(req, res) {
     let selectedModeId = null;
     let safetyConfig = {};
     let escalationConfig = {};
+    let voiceConfig = { enabled: false, gender: 'female' };
     const userMsg = messages[messages.length - 1];
 
     // Persist pre-response data (non-fatal if DB is unavailable)
@@ -59,6 +63,13 @@ async function postMessage(req, res) {
         highValueLeadScoreThreshold: chatbot?.escalation_high_value_lead_score_threshold || 75,
       };
 
+      voiceConfig = {
+        enabled: Boolean(chatbot?.voice_mode_enabled),
+        responseEnabled: Boolean(chatbot?.voice_response_enabled !== false),
+        gender: normalizeVoiceGender(chatbot?.voice_gender),
+        ignoreEmoji: Boolean(chatbot?.voice_ignore_emoji),
+      };
+
       if (!sid) {
         const { id } = await ChatSession.create(companyId);
         sid = id;
@@ -77,7 +88,18 @@ async function postMessage(req, res) {
       if (chatbot?.agent_paused) {
         const pausedMessage = 'Our AI agent is currently paused. Please leave your name and contact details, and we will get back to you shortly.';
         await ChatMessage.create(sid, 'assistant', pausedMessage);
-        return res.json({ content: pausedMessage, sessionId: sid });
+
+        let pausedVoice = null;
+        if (voiceConfig.enabled && voiceConfig.responseEnabled) {
+          try {
+            pausedVoice = await synthesizeTextResponse(pausedMessage, { gender: voiceConfig.gender, ignoreEmoji: voiceConfig.ignoreEmoji });
+          } catch (voiceErr) {
+            console.error('[voice] paused message non-fatal:', voiceErr.message);
+            appendChatLog('warn', `Voice synthesis failed: ${voiceErr.message}`, { sessionId: sid, companyId });
+          }
+        }
+
+        return res.json({ content: pausedMessage, sessionId: sid, voice: pausedVoice });
       }
 
       recordActiveVisitor(companyId, sid, req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl, true);
@@ -100,6 +122,19 @@ async function postMessage(req, res) {
     }
 
     const response = await sendMessage(companyId, messages, { modeId: selectedModeId, safetyConfig });
+    let voice = null;
+
+    if (voiceConfig.enabled && voiceConfig.responseEnabled) {
+      try {
+        voice = await synthesizeTextResponse(response, { gender: voiceConfig.gender, ignoreEmoji: voiceConfig.ignoreEmoji });
+        if (!voice && process.env.ELEVENLABS_API_KEY) {
+          appendChatLog('warn', 'Voice synthesis returned no audio (text may be empty after sanitization)', { sessionId: sid, companyId });
+        }
+      } catch (voiceErr) {
+        console.error('[voice] response non-fatal:', voiceErr.message);
+        appendChatLog('warn', `Voice synthesis failed: ${voiceErr.message}`, { sessionId: sid, companyId });
+      }
+    }
 
     if (sid) {
       try {
@@ -173,7 +208,7 @@ async function postMessage(req, res) {
       }
     }
 
-    res.json({ content: response, sessionId: sid });
+    res.json({ content: response, sessionId: sid, voice });
   } catch (err) {
     console.error('[chat] error:', err);
     appendChatLog('error', `Chat error: ${err.message || 'Failed to get AI response'}`, { companyId, stack: err.stack });

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 
@@ -48,7 +49,6 @@ export default function Settings() {
   const [leadEmailNotificationsEnabled, setLeadEmailNotificationsEnabled] = useState(false);
   const [leadNotificationEmail, setLeadNotificationEmail] = useState('');
   const [saving, setSaving] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [escalation, setEscalation] = useState(defaultEscalation);
   const [safety, setSafety] = useState(defaultSafety);
   const [sessions, setSessions] = useState([]);
@@ -66,7 +66,6 @@ export default function Settings() {
         setGreetingMessage(d.greetingMessage || '');
         setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
         setLeadNotificationEmail(d.leadNotifications?.email || '');
-        setVoiceEnabled(Boolean(d.voice?.enabled));
         if (d.escalation) {
           setEscalation((prev) => ({
             triggers: { ...prev.triggers, ...d.escalation.triggers },
@@ -113,7 +112,6 @@ export default function Settings() {
             emailEnabled: leadEmailNotificationsEnabled,
             email: leadNotificationEmail.trim() || null,
           },
-          voice: { enabled: voiceEnabled },
           escalation: {
             triggers: escalation.triggers,
             actions: escalation.actions,
@@ -255,24 +253,13 @@ export default function Settings() {
                 Voice settings
               </div>
 
-              <div className="mb-1">
-                <div className="form-check">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="voiceEnabled"
-                    checked={voiceEnabled}
-                    onChange={(e) => setVoiceEnabled(e.target.checked)}
-                  />
-                  <label className="form-check-label" htmlFor="voiceEnabled">
-                    Enable voice input (mic button) in the chatbot
-                  </label>
-                </div>
+              <div className="form-text" style={mutedStyle}>
+                Voice options now have a dedicated page so you can manage voice mode and male/female response voice separately.
               </div>
 
-              <div className="form-text" style={mutedStyle}>
-                When enabled, visitors can speak instead of typing. This reflects the Voice configuration in your AI agent settings.
-              </div>
+              <Link to="/admin/voice-settings" className="btn btn-sm btn-outline-primary mt-3">
+                Open voice settings
+              </Link>
             </div>
           </div>
         </div>

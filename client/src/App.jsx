@@ -323,8 +323,168 @@ export default function App() {
   });
   const ignoreButtonClickRef = useRef(false);
   const presenceWsRef = useRef(null);
+  const responseAudioRef = useRef(null);
+  const speechUtteranceRef = useRef(null);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+  const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
+
+  const stripEmoji = useCallback((text) => {
+    try {
+      return String(text || '').replace(/\p{Emoji}/gu, '').replace(/\s+/g, ' ').trim();
+    } catch {
+      return String(text || '').trim();
+    }
+  }, []);
+
+  const stripLeadingInvisible = useCallback((str) => {
+    return String(str || '').replace(/^[\s\uFEFF\u200B-\u200D\u2060\u00AD]*/, '');
+  }, []);
+
+  const sanitizeSpeechText = useCallback((text, options = {}) => {
+    let out = stripLeadingInvisible(String(text || ''))
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+      .replace(/^\s{0,3}(#{1,6}|[-*+])\s+/gm, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (options.ignoreEmoji) out = stripEmoji(out);
+    return out;
+  }, [stripEmoji, stripLeadingInvisible]);
+
+  const getPreferredBrowserVoice = useCallback((gender) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+
+    const allVoices = window.speechSynthesis.getVoices() || [];
+    if (!allVoices.length) return null;
+
+    const englishVoices = allVoices.filter((v) => /^en(-|$)/i.test(v.lang || ''));
+    const pool = englishVoices.length ? englishVoices : allVoices;
+
+    const femaleHint = /(female|woman|zira|susan|samantha|aria|eva|linda|hazel|jenny|karen|emma|alloy)/i;
+    const maleHint = /(male|man|david|mark|alex|guy|daniel|george|james|tom|ryan|adam)/i;
+    const matcher = String(gender || 'female').toLowerCase() === 'male' ? maleHint : femaleHint;
+
+    return pool.find((v) => matcher.test(v.name || '')) || pool[0] || null;
+  }, []);
+
+  const speakWithBrowserVoice = useCallback((text, gender = 'female', ignoreEmoji = false, onEnd) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis || typeof window.SpeechSynthesisUtterance === 'undefined') {
+      return;
+    }
+
+    const speechText = sanitizeSpeechText(text, { ignoreEmoji });
+    if (!speechText) return;
+
+    try {
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(speechText);
+      const selectedVoice = getPreferredBrowserVoice(gender);
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang || 'en-US';
+      } else {
+        utterance.lang = 'en-US';
+      }
+
+      const isMale = String(gender || '').toLowerCase() === 'male';
+      utterance.pitch = isMale ? 0.9 : 1.1;
+      utterance.rate = 1;
+
+      utterance.onend = () => {
+        if (speechUtteranceRef.current === utterance) {
+          speechUtteranceRef.current = null;
+        }
+        if (typeof onEnd === 'function') onEnd();
+      };
+
+      utterance.onerror = () => {
+        if (speechUtteranceRef.current === utterance) {
+          speechUtteranceRef.current = null;
+        }
+        if (typeof onEnd === 'function') onEnd();
+      };
+
+      speechUtteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      if (typeof onEnd === 'function') onEnd();
+    }
+  }, [getPreferredBrowserVoice, sanitizeSpeechText]);
+
+  const pauseAssistantVoice = useCallback(() => {
+    try {
+      if (responseAudioRef.current) {
+        responseAudioRef.current.pause();
+        responseAudioRef.current.src = '';
+        responseAudioRef.current = null;
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      speechUtteranceRef.current = null;
+    } catch {
+      // ignore
+    }
+    setPlayingMessageIndex(null);
+  }, []);
+
+  const playAssistantVoice = useCallback((audioDataUrl, messageIndex) => {
+    if (!audioDataUrl || typeof window === 'undefined') return;
+
+    try {
+      if (responseAudioRef.current) {
+        responseAudioRef.current.pause();
+        responseAudioRef.current = null;
+      }
+
+      setPlayingMessageIndex(messageIndex ?? null);
+
+      const audio = new Audio(audioDataUrl);
+      responseAudioRef.current = audio;
+
+      const clearPlaying = () => {
+        if (responseAudioRef.current === audio) {
+          responseAudioRef.current = null;
+        }
+        setPlayingMessageIndex(null);
+      };
+
+      audio.onended = clearPlaying;
+      audio.onerror = clearPlaying;
+
+      audio.play().catch(clearPlaying);
+    } catch {
+      setPlayingMessageIndex(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (responseAudioRef.current) {
+        try {
+          responseAudioRef.current.pause();
+          responseAudioRef.current.src = '';
+        } catch {
+          // ignore
+        }
+        responseAudioRef.current = null;
+      }
+
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // ignore
+        }
+      }
+
+      speechUtteranceRef.current = null;
+      setPlayingMessageIndex(null);
+    };
+  }, []);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -682,7 +842,20 @@ export default function App() {
       }
 
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.content }]);
+      const responseAudioDataUrl = data?.voice?.audioDataUrl;
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        content: data.content,
+        voiceUrl: responseAudioDataUrl || undefined,
+      }]);
+      if (responseAudioDataUrl) {
+        playAssistantVoice(responseAudioDataUrl, messages.length);
+      } else if (voiceEnabled && voiceResponseEnabled) {
+        const voiceGender = currentCompany?.voice?.gender === 'male' ? 'male' : 'female';
+        const ignoreEmoji = Boolean(currentCompany?.voice?.ignoreEmoji);
+        setPlayingMessageIndex(messages.length);
+        speakWithBrowserVoice(data?.content, voiceGender, ignoreEmoji, () => setPlayingMessageIndex(null));
+      }
 
       // Update active session ID (server returns the created/used session)
       if (data.sessionId && data.sessionId !== sessionId) {
@@ -810,6 +983,13 @@ export default function App() {
   const companyIconUrl = currentCompany?.iconUrl || null;
   const greetingMessage = currentCompany?.greetingMessage || null;
   const voiceEnabled = Boolean(currentCompany?.voice?.enabled);
+  const voiceResponseEnabled = currentCompany?.voice?.responseEnabled !== false;
+  const voiceGender = currentCompany?.voice?.gender === 'male' ? 'male' : 'female';
+  const handlePlayBrowserVoice = useCallback((content, messageIndex) => {
+    if (!content) return;
+    setPlayingMessageIndex(messageIndex ?? null);
+    speakWithBrowserVoice(content, voiceGender, Boolean(currentCompany?.voice?.ignoreEmoji), () => setPlayingMessageIndex(null));
+  }, [voiceGender, currentCompany?.voice?.ignoreEmoji, speakWithBrowserVoice]);
   const companyThemeStyle = buildCompanyThemeStyle(currentCompany?.theme, theme);
   const isFullPage = chatViewMode === CHAT_VIEW_MODES.FULL_PAGE;
   const isWidgetOpen = chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN;
@@ -857,6 +1037,12 @@ export default function App() {
           scrollToLead={new URLSearchParams(location.search).get('scrollTo') === 'lead'}
           onScrolledToLead={handleScrolledToLead}
           showMic={voiceEnabled}
+          onPlayVoice={playAssistantVoice}
+          onPauseVoice={pauseAssistantVoice}
+          playingMessageIndex={playingMessageIndex}
+          voiceEnabled={voiceEnabled}
+          voiceResponseEnabled={voiceResponseEnabled}
+          onPlayBrowserVoice={handlePlayBrowserVoice}
         />
 
         <button
@@ -943,6 +1129,13 @@ export default function App() {
                 compact
                 scrollToLead={new URLSearchParams(location.search).get('scrollTo') === 'lead'}
                 onScrolledToLead={handleScrolledToLead}
+                showMic={voiceEnabled}
+                onPlayVoice={playAssistantVoice}
+                onPauseVoice={pauseAssistantVoice}
+                playingMessageIndex={playingMessageIndex}
+                voiceEnabled={voiceEnabled}
+                voiceResponseEnabled={voiceResponseEnabled}
+                onPlayBrowserVoice={handlePlayBrowserVoice}
               />
             </div>
           </section>

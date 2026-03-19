@@ -14,6 +14,12 @@ export default function ChatMain({
   scrollToLead = false,
   onScrolledToLead,
   showMic = true,
+  onPlayVoice,
+  onPauseVoice,
+  playingMessageIndex = null,
+  voiceEnabled = false,
+  voiceResponseEnabled = true,
+  onPlayBrowserVoice,
 }) {
   const scrollRef = useRef(null);
   const prevLoadingRef = useRef(loading);
@@ -77,7 +83,7 @@ export default function ChatMain({
         className={`chat-main-scroll flex-grow-1 overflow-auto ${compact ? 'py-3 px-3' : 'py-4 px-3 px-md-4'}`}
         style={{ overflowX: 'hidden' }}
       >
-        <ChatMessages messages={messages} loading={loading} greetingMessage={greetingMessage} />
+        <ChatMessages messages={messages} loading={loading} greetingMessage={greetingMessage} onPlayVoice={onPlayVoice} onPauseVoice={onPauseVoice} playingMessageIndex={playingMessageIndex} voiceEnabled={voiceEnabled} voiceResponseEnabled={voiceResponseEnabled} onPlayBrowserVoice={onPlayBrowserVoice} />
       </div>
 
       <ChatInput onSend={onSend} disabled={loading} showMic={showMic} />

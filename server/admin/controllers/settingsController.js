@@ -18,6 +18,12 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function normalizeVoiceGender(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'male' || normalized === 'female') return normalized;
+  return null;
+}
+
 async function getSettings(req, res) {
   try {
     const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
@@ -38,6 +44,9 @@ async function getSettings(req, res) {
       },
       voice: {
         enabled: Boolean(company.voice_mode_enabled),
+        responseEnabled: Boolean(company.voice_response_enabled !== false),
+        gender: company.voice_gender === 'male' ? 'male' : 'female',
+        ignoreEmoji: Boolean(company.voice_ignore_emoji),
       },
       escalation: {
         triggers: {
@@ -101,6 +110,14 @@ async function updateSettings(req, res) {
       return res.status(400).json({ error: 'Lead notification email is required when email notifications are enabled' });
     }
 
+    let normalizedVoiceGender;
+    if (voice?.gender !== undefined) {
+      normalizedVoiceGender = normalizeVoiceGender(voice.gender);
+      if (!normalizedVoiceGender) {
+        return res.status(400).json({ error: 'Invalid voice gender. Allowed values: male, female' });
+      }
+    }
+
     await CompanyAdmin.updateSettings(req.adminCompanyId, {
       display_name: displayName !== undefined ? displayName : undefined,
       icon_url: iconUrl !== undefined ? iconUrl : undefined,
@@ -113,6 +130,9 @@ async function updateSettings(req, res) {
       lead_email_notifications_enabled: emailEnabled !== undefined ? Boolean(emailEnabled) : undefined,
       lead_notification_email: email !== undefined ? email : undefined,
       voice_mode_enabled: voice?.enabled !== undefined ? Boolean(voice.enabled) : undefined,
+      voice_response_enabled: voice?.responseEnabled !== undefined ? Boolean(voice.responseEnabled) : undefined,
+      voice_gender: normalizedVoiceGender !== undefined ? normalizedVoiceGender : undefined,
+      voice_ignore_emoji: voice?.ignoreEmoji !== undefined ? Boolean(voice.ignoreEmoji) : undefined,
       escalation_trigger_user_requests_human: escalation?.triggers?.userRequestsHuman !== undefined
         ? Boolean(escalation.triggers.userRequestsHuman)
         : undefined,
@@ -180,6 +200,9 @@ async function updateSettings(req, res) {
       },
       voice: {
         enabled: Boolean(company.voice_mode_enabled),
+        responseEnabled: Boolean(company.voice_response_enabled !== false),
+        gender: company.voice_gender === 'male' ? 'male' : 'female',
+        ignoreEmoji: Boolean(company.voice_ignore_emoji),
       },
       escalation: {
         triggers: {
