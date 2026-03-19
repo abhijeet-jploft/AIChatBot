@@ -27,6 +27,10 @@ export default function Conversations() {
   const { authFetch, company } = useAuth();
   const [search, setSearch] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [leadStatus, setLeadStatus] = useState('all');
+  const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [loading, setLoading] = useState(false);
@@ -38,6 +42,10 @@ export default function Conversations() {
       params.set('limit', String(PAGE_SIZE));
       params.set('page', String(page));
       if (appliedSearch) params.set('search', appliedSearch);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (leadStatus && leadStatus !== 'all') params.set('leadStatus', leadStatus);
+      if (status && status !== 'all') params.set('status', status);
       const res = await authFetch(`/conversations?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load conversations');
       const json = await res.json();
@@ -52,7 +60,7 @@ export default function Conversations() {
     } finally {
       setLoading(false);
     }
-  }, [authFetch, page, appliedSearch]);
+  }, [authFetch, page, appliedSearch, dateFrom, dateTo, leadStatus, status]);
 
   useEffect(() => {
     loadConversations();
@@ -64,6 +72,17 @@ export default function Conversations() {
     setPage(1);
   };
 
+  const hasFilters = appliedSearch || dateFrom || dateTo || (leadStatus && leadStatus !== 'all') || (status && status !== 'all');
+  const clearFilters = () => {
+    setSearch('');
+    setAppliedSearch('');
+    setDateFrom('');
+    setDateTo('');
+    setLeadStatus('all');
+    setStatus('all');
+    setPage(1);
+  };
+
   const totalPages = Math.max(1, Math.ceil(data.total / data.limit));
   const fromRow = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
   const toRow = Math.min(data.page * data.limit, data.total);
@@ -72,36 +91,72 @@ export default function Conversations() {
     <div className="p-4">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Conversations</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
-        All chat sessions with server-side search and pagination.
+        All chat sessions. Filter by date range, lead status, active/closed; search by visitor name, email, phone, or first message.
       </p>
 
       <form onSubmit={handleSearchSubmit} className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
         <div className="card-body">
           <div className="row g-2 align-items-end">
-            <div className="col-md-6">
+            <div className="col-12 col-md-4 col-lg-3">
               <label className="form-label small">Search</label>
               <input
                 type="text"
                 className="form-control form-control-sm"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by title or first message..."
+                placeholder="Visitor name, email, phone, or first message..."
               />
             </div>
-            <div className="col-md-2">
-              <button type="submit" className="btn btn-primary btn-sm">Search</button>
+            <div className="col-6 col-md-2 col-lg-2">
+              <label className="form-label small">From date</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
             </div>
-            {appliedSearch && (
-              <div className="col-md-2">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary btn-sm"
-                  onClick={() => { setSearch(''); setAppliedSearch(''); setPage(1); }}
-                >
-                  Clear
+            <div className="col-6 col-md-2 col-lg-2">
+              <label className="form-label small">To date</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
+            <div className="col-6 col-md-2 col-lg-2">
+              <label className="form-label small">Lead</label>
+              <select
+                className="form-select form-select-sm"
+                value={leadStatus}
+                onChange={(e) => setLeadStatus(e.target.value)}
+              >
+                <option value="all">All</option>
+                <option value="yes">Lead captured</option>
+                <option value="no">No lead</option>
+              </select>
+            </div>
+            <div className="col-6 col-md-2 col-lg-2">
+              <label className="form-label small">Status</label>
+              <select
+                className="form-select form-select-sm"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="all">All</option>
+                <option value="active">Active only</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+            <div className="col-12 col-md-auto d-flex gap-1 flex-wrap">
+              <button type="submit" className="btn btn-primary btn-sm">Search</button>
+              {hasFilters && (
+                <button type="button" className="btn btn-outline-secondary btn-sm" onClick={clearFilters}>
+                  Clear filters
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </form>

@@ -8,8 +8,9 @@ const MAX_LIMIT = 100;
 
 /**
  * GET /admin/conversations
- * Query: search, limit, offset (or page; offset = (page-1)*limit)
- * Returns: { rows, total } - conversations with message_count, first_message, leadId when applicable.
+ * Query: search, limit, page, dateFrom, dateTo, leadStatus (all|yes|no), status (all|active|closed)
+ * Returns: { rows, total, limit, page } - conversations with message_count, first_message, leadId.
+ * 4.3.3: Filter by date range, lead status, active/closed, search by visitor name/email/phone or first message/title.
  */
 async function listConversations(req, res) {
   try {
@@ -18,23 +19,73 @@ async function listConversations(req, res) {
     const page = Math.max(1, Number(req.query.page) || 1);
     const offset = (page - 1) * limit;
     const search = (req.query.search || '').trim();
+    const dateFrom = (req.query.dateFrom || '').trim();
+    const dateTo = (req.query.dateTo || '').trim();
+    const leadStatus = (req.query.leadStatus || 'all').toLowerCase();
+    const statusFilter = (req.query.status || 'all').toLowerCase();
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
     const countWhere = ['cs.company_id = $1'];
     const listWhere = ['cs.company_id = $1'];
     const countValues = [companyId];
     const listValues = [companyId];
+    let paramIndex = 2;
+
+    if (dateFrom) {
+      countWhere.push(`(cs.updated_at >= $${paramIndex}::timestamptz)`);
+      listWhere.push(`(cs.updated_at >= $${paramIndex}::timestamptz)`);
+      countValues.push(dateFrom);
+      listValues.push(dateFrom);
+      paramIndex += 1;
+    }
+    if (dateTo) {
+      countWhere.push(`(cs.updated_at <= $${paramIndex}::timestamptz)`);
+      listWhere.push(`(cs.updated_at <= $${paramIndex}::timestamptz)`);
+      countValues.push(dateTo);
+      listValues.push(dateTo);
+      paramIndex += 1;
+    }
+
+    if (leadStatus === 'yes') {
+      countWhere.push(`EXISTS (SELECT 1 FROM leads l WHERE l.session_id = cs.id AND l.company_id = cs.company_id AND l.deleted_at IS NULL)`);
+      listWhere.push(`EXISTS (SELECT 1 FROM leads l WHERE l.session_id = cs.id AND l.company_id = cs.company_id AND l.deleted_at IS NULL)`);
+    } else if (leadStatus === 'no') {
+      countWhere.push(`NOT EXISTS (SELECT 1 FROM leads l WHERE l.session_id = cs.id AND l.company_id = cs.company_id AND l.deleted_at IS NULL)`);
+      listWhere.push(`NOT EXISTS (SELECT 1 FROM leads l WHERE l.session_id = cs.id AND l.company_id = cs.company_id AND l.deleted_at IS NULL)`);
+    }
+
+    if (statusFilter === 'active') {
+      countWhere.push(`cs.updated_at >= $${paramIndex}`);
+      listWhere.push(`cs.updated_at >= $${paramIndex}`);
+      countValues.push(thirtyMinutesAgo);
+      listValues.push(thirtyMinutesAgo);
+      paramIndex += 1;
+    } else if (statusFilter === 'closed') {
+      countWhere.push(`cs.updated_at < $${paramIndex}`);
+      listWhere.push(`cs.updated_at < $${paramIndex}`);
+      countValues.push(thirtyMinutesAgo);
+      listValues.push(thirtyMinutesAgo);
+      paramIndex += 1;
+    }
 
     if (search) {
       const searchPattern = `%${search}%`;
       countValues.push(searchPattern);
       listValues.push(searchPattern);
-      const iCount = countValues.length;
-      const iList = listValues.length;
+      const iCount = paramIndex;
+      const iList = paramIndex;
+      paramIndex += 1;
       countWhere.push(`(
         cs.title ILIKE $${iCount}
         OR EXISTS (
           SELECT 1 FROM chat_messages m
           WHERE m.session_id = cs.id AND m.role = 'user' AND m.content ILIKE $${iCount}
+          LIMIT 1
+        )
+        OR EXISTS (
+          SELECT 1 FROM leads l
+          WHERE l.session_id = cs.id AND l.company_id = cs.company_id AND l.deleted_at IS NULL
+          AND (COALESCE(l.name,'') ILIKE $${iCount} OR COALESCE(l.phone,'') ILIKE $${iCount} OR COALESCE(l.email,'') ILIKE $${iCount})
           LIMIT 1
         )
       )`);
@@ -43,6 +94,12 @@ async function listConversations(req, res) {
         OR EXISTS (
           SELECT 1 FROM chat_messages m
           WHERE m.session_id = cs.id AND m.role = 'user' AND m.content ILIKE $${iList}
+          LIMIT 1
+        )
+        OR EXISTS (
+          SELECT 1 FROM leads l
+          WHERE l.session_id = cs.id AND l.company_id = cs.company_id AND l.deleted_at IS NULL
+          AND (COALESCE(l.name,'') ILIKE $${iList} OR COALESCE(l.phone,'') ILIKE $${iList} OR COALESCE(l.email,'') ILIKE $${iList})
           LIMIT 1
         )
       )`);
@@ -72,19 +129,21 @@ async function listConversations(req, res) {
     `;
     const { rows } = await pool.query(listSql, listValuesWithPage);
 
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-
-    const conversations = rows.map((r) => ({
-      id: r.id,
-      title: r.title || 'New Chat',
-      firstMessage: (r.first_message || '').toString().slice(0, 200),
-      messageCount: r.message_count ?? 0,
-      leadId: r.lead_id || null,
-      leadCaptured: Boolean(r.lead_id),
-      status: r.updated_at >= thirtyMinutesAgo ? 'active' : 'closed',
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }));
+    const activeCutoffMs = new Date(thirtyMinutesAgo).getTime();
+    const conversations = rows.map((r) => {
+      const updatedMs = r.updated_at ? new Date(r.updated_at).getTime() : 0;
+      return {
+        id: r.id,
+        title: r.title || 'New Chat',
+        firstMessage: (r.first_message || '').toString().slice(0, 200),
+        messageCount: r.message_count ?? 0,
+        leadId: r.lead_id || null,
+        leadCaptured: Boolean(r.lead_id),
+        status: updatedMs >= activeCutoffMs ? 'active' : 'closed',
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      };
+    });
 
     res.json({
       rows: conversations,

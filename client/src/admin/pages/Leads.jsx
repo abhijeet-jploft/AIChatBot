@@ -120,6 +120,7 @@ export default function Leads() {
   const [savingActivity, setSavingActivity] = useState(false);
   const [savingOwner, setSavingOwner] = useState(false);
   const [savingReminder, setSavingReminder] = useState(false);
+  const [unmarkingLeadId, setUnmarkingLeadId] = useState(null);
   const [ownerValue, setOwnerValue] = useState('');
   const [reminderAtValue, setReminderAtValue] = useState('');
   const [reminderNoteValue, setReminderNoteValue] = useState('');
@@ -185,6 +186,25 @@ export default function Leads() {
       setLoadingDetail(false);
     }
   }, [authFetch, showToast]);
+
+  const unmarkLeadContacted = useCallback((leadId) => {
+    if (!leadId) return;
+    if (!window.confirm('Are you sure you want to unmark as contacted? The lead will be set back to New.')) return;
+    setUnmarkingLeadId(leadId);
+    authFetch(`/leads/${leadId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'new' }),
+    })
+      .then(async (res) => {
+        if (!res.ok) return;
+        await loadLeads(appliedFilters);
+        if (selectedLeadId === leadId) await loadLeadDetail(leadId);
+        showToast('Lead unmarked as contacted', 'success');
+      })
+      .catch(() => showToast('Failed to unmark', 'error'))
+      .finally(() => setUnmarkingLeadId(null));
+  }, [authFetch, appliedFilters, loadLeads, loadLeadDetail, selectedLeadId, showToast]);
 
   useEffect(() => {
     if (leadIdFromUrl) {
@@ -639,18 +659,22 @@ export default function Leads() {
                     const selected = selectedLeadId === lead.id;
                     const overdue = Boolean(lead.reminder_overdue);
                     const dueToday = Boolean(lead.reminder_due_today);
+                    const isContacted = (lead.status || '').toLowerCase() === 'contacted';
                     return (
                       <button
                         key={lead.id}
                         type="button"
                         className="w-100 text-start mb-2 p-2 rounded border-0"
                         style={{
-                          background: selected ? 'var(--chat-sidebar)' : 'var(--chat-bg)',
+                          background: selected ? 'var(--chat-sidebar)' : isContacted ? 'rgba(25, 135, 84, 0.08)' : 'var(--chat-bg)',
                           border: overdue
                             ? '1px solid #dc3545'
                             : dueToday
                               ? '1px solid #fd7e14'
-                              : '1px solid var(--chat-border)',
+                              : isContacted
+                                ? '1px solid var(--bs-success)'
+                                : '1px solid var(--chat-border)',
+                          borderLeft: isContacted ? '3px solid var(--bs-success)' : undefined,
                           color: 'var(--chat-text)',
                         }}
                         onClick={() => {
@@ -674,7 +698,20 @@ export default function Leads() {
                               {(lead.project_summary || lead.service_requested || 'No requirement summary').slice(0, 120)}
                             </div>
                             <div className="d-flex gap-2 mt-1 flex-wrap">
-                              <span className="badge text-bg-light border">{humanize(lead.status)}</span>
+                              {isContacted ? (
+                                <button
+                                  type="button"
+                                  className="badge bg-success border-0"
+                                  style={{ cursor: 'pointer', fontSize: 'inherit' }}
+                                  title="Click to unmark as contacted"
+                                  disabled={unmarkingLeadId === lead.id}
+                                  onClick={(e) => { e.stopPropagation(); unmarkLeadContacted(lead.id); }}
+                                >
+                                  {unmarkingLeadId === lead.id ? '…' : humanize(lead.status)}
+                                </button>
+                              ) : (
+                                <span className="badge text-bg-light border">{humanize(lead.status)}</span>
+                              )}
                               <span className="badge text-bg-light border">{humanize(lead.lead_score_category)} ({lead.lead_score})</span>
                               {dueToday ? <span className="badge text-bg-warning">Reminder today</span> : null}
                               {overdue ? <span className="badge text-bg-danger">Overdue</span> : null}

@@ -107,6 +107,7 @@ async function getDashboard(req, res) {
       requirement: r.project_summary || r.status || '—',
       sourcePage: r.landing_page || '—',
       timeReceived: r.created_at,
+      status: r.status || 'new',
     }));
 
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();

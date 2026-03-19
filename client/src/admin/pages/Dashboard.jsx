@@ -99,6 +99,19 @@ export default function Dashboard() {
       .finally(() => setMarkingContactedId(null));
   }, [authFetch, fetchDashboard]);
 
+  const unmarkLeadContacted = useCallback((leadId) => {
+    if (!leadId) return;
+    if (!window.confirm('Are you sure you want to unmark as contacted? The lead will be set back to New.')) return;
+    setMarkingContactedId(leadId);
+    authFetch(`/leads/${leadId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'new' }),
+    })
+      .then((res) => { if (res.ok) return fetchDashboard(); })
+      .finally(() => setMarkingContactedId(null));
+  }, [authFetch, fetchDashboard]);
+
   const setAgentPaused = useCallback((paused) => {
     setAgentPausedUpdating(true);
     authFetch('/agent/status', {
@@ -396,10 +409,23 @@ export default function Dashboard() {
                 <div className="p-4 text-center small" style={{ color: 'var(--chat-muted)' }}>No leads yet</div>
               ) : (
                 <ul className="list-group list-group-flush">
-                  {recentLeads.slice(0, 5).map((lead) => (
-                    <li key={lead.id} className="list-group-item d-flex justify-content-between align-items-start border-0 px-3 py-2" style={{ background: 'transparent', borderColor: 'var(--chat-border)' }}>
+                  {recentLeads.slice(0, 5).map((lead) => {
+                    const isContacted = (lead.status || '').toLowerCase() === 'contacted';
+                    return (
+                    <li
+                      key={lead.id}
+                      className="list-group-item d-flex justify-content-between align-items-start border-0 px-3 py-2"
+                      style={{
+                        background: isContacted ? 'rgba(25, 135, 84, 0.08)' : 'transparent',
+                        borderLeft: isContacted ? '3px solid var(--bs-success)' : undefined,
+                        borderColor: 'var(--chat-border)',
+                      }}
+                    >
                       <div className="ms-0 flex-grow-1 min-width-0 overflow-hidden">
-                        <div className="fw-semibold text-truncate" style={{ color: 'var(--chat-text)' }} title={lead.name}>{lead.name}</div>
+                        <div className="d-flex align-items-center gap-2 flex-wrap">
+                          <div className="fw-semibold text-truncate" style={{ color: 'var(--chat-text)' }} title={lead.name}>{lead.name}</div>
+                          {isContacted && <span className="badge bg-success" style={{ fontSize: '0.7rem' }}>Contacted</span>}
+                        </div>
                         <div
                           className="small"
                           style={{
@@ -428,15 +454,27 @@ export default function Dashboard() {
                         >
                           Add note
                         </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-success"
-                          disabled={markingContactedId === lead.id}
-                          onClick={() => markLeadContacted(lead.id)}
-                          title="Mark contacted"
-                        >
-                          {markingContactedId === lead.id ? '…' : 'Mark contacted'}
-                        </button>
+                        {isContacted ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-success"
+                            disabled={markingContactedId === lead.id}
+                            onClick={() => unmarkLeadContacted(lead.id)}
+                            title="Click to unmark as contacted"
+                          >
+                            {markingContactedId === lead.id ? '…' : 'Contacted'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-success"
+                            disabled={markingContactedId === lead.id}
+                            onClick={() => markLeadContacted(lead.id)}
+                            title="Mark contacted"
+                          >
+                            {markingContactedId === lead.id ? '…' : 'Mark contacted'}
+                          </button>
+                        )}
                         {lead.sessionId && (
                           <a
                             href={`/?sessionId=${encodeURIComponent(lead.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}&scrollTo=lead`}
@@ -450,7 +488,8 @@ export default function Dashboard() {
                         <Link to={`/admin/leads/${lead.id}`} className="btn btn-sm btn-outline-secondary">View lead</Link>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>

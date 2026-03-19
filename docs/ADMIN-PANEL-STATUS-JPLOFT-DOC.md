@@ -53,7 +53,7 @@ This document maps **Section 4 (Functional Requirements of Admin)** to the curre
 |-----------------|----------------|
 | 4.3.1 View all past/active, join live, override AI, review transcripts | ✅ Conversations list; Take over page; Open chat (new tab) |
 | 4.3.2 List: visitor, date/time, status, lead captured, source, duration | ✅ firstMessage, messageCount, leadCaptured, status, updatedAt; Open chat, View lead |
-| 4.3.3 Filters & search | ✅ Server-side search; pagination |
+| 4.3.3 Filters & Search | ✅ Date range, lead status, outcome (lead yes/no), search name/email/phone, active only; pagination |
 | 4.3.4 Detail view (full transcript, timestamps, lead info) | ✅ Via “Open chat” (full UI) and Leads transcript |
 | 4.3.5 Live monitoring (active count, typing, current page) | ✅ Dashboard live panel; Take over shows active sessions until visitor closes |
 | 4.3.6 Human Takeover | ✅ Take over page: send message; message appears in visitor chat in real time; saved as assistant |
@@ -62,8 +62,11 @@ This document maps **Section 4 (Functional Requirements of Admin)** to the curre
 | 4.3.7 Escalation rules (notify owner) | ✅ Support requests module + alert; Missed conversations module |
 | 4.3.8 AI-generated conversation summary | ⚠️ Partial (lead summary / intent in Leads, not per-conversation summary) |
 | 4.3.11 Voice logs | ❌ Not implemented (no voice mode) |
-| 4.3.12 Export transcript | ✅ Leads: transcript download; Conversations: view in chat |
+| 4.3.12 Data retention / Export transcript | ✅ Leads: transcript download; Conversations: view in chat |
+| 4.3.13 Performance (real-time, no full reload) | ✅ WebSocket; Take over live; message push |
 | 4.3.14–4.3.15 Security, analytics integration | ✅ Auth; data in dashboard/leads |
+
+**4.3.3 doc checklist:** Filter by date range ✅ | Lead status ✅ | Outcome (lead yes/no) ✅ | Search visitor name/email/phone ✅ | Active chats only ✅ | Intent type: not in DB (deferred).
 
 **Reference:** `server/admin/controllers/conversationsController.js`, `client/src/admin/pages/Conversations.jsx`, `client/src/admin/pages/TakeOver.jsx`, `server/services/activeVisitorsService.js` (pushMessageToSession)
 

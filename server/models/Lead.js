@@ -364,7 +364,7 @@ async function updateStatus(companyId, leadId, status) {
     const existingResult = await client.query(
       `SELECT id, status
        FROM leads
-       WHERE company_id = $1 AND id = $2 AND deleted_at IS NULL
+       WHERE company_id = $1::varchar AND id = $2::uuid AND deleted_at IS NULL
        FOR UPDATE`,
       [companyId, leadId]
     );
@@ -379,22 +379,22 @@ async function updateStatus(companyId, leadId, status) {
     if (existing.status !== nextStatus) {
       await client.query(
         `UPDATE leads
-         SET status = $1,
+         SET status = $1::varchar,
              updated_at = NOW(),
-             converted_at = CASE WHEN $1 = 'converted' THEN COALESCE(converted_at, NOW()) ELSE converted_at END
-         WHERE id = $2`,
+             converted_at = CASE WHEN $1::varchar = 'converted' THEN COALESCE(converted_at, NOW()) ELSE converted_at END
+         WHERE id = $2::uuid`,
         [nextStatus, leadId]
       );
 
       await client.query(
         `INSERT INTO lead_status_history (lead_id, from_status, to_status)
-         VALUES ($1, $2, $3)`,
+         VALUES ($1::uuid, $2::varchar, $3::varchar)`,
         [leadId, existing.status, nextStatus]
       );
 
       await client.query(
         `INSERT INTO lead_activities (lead_id, activity_type, details, metadata)
-         VALUES ($1, 'status_change', $2, $3::jsonb)`,
+         VALUES ($1::uuid, 'status_change', $2::text, $3::jsonb)`,
         [
           leadId,
           `Status changed from ${existing.status} to ${nextStatus}`,
@@ -404,7 +404,7 @@ async function updateStatus(companyId, leadId, status) {
     }
 
     const updatedResult = await client.query(
-      `SELECT * FROM leads WHERE company_id = $1 AND id = $2 AND deleted_at IS NULL`,
+      `SELECT * FROM leads WHERE company_id = $1::varchar AND id = $2::uuid AND deleted_at IS NULL`,
       [companyId, leadId]
     );
 
