@@ -58,6 +58,31 @@ ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_notification_email TEXT;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS agent_paused BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- 4.5.10 Escalation settings (human intervention triggers/actions)
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_user_requests_human BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_ai_confidence_low BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_urgent_keywords BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_angry_sentiment BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_high_value_lead BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_action_instant_notification BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_action_auto_schedule_meeting BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_action_chat_takeover_alert BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_high_value_lead_score_threshold INTEGER NOT NULL DEFAULT 75;
+
+-- 4.5.11 Safety & compliance controls
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_block_topics_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_block_topics TEXT;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_prevent_internal_data BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_restrict_database_price_exposure BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_disable_competitor_comparisons BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_restrict_file_sharing BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- 4.8 Settings: language preferences (basic storage for now)
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_primary VARCHAR(50) NOT NULL DEFAULT 'English';
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_multi_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_auto_detect_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_manual_switch_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS admin_sessions (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id  VARCHAR(255) NOT NULL REFERENCES chatbots(company_id) ON DELETE CASCADE,

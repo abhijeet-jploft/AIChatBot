@@ -215,23 +215,65 @@ function buildJobSeekerSafeReply() {
   ].join('\n');
 }
 
-function enforceOutputRules({ latestUserMessage = '', modelText = '', messages = [], modeContext = null }) {
-  let output = sanitizeInternalIdentifiers(modelText || '');
+function enforceOutputRules({
+  latestUserMessage = '',
+  modelText = '',
+  messages = [],
+  modeContext = null,
+  safetyConfig = {},
+}) {
+  const preventInternalData = safetyConfig?.preventInternalData !== false;
+  const restrictDatabasePriceExposure = safetyConfig?.restrictDatabasePriceExposure !== false;
+  const disableCompetitorComparisons = safetyConfig?.disableCompetitorComparisons !== false;
+  const restrictFileSharing = safetyConfig?.restrictFileSharing !== false;
+
+  const normalizedUserMessage = String(latestUserMessage || '');
+
+  // Safety controls: refuse when user requests disallowed content
+  if (safetyConfig?.blockTopicsEnabled) {
+    const topics = String(safetyConfig?.blockTopics || '')
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    if (topics.length > 0) {
+      const matched = topics.find((t) => t && normalizedUserMessage.toLowerCase().includes(t));
+      if (matched) {
+        return 'Sorry, I can not help with that topic. If you share what you are trying to achieve, I can suggest a safe alternative approach.';
+      }
+    }
+  }
+
+  if (disableCompetitorComparisons) {
+    const wantsComparison = /\b(compare|vs\.?|versus|alternatives|competitor|competitors|better than)\b/i.test(normalizedUserMessage);
+    if (wantsComparison) {
+      return 'I can not do direct competitor comparisons. I can help you understand the features you need and how we can support your goals. What are you trying to build and for which audience?';
+    }
+  }
+
+  if (restrictFileSharing) {
+    const wantsFile = /\b(upload|attach|send|share)\b[^\n]{0,40}\b(file|document|pdf|docx|screenshot|image|attachment)\b/i.test(normalizedUserMessage)
+      || /\b(file|document|pdf|docx)\b/i.test(normalizedUserMessage);
+    if (wantsFile) {
+      return 'I can not accept files directly in chat. Please describe the details in text, and I will help you review the requirements and next steps.';
+    }
+  }
+
+  let output = preventInternalData ? sanitizeInternalIdentifiers(modelText || '') : (modelText || '');
 
   if (isOffDomainCodeRequest(latestUserMessage)) {
     return buildOffDomainRedirectReply(latestUserMessage);
   }
 
   if (isPricingQuestion(latestUserMessage)) {
-    const pricingFallback = buildPricingDeflectionReply({ latestUserMessage, messages });
-    const looksTooGeneric = /random numbers|what are you looking to create/i.test(output);
-    const lacksConsultativeFlow = !/business|website|app|order|contact|consult|estimate|scope|feature/i.test(output);
+    if (restrictDatabasePriceExposure) {
+      const pricingFallback = buildPricingDeflectionReply({ latestUserMessage, messages });
+      const looksTooGeneric = /random numbers|what are you looking to create/i.test(output);
+      const lacksConsultativeFlow = !/business|website|app|order|contact|consult|estimate|scope|feature/i.test(output);
 
-    if (!output || containsPriceLikeNumbers(output) || looksTooGeneric || lacksConsultativeFlow) {
-      output = pricingFallback;
+      if (!output || containsPriceLikeNumbers(output) || looksTooGeneric || lacksConsultativeFlow) {
+        output = pricingFallback;
+      }
     }
-
-    return output;
   }
 
   if ((modeContext?.scenario === 'urgent_buyer' || isUrgentLead(latestUserMessage)) && needsUrgentEscalationFallback(output)) {

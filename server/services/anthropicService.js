@@ -110,7 +110,7 @@ function buildCachedMessages(messages) {
  */
 async function sendMessage(companyId, messages, options = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
-  const { modeId: requestedModeId, modeContext: providedModeContext, ...anthropicOptions } = options || {};
+  const { modeId: requestedModeId, modeContext: providedModeContext, safetyConfig, ...anthropicOptions } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
   const modeContext = providedModeContext || buildModeContext({ modeId, latestUserMessage, messages });
 
@@ -129,7 +129,7 @@ async function sendMessage(companyId, messages, options = {}) {
   const response = await anthropic.messages.create(params);
   const textBlock = response.content.find((b) => b.type === 'text');
   const modelText = textBlock ? textBlock.text : '';
-  return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext });
+  return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig });
 }
 
 module.exports = { sendMessage, buildSystemBlocks };

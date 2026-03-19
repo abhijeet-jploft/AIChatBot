@@ -10,7 +10,26 @@ async function findByCompanyId(companyId) {
             lead_email_notifications_enabled,
             lead_notification_email,
             agent_paused,
-            voice_mode_enabled
+            voice_mode_enabled,
+            escalation_trigger_user_requests_human,
+            escalation_trigger_ai_confidence_low,
+            escalation_trigger_urgent_keywords,
+            escalation_trigger_angry_sentiment,
+            escalation_trigger_high_value_lead,
+            escalation_action_instant_notification,
+            escalation_action_auto_schedule_meeting,
+            escalation_action_chat_takeover_alert,
+            escalation_high_value_lead_score_threshold,
+            safety_block_topics_enabled,
+            safety_block_topics,
+            safety_prevent_internal_data,
+            safety_restrict_database_price_exposure,
+            safety_disable_competitor_comparisons,
+            safety_restrict_file_sharing,
+            language_primary,
+            language_multi_enabled,
+            language_auto_detect_enabled,
+            language_manual_switch_enabled
      FROM chatbots WHERE company_id = $1`,
     [companyId]
   );
@@ -39,6 +58,25 @@ async function updateSettings(companyId, {
   lead_email_notifications_enabled,
   lead_notification_email,
   voice_mode_enabled,
+  escalation_trigger_user_requests_human,
+  escalation_trigger_ai_confidence_low,
+  escalation_trigger_urgent_keywords,
+  escalation_trigger_angry_sentiment,
+  escalation_trigger_high_value_lead,
+  escalation_action_instant_notification,
+  escalation_action_auto_schedule_meeting,
+  escalation_action_chat_takeover_alert,
+  escalation_high_value_lead_score_threshold,
+  safety_block_topics_enabled,
+  safety_block_topics,
+  safety_prevent_internal_data,
+  safety_restrict_database_price_exposure,
+  safety_disable_competitor_comparisons,
+  safety_restrict_file_sharing,
+  language_primary,
+  language_multi_enabled,
+  language_auto_detect_enabled,
+  language_manual_switch_enabled,
 }) {
   const updates = [];
   const values = [];
@@ -98,6 +136,84 @@ async function updateSettings(companyId, {
   if (voice_mode_enabled !== undefined) {
     updates.push(`voice_mode_enabled = $${i++}`);
     values.push(Boolean(voice_mode_enabled));
+  }
+  if (escalation_trigger_user_requests_human !== undefined) {
+    updates.push(`escalation_trigger_user_requests_human = $${i++}`);
+    values.push(Boolean(escalation_trigger_user_requests_human));
+  }
+  if (escalation_trigger_ai_confidence_low !== undefined) {
+    updates.push(`escalation_trigger_ai_confidence_low = $${i++}`);
+    values.push(Boolean(escalation_trigger_ai_confidence_low));
+  }
+  if (escalation_trigger_urgent_keywords !== undefined) {
+    updates.push(`escalation_trigger_urgent_keywords = $${i++}`);
+    values.push(Boolean(escalation_trigger_urgent_keywords));
+  }
+  if (escalation_trigger_angry_sentiment !== undefined) {
+    updates.push(`escalation_trigger_angry_sentiment = $${i++}`);
+    values.push(Boolean(escalation_trigger_angry_sentiment));
+  }
+  if (escalation_trigger_high_value_lead !== undefined) {
+    updates.push(`escalation_trigger_high_value_lead = $${i++}`);
+    values.push(Boolean(escalation_trigger_high_value_lead));
+  }
+  if (escalation_action_instant_notification !== undefined) {
+    updates.push(`escalation_action_instant_notification = $${i++}`);
+    values.push(Boolean(escalation_action_instant_notification));
+  }
+  if (escalation_action_auto_schedule_meeting !== undefined) {
+    updates.push(`escalation_action_auto_schedule_meeting = $${i++}`);
+    values.push(Boolean(escalation_action_auto_schedule_meeting));
+  }
+  if (escalation_action_chat_takeover_alert !== undefined) {
+    updates.push(`escalation_action_chat_takeover_alert = $${i++}`);
+    values.push(Boolean(escalation_action_chat_takeover_alert));
+  }
+  if (escalation_high_value_lead_score_threshold !== undefined) {
+    updates.push(`escalation_high_value_lead_score_threshold = $${i++}`);
+    values.push(Number(escalation_high_value_lead_score_threshold));
+  }
+
+  if (safety_block_topics_enabled !== undefined) {
+    updates.push(`safety_block_topics_enabled = $${i++}`);
+    values.push(Boolean(safety_block_topics_enabled));
+  }
+  if (safety_block_topics !== undefined) {
+    updates.push(`safety_block_topics = $${i++}`);
+    values.push(safety_block_topics || null);
+  }
+  if (safety_prevent_internal_data !== undefined) {
+    updates.push(`safety_prevent_internal_data = $${i++}`);
+    values.push(Boolean(safety_prevent_internal_data));
+  }
+  if (safety_restrict_database_price_exposure !== undefined) {
+    updates.push(`safety_restrict_database_price_exposure = $${i++}`);
+    values.push(Boolean(safety_restrict_database_price_exposure));
+  }
+  if (safety_disable_competitor_comparisons !== undefined) {
+    updates.push(`safety_disable_competitor_comparisons = $${i++}`);
+    values.push(Boolean(safety_disable_competitor_comparisons));
+  }
+  if (safety_restrict_file_sharing !== undefined) {
+    updates.push(`safety_restrict_file_sharing = $${i++}`);
+    values.push(Boolean(safety_restrict_file_sharing));
+  }
+
+  if (language_primary !== undefined) {
+    updates.push(`language_primary = $${i++}`);
+    values.push(String(language_primary || 'English').slice(0, 50));
+  }
+  if (language_multi_enabled !== undefined) {
+    updates.push(`language_multi_enabled = $${i++}`);
+    values.push(Boolean(language_multi_enabled));
+  }
+  if (language_auto_detect_enabled !== undefined) {
+    updates.push(`language_auto_detect_enabled = $${i++}`);
+    values.push(Boolean(language_auto_detect_enabled));
+  }
+  if (language_manual_switch_enabled !== undefined) {
+    updates.push(`language_manual_switch_enabled = $${i++}`);
+    values.push(Boolean(language_manual_switch_enabled));
   }
   if (updates.length === 0) return;
   values.push(companyId);
@@ -177,6 +293,21 @@ async function deleteSession(token) {
   await pool.query(`DELETE FROM admin_sessions WHERE token = $1`, [token]);
 }
 
+async function listActiveSessions(companyId) {
+  const { rows } = await pool.query(
+    `SELECT id, expires_at, created_at
+     FROM admin_sessions
+     WHERE company_id = $1 AND expires_at > NOW()
+     ORDER BY created_at DESC`,
+    [companyId]
+  );
+  return rows || [];
+}
+
+async function deleteAllSessions(companyId) {
+  await pool.query(`DELETE FROM admin_sessions WHERE company_id = $1`, [companyId]);
+}
+
 async function setAgentPaused(companyId, paused) {
   await pool.query(
     `UPDATE chatbots SET agent_paused = $1 WHERE company_id = $2`,
@@ -193,4 +324,6 @@ module.exports = {
   createSession,
   findSessionByToken,
   deleteSession,
+  listActiveSessions,
+  deleteAllSessions,
 };

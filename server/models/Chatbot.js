@@ -21,7 +21,31 @@ async function findOrCreate(companyId) {
  */
 async function findByCompanyId(companyId) {
   const { rows } = await pool.query(
-    `SELECT company_id, ai_mode, agent_paused FROM chatbots WHERE company_id = $1`,
+    `SELECT
+      company_id,
+      ai_mode,
+      agent_paused,
+      voice_mode_enabled,
+      escalation_trigger_user_requests_human,
+      escalation_trigger_ai_confidence_low,
+      escalation_trigger_urgent_keywords,
+      escalation_trigger_angry_sentiment,
+      escalation_trigger_high_value_lead,
+      escalation_action_instant_notification,
+      escalation_action_auto_schedule_meeting,
+      escalation_action_chat_takeover_alert,
+      escalation_high_value_lead_score_threshold,
+      safety_block_topics_enabled,
+      safety_block_topics,
+      safety_prevent_internal_data,
+      safety_restrict_database_price_exposure,
+      safety_disable_competitor_comparisons,
+      safety_restrict_file_sharing,
+      language_primary,
+      language_multi_enabled,
+      language_auto_detect_enabled,
+      language_manual_switch_enabled
+    FROM chatbots WHERE company_id = $1`,
     [companyId]
   );
 

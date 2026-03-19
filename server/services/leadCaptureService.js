@@ -122,6 +122,7 @@ function inferContactMethod({ phone, email, contactRequested, meetingRequested }
 function scoreLead({
   hasPhone,
   hasEmail,
+  hasName,
   consultationRequested,
   pricingRequested,
   contactRequested,
@@ -136,6 +137,7 @@ function scoreLead({
 
   if (hasPhone) score += 30;
   if (hasEmail) score += 22;
+  if (hasName) score += 8;
   if (consultationRequested) score += 18;
   if (meetingRequested) score += 20;
   if (contactRequested) score += 12;
@@ -187,8 +189,14 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
     || consultationRequested
     || urgencyMentioned;
 
+  // 4.5.6: Lead Capture Rules
+  // If the user provides personal information directly, treat it as a lead signal.
+  // - Email always qualifies.
+  // - Phone qualifies even if name is missing (e.g. "Call me at ...").
+  // - Name alone qualifies so it reflects in admin Leads (e.g. "My name is John").
   const shouldCreate = Boolean(email)
-    || Boolean(phone && name)
+    || Boolean(phone)
+    || Boolean(name)
     || consultationRequested
     || pricingRequested
     || contactRequested
@@ -202,6 +210,7 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
   const leadScore = scoreLead({
     hasPhone: Boolean(phone),
     hasEmail: Boolean(email),
+    hasName: Boolean(name),
     consultationRequested,
     pricingRequested,
     contactRequested,
