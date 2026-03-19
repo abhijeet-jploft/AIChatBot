@@ -13,6 +13,20 @@ export default defineConfig({
         target: 'http://localhost:7022',
         changeOrigin: true,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err, req, res) => {
+            const code = err.code || '';
+            if (code === 'ECONNABORTED' || code === 'ECONNRESET' || code === 'EPIPE') return;
+            console.error('[vite proxy]', err.message);
+          });
+          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+            socket.on('error', (err) => {
+              const code = err.code || '';
+              if (code === 'ECONNABORTED' || code === 'ECONNRESET' || code === 'EPIPE') return;
+              console.error('[vite proxy ws]', err.message);
+            });
+          });
+        },
       },
     },
   },

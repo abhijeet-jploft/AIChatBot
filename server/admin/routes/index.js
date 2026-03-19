@@ -29,6 +29,7 @@ router.get('/auth/me', requireAuth, authController.me);
 router.get('/settings', requireAuth, settingsController.getSettings);
 router.put('/settings', requireAuth, settingsController.updateSettings);
 router.post('/settings/voice-preview', requireAuth, settingsController.previewVoice);
+router.post('/settings/voice-train', requireAuth, uploadMemory.array('samples', 8), settingsController.trainCustomVoice);
 router.get('/settings/voices', requireAuth, settingsController.listVoices);
 router.get('/settings/sessions', requireAuth, settingsController.listActiveSessions);
 router.delete('/settings/sessions', requireAuth, settingsController.logoutAllSessions);

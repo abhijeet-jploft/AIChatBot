@@ -1,5 +1,5 @@
 const path = require('path');
-// Always use .env in project root (never .env.example). Copy .env.example to .env and set real values.
+// Use .env in project root only.
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const http = require('http');

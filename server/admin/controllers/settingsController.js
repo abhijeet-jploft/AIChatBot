@@ -7,6 +7,7 @@ const {
   normalizeConversationModeId,
 } = require('../../services/conversationModes');
 const {
+  createCustomVoiceFromSamples,
   getVoiceList,
   getVoicePreviewText,
   getVoicePresetCatalog,
@@ -33,14 +34,42 @@ function normalizeVoiceGenderInput(value) {
   return null;
 }
 
+function getCompanyCustomVoice(company) {
+  const voiceId = String(company?.voice_custom_id || '').trim();
+  if (!voiceId) return null;
+
+  return {
+    voiceId,
+    voiceName: String(company?.voice_custom_name || 'My Voice').trim() || 'My Voice',
+    gender: company?.voice_custom_gender === 'male' ? 'male' : 'female',
+  };
+}
+
 function buildVoicePayload(company) {
+  const customVoice = getCompanyCustomVoice(company);
+  const storedProfile = normalizeVoiceProfile(company?.voice_profile) || 'professional';
+  const effectiveProfile = storedProfile === 'custom' && !customVoice ? 'professional' : storedProfile;
+  const effectiveGender = effectiveProfile === 'custom'
+    ? (customVoice?.gender || 'female')
+    : normalizeVoiceGender(company?.voice_gender);
+
   return {
     enabled: Boolean(company?.voice_mode_enabled),
     responseEnabled: Boolean(company?.voice_response_enabled !== false),
-    gender: normalizeVoiceGender(company?.voice_gender),
-    profile: normalizeVoiceProfile(company?.voice_profile) || 'professional',
+    gender: effectiveGender,
+    profile: effectiveProfile,
     ignoreEmoji: Boolean(company?.voice_ignore_emoji),
-    catalog: getVoicePresetCatalog(),
+    custom: customVoice
+      ? {
+        available: true,
+        voiceId: customVoice.voiceId,
+        name: customVoice.voiceName,
+        gender: customVoice.gender,
+      }
+      : {
+        available: false,
+      },
+    catalog: getVoicePresetCatalog({ customVoice }),
   };
 }
 
@@ -125,6 +154,13 @@ async function updateSettings(req, res) {
       return res.status(400).json({ error: 'Lead notification email is required when email notifications are enabled' });
     }
 
+    const companyBeforeUpdate = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+    if (!companyBeforeUpdate) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const companyCustomVoice = getCompanyCustomVoice(companyBeforeUpdate);
+
     let normalizedVoiceGender;
     if (voice?.gender !== undefined) {
       normalizedVoiceGender = normalizeVoiceGenderInput(voice.gender);
@@ -137,8 +173,23 @@ async function updateSettings(req, res) {
     if (voice?.profile !== undefined) {
       normalizedVoiceProfile = normalizeVoiceProfile(voice.profile);
       if (!normalizedVoiceProfile) {
-        return res.status(400).json({ error: 'Invalid voice profile. Allowed values: professional, corporate, sales' });
+        return res.status(400).json({ error: 'Invalid voice profile. Allowed values: professional, corporate, sales, custom' });
       }
+
+      if (normalizedVoiceProfile === 'custom' && !companyCustomVoice) {
+        return res.status(400).json({ error: 'No custom voice is trained yet. Train your voice first, then select custom profile.' });
+      }
+    }
+
+    if (normalizedVoiceProfile === 'custom' && companyCustomVoice) {
+      normalizedVoiceGender = companyCustomVoice.gender;
+    }
+
+    if (normalizedVoiceProfile === undefined
+      && normalizeVoiceProfile(companyBeforeUpdate.voice_profile) === 'custom'
+      && companyCustomVoice
+      && normalizedVoiceGender !== undefined) {
+      normalizedVoiceGender = companyCustomVoice.gender;
     }
 
     await CompanyAdmin.updateSettings(req.adminCompanyId, {
@@ -306,6 +357,7 @@ async function previewVoice(req, res) {
     if (!company) {
       return res.status(404).json({ error: 'Company not found' });
     }
+    const customVoice = getCompanyCustomVoice(company);
 
     const requestedGender = normalizeVoiceGenderInput(req.body?.gender);
     if (requestedGender === null) {
@@ -315,17 +367,34 @@ async function previewVoice(req, res) {
     const profileInputProvided = req.body?.profile !== undefined;
     const requestedProfile = profileInputProvided ? normalizeVoiceProfile(req.body.profile) : undefined;
     if (profileInputProvided && !requestedProfile) {
-      return res.status(400).json({ error: 'Invalid voice profile. Allowed values: professional, corporate, sales' });
+      return res.status(400).json({ error: 'Invalid voice profile. Allowed values: professional, corporate, sales, custom' });
     }
 
-    const gender = requestedGender || normalizeVoiceGender(company.voice_gender);
-    const profile = requestedProfile || normalizeVoiceProfile(company.voice_profile) || 'professional';
+    let profile = requestedProfile || normalizeVoiceProfile(company.voice_profile) || 'professional';
+    if (profile === 'custom' && !customVoice) {
+      return res.status(400).json({ error: 'No custom voice is trained yet. Train your voice first.' });
+    }
+
+    let gender = requestedGender || normalizeVoiceGender(company.voice_gender);
+    if (profile === 'custom' && customVoice) {
+      gender = customVoice.gender;
+    }
+
     const bodyText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
-    const previewText = bodyText ? bodyText.slice(0, 260) : getVoicePreviewText(profile, gender);
+    const previewText = bodyText
+      ? bodyText.slice(0, 260)
+      : getVoicePreviewText(profile, gender, {
+        customVoiceId: customVoice?.voiceId,
+        customVoiceName: customVoice?.voiceName,
+        customVoiceGender: customVoice?.gender,
+      });
 
     const voice = await synthesizeTextResponse(previewText, {
       gender,
       profile,
+      customVoiceId: customVoice?.voiceId,
+      customVoiceName: customVoice?.voiceName,
+      customVoiceGender: customVoice?.gender,
       ignoreEmoji: true,
     });
 
@@ -350,14 +419,88 @@ async function previewVoice(req, res) {
 
 async function listVoices(req, res) {
   try {
+    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const customVoice = getCompanyCustomVoice(company);
     const gender = req.query.gender || null;
     const profile = req.query.profile || null;
     const search = req.query.search || null;
-    const voices = getVoiceList({ gender, profile, search });
+    const voices = getVoiceList({ gender, profile, search }, { customVoice });
     res.json({ voices });
   } catch (err) {
     console.error('[admin settings] list voices:', err);
     res.status(500).json({ error: err.message });
+  }
+}
+
+async function trainCustomVoice(req, res) {
+  try {
+    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const voiceName = String(req.body?.name || '').trim();
+    if (!voiceName) {
+      return res.status(400).json({ error: 'Voice name is required.' });
+    }
+
+    const voiceGender = normalizeVoiceGenderInput(req.body?.gender);
+    if (!voiceGender) {
+      return res.status(400).json({ error: 'Please choose male or female before training your voice.' });
+    }
+
+    const uploadedFiles = Array.isArray(req.files) ? req.files : [];
+    if (!uploadedFiles.length) {
+      return res.status(400).json({ error: 'Please upload at least one audio sample file.' });
+    }
+
+    const audioFiles = uploadedFiles.filter((file) => {
+      const mime = String(file?.mimetype || '').toLowerCase();
+      const name = String(file?.originalname || '').toLowerCase();
+      return mime.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|webm|flac|aac|mp4)$/i.test(name);
+    });
+
+    if (!audioFiles.length) {
+      return res.status(400).json({ error: 'Only audio files are accepted for voice training.' });
+    }
+
+    const trainedVoice = await createCustomVoiceFromSamples({
+      name: voiceName,
+      gender: voiceGender,
+      files: audioFiles,
+      description: req.body?.description,
+    });
+
+    await CompanyAdmin.updateSettings(req.adminCompanyId, {
+      voice_custom_id: trainedVoice.voiceId,
+      voice_custom_name: trainedVoice.voiceName,
+      voice_custom_gender: trainedVoice.gender,
+      voice_profile: 'custom',
+      voice_gender: trainedVoice.gender,
+      voice_mode_enabled: true,
+      voice_response_enabled: true,
+    });
+
+    const updatedCompany = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+    res.status(201).json({
+      message: 'Custom voice trained successfully.',
+      trainedVoice: {
+        voiceId: trainedVoice.voiceId,
+        voiceName: trainedVoice.voiceName,
+        gender: trainedVoice.gender,
+      },
+      voice: buildVoicePayload(updatedCompany),
+    });
+  } catch (err) {
+    console.error('[admin settings] train custom voice:', err);
+    if (err.status === 400 || err.status === 402 || err.status === 413) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    res.status(500).json({ error: err.message || 'Failed to train custom voice.' });
   }
 }
 
@@ -381,4 +524,14 @@ async function logoutAllSessions(req, res) {
   }
 }
 
-module.exports = { getSettings, updateSettings, previewVoice, listVoices, listCompanies, getModeSettings, listActiveSessions, logoutAllSessions };
+module.exports = {
+  getSettings,
+  updateSettings,
+  previewVoice,
+  listVoices,
+  trainCustomVoice,
+  listCompanies,
+  getModeSettings,
+  listActiveSessions,
+  logoutAllSessions,
+};

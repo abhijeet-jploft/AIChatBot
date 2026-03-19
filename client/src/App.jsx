@@ -843,17 +843,19 @@ export default function App() {
 
       const data = await res.json();
       const responseAudioDataUrl = data?.voice?.audioDataUrl;
+      // Index of the new assistant message: we already added the user message earlier, so it's messages.length + 1
+      const newAssistantIndex = messages.length + 1;
       setMessages((prev) => [...prev, {
         role: 'assistant',
         content: data.content,
         voiceUrl: responseAudioDataUrl || undefined,
       }]);
       if (responseAudioDataUrl) {
-        playAssistantVoice(responseAudioDataUrl, messages.length);
+        playAssistantVoice(responseAudioDataUrl, newAssistantIndex);
       } else if (voiceEnabled && voiceResponseEnabled) {
         const voiceGender = currentCompany?.voice?.gender === 'male' ? 'male' : 'female';
         const ignoreEmoji = Boolean(currentCompany?.voice?.ignoreEmoji);
-        setPlayingMessageIndex(messages.length);
+        setPlayingMessageIndex(newAssistantIndex);
         speakWithBrowserVoice(data?.content, voiceGender, ignoreEmoji, () => setPlayingMessageIndex(null));
       }
 

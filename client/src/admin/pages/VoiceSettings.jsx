@@ -37,11 +37,6 @@ const FALLBACK_VOICE_CATALOG = [
   },
 ];
 
-const GENDER_OPTIONS = [
-  { id: 'female', label: 'Female' },
-  { id: 'male', label: 'Male' },
-];
-
 function normalizeCatalog(rawCatalog) {
   if (!Array.isArray(rawCatalog) || rawCatalog.length === 0) {
     return FALLBACK_VOICE_CATALOG;
@@ -53,6 +48,9 @@ function normalizeCatalog(rawCatalog) {
       id: String(item.id),
       label: String(item.label),
       description: item.description ? String(item.description) : '',
+      genders: Array.isArray(item.genders)
+        ? item.genders.map((g) => String(g).toLowerCase()).filter((g) => g === 'female' || g === 'male')
+        : ['female', 'male'],
       voices: {
         female: {
           label: item?.voices?.female?.label ? String(item.voices.female.label) : 'Female voice',
@@ -70,6 +68,7 @@ export default function VoiceSettings() {
   const { authFetch } = useAuth();
   const { showToast } = useAdminToast();
   const previewAudioRef = useRef(null);
+  const customSamplesInputRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,6 +85,10 @@ export default function VoiceSettings() {
   const [filterProfile, setFilterProfile] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [voiceListLoading, setVoiceListLoading] = useState(false);
+  const [trainingCustomVoice, setTrainingCustomVoice] = useState(false);
+  const [customVoiceName, setCustomVoiceName] = useState('');
+  const [customVoiceGender, setCustomVoiceGender] = useState('');
+  const [customVoiceSamples, setCustomVoiceSamples] = useState([]);
 
   const stopPreview = useCallback(() => {
     if (previewAudioRef.current) {
@@ -105,6 +108,32 @@ export default function VoiceSettings() {
       stopPreview();
     };
   }, [stopPreview]);
+
+  const loadSettings = useCallback(async () => {
+    const res = await authFetch('/settings');
+    if (!res.ok) throw new Error('Failed to load voice settings');
+
+    const data = await res.json();
+    const catalog = normalizeCatalog(data.voice?.catalog);
+    setVoiceCatalog(catalog);
+
+    const customInfo = data.voice?.custom || null;
+    if (customInfo?.available) {
+      setCustomVoiceName(String(customInfo.name || ''));
+      setCustomVoiceGender(customInfo.gender === 'male' ? 'male' : 'female');
+    } else {
+      setCustomVoiceName('');
+      setCustomVoiceGender('');
+    }
+
+    setVoiceEnabled(Boolean(data.voice?.enabled));
+    setVoiceResponseEnabled(data.voice?.responseEnabled !== false);
+    setVoiceGender(data.voice?.gender === 'male' ? 'male' : 'female');
+    const profileIds = new Set(catalog.map((profile) => profile.id));
+    const requestedProfile = String(data.voice?.profile || 'professional');
+    setVoiceProfile(profileIds.has(requestedProfile) ? requestedProfile : catalog[0].id);
+    setVoiceIgnoreEmoji(Boolean(data.voice?.ignoreEmoji));
+  }, [authFetch]);
 
   const loadVoiceList = useCallback(async () => {
     setVoiceListLoading(true);
@@ -131,37 +160,12 @@ export default function VoiceSettings() {
     loadVoiceList();
   }, [loadVoiceList]);
 
-  const selectedVoiceKey = `${voiceProfile}:${voiceGender}`;
-
-  const selectedVoiceMeta = useMemo(() => {
-    const selectedProfile = voiceCatalog.find((profile) => profile.id === voiceProfile) || voiceCatalog[0] || FALLBACK_VOICE_CATALOG[0];
-    const selectedVoice = selectedProfile?.voices?.[voiceGender] || null;
-    return {
-      profileLabel: selectedProfile?.label || 'Professional',
-      voiceName: selectedVoice?.label || (voiceGender === 'male' ? 'Male voice' : 'Female voice'),
-    };
-  }, [voiceCatalog, voiceProfile, voiceGender]);
-
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await authFetch('/settings');
-        if (!res.ok) throw new Error('Failed to load voice settings');
-        const data = await res.json();
-        if (cancelled) return;
-
-        const catalog = normalizeCatalog(data.voice?.catalog);
-        setVoiceCatalog(catalog);
-
-        setVoiceEnabled(Boolean(data.voice?.enabled));
-        setVoiceResponseEnabled(data.voice?.responseEnabled !== false);
-        setVoiceGender(data.voice?.gender === 'male' ? 'male' : 'female');
-        const profileIds = new Set(catalog.map((profile) => profile.id));
-        const requestedProfile = String(data.voice?.profile || 'professional');
-        setVoiceProfile(profileIds.has(requestedProfile) ? requestedProfile : catalog[0].id);
-        setVoiceIgnoreEmoji(Boolean(data.voice?.ignoreEmoji));
+        await loadSettings();
       } catch {
         if (!cancelled) {
           showToast('Failed to load voice settings', 'error');
@@ -176,7 +180,35 @@ export default function VoiceSettings() {
     return () => {
       cancelled = true;
     };
-  }, [authFetch, showToast]);
+  }, [loadSettings, showToast]);
+
+  const selectedVoiceKey = `${voiceProfile}:${voiceGender}`;
+
+  const hasCustomVoice = useMemo(
+    () => voiceCatalog.some((profile) => profile.id === 'custom'),
+    [voiceCatalog]
+  );
+
+  const profileFilterOptions = useMemo(
+    () => [{ id: 'all', label: 'All types' }, ...voiceCatalog.map((profile) => ({ id: profile.id, label: profile.label }))],
+    [voiceCatalog]
+  );
+
+  useEffect(() => {
+    if (filterProfile === 'all') return;
+    if (!profileFilterOptions.some((item) => item.id === filterProfile)) {
+      setFilterProfile('all');
+    }
+  }, [filterProfile, profileFilterOptions]);
+
+  const selectedVoiceMeta = useMemo(() => {
+    const selectedProfile = voiceCatalog.find((profile) => profile.id === voiceProfile) || voiceCatalog[0] || FALLBACK_VOICE_CATALOG[0];
+    const selectedVoice = selectedProfile?.voices?.[voiceGender] || null;
+    return {
+      profileLabel: selectedProfile?.label || 'Professional',
+      voiceName: selectedVoice?.label || (voiceGender === 'male' ? 'Male voice' : 'Female voice'),
+    };
+  }, [voiceCatalog, voiceProfile, voiceGender]);
 
   const handleSubmit = useCallback(async (event) => {
     event.preventDefault();
@@ -270,6 +302,71 @@ export default function VoiceSettings() {
     }
   }, [authFetch, playingPreviewKey, showToast, stopPreview]);
 
+  const handleTrainCustomVoice = useCallback(async (event) => {
+    event.preventDefault();
+
+    const trimmedName = customVoiceName.trim();
+    if (!trimmedName) {
+      showToast('Enter a voice name before training.', 'error');
+      return;
+    }
+
+    if (customVoiceGender !== 'male' && customVoiceGender !== 'female') {
+      showToast('Please choose male or female before adding your own voice.', 'error');
+      return;
+    }
+
+    if (!customVoiceSamples.length) {
+      showToast('Upload at least one audio sample to train your voice.', 'error');
+      return;
+    }
+
+    setTrainingCustomVoice(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('name', trimmedName);
+      formData.append('gender', customVoiceGender);
+      customVoiceSamples.forEach((file) => {
+        formData.append('samples', file);
+      });
+
+      const res = await authFetch('/settings/voice-train', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 402) {
+        showToast(data?.error || 'ElevenLabs quota exceeded or payment required. Upgrade at elevenlabs.io', 'error');
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to train custom voice');
+      }
+
+      setCustomVoiceSamples([]);
+      if (customSamplesInputRef.current) {
+        customSamplesInputRef.current.value = '';
+      }
+
+      await loadSettings();
+      await loadVoiceList();
+
+      setVoiceProfile('custom');
+      setVoiceGender(customVoiceGender);
+
+      showToast('Custom voice trained successfully. Testing your voice now...', 'success');
+      await handlePreviewVoice('custom', customVoiceGender);
+    } catch (err) {
+      showToast(err?.message || 'Failed to train custom voice', 'error');
+    } finally {
+      setTrainingCustomVoice(false);
+    }
+  }, [authFetch, customVoiceGender, customVoiceName, customVoiceSamples, handlePreviewVoice, loadSettings, loadVoiceList, showToast]);
+
   if (loading) {
     return (
       <div className="p-4 d-flex align-items-center justify-content-center" style={{ minHeight: 220 }}>
@@ -339,6 +436,101 @@ export default function VoiceSettings() {
         </div>
 
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
+          <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Train your own voice (ElevenLabs)</h6>
+          <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>
+            Upload your voice samples, choose male or female before training, then test and select your own voice.
+          </p>
+
+          <div className="row g-3">
+            <div className="col-12 col-md-4">
+              <label className="form-label small mb-1" style={{ color: 'var(--chat-text-heading)' }}>Voice name</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="e.g. My Sales Voice"
+                value={customVoiceName}
+                onChange={(e) => setCustomVoiceName(e.target.value)}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label small mb-1" style={{ color: 'var(--chat-text-heading)' }}>
+                Gender (required before training)
+              </label>
+              <div className="d-flex gap-3 pt-1">
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="radio"
+                    name="custom-voice-gender"
+                    id="custom-voice-gender-female"
+                    checked={customVoiceGender === 'female'}
+                    onChange={() => setCustomVoiceGender('female')}
+                  />
+                  <label className="form-check-label" htmlFor="custom-voice-gender-female" style={{ color: 'var(--chat-text)' }}>
+                    Female
+                  </label>
+                </div>
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="radio"
+                    name="custom-voice-gender"
+                    id="custom-voice-gender-male"
+                    checked={customVoiceGender === 'male'}
+                    onChange={() => setCustomVoiceGender('male')}
+                  />
+                  <label className="form-check-label" htmlFor="custom-voice-gender-male" style={{ color: 'var(--chat-text)' }}>
+                    Male
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label small mb-1" style={{ color: 'var(--chat-text-heading)' }}>
+                Voice samples (audio)
+              </label>
+              <input
+                ref={customSamplesInputRef}
+                type="file"
+                className="form-control"
+                accept="audio/*"
+                multiple
+                onChange={(e) => setCustomVoiceSamples(Array.from(e.target.files || []))}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
+            </div>
+          </div>
+
+          <div className="d-flex flex-wrap gap-2 mt-3">
+            <button
+              type="button"
+              className="btn btn-outline-primary"
+              onClick={handleTrainCustomVoice}
+              disabled={trainingCustomVoice}
+            >
+              {trainingCustomVoice ? 'Training...' : 'Train my voice'}
+            </button>
+
+            {hasCustomVoice && (
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() => handlePreviewVoice('custom', customVoiceGender || voiceGender)}
+              >
+                Test my voice
+              </button>
+            )}
+          </div>
+
+          <div className="small mt-2" style={{ color: 'var(--chat-muted)' }}>
+            Tip: upload 3 to 8 clear clips (10 to 30 seconds each) for best custom voice quality.
+          </div>
+        </div>
+
+        <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>ElevenLabs voices</h6>
           <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>
             Search and filter by gender or voice type, then use Hear voice to preview and Choose to select.
@@ -374,10 +566,9 @@ export default function VoiceSettings() {
                 onChange={(e) => setFilterProfile(e.target.value)}
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               >
-                <option value="all">All types</option>
-                <option value="professional">Professional</option>
-                <option value="corporate">Corporate</option>
-                <option value="sales">Sales</option>
+                {profileFilterOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
               </select>
             </div>
           </div>

@@ -27,11 +27,8 @@ AIChatBot/
    npm run install:all
    ```
 
-2. **Configure environment**
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` and add your Anthropic API key:
+2. **Configure environment**  
+   Create or edit `.env` in the project root and add your Anthropic API key:
    ```
    ANTHROPIC_API_KEY=your_key_here
    PORT=5000
@@ -42,7 +39,7 @@ AIChatBot/
    ELEVENLABS_API_KEY=your_elevenlabs_key_here
    ELEVENLABS_DEFAULT_VOICE_PROFILE=professional
    ```
-   The admin Voice Settings page now includes premade `professional`, `corporate`, and `sales` profiles with male/female choices and live preview.
+   The admin Voice Settings page includes premade `professional`, `corporate`, and `sales` profiles with male/female choices and live preview, plus custom voice training (upload audio samples, choose male/female, then test/select your own voice).
 
 3. **Run the app**
    - Backend: `npm run server` (or `npm start`)

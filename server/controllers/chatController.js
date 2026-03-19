@@ -29,7 +29,14 @@ async function postMessage(req, res) {
     let selectedModeId = null;
     let safetyConfig = {};
     let escalationConfig = {};
-    let voiceConfig = { enabled: false, gender: 'female', profile: 'professional' };
+    let voiceConfig = {
+      enabled: false,
+      gender: 'female',
+      profile: 'professional',
+      customVoiceId: null,
+      customVoiceName: null,
+      customVoiceGender: null,
+    };
     const userMsg = messages[messages.length - 1];
 
     // Persist pre-response data (non-fatal if DB is unavailable)
@@ -68,6 +75,9 @@ async function postMessage(req, res) {
         responseEnabled: Boolean(chatbot?.voice_response_enabled !== false),
         gender: normalizeVoiceGender(chatbot?.voice_gender),
         profile: normalizeVoiceProfile(chatbot?.voice_profile) || 'professional',
+        customVoiceId: chatbot?.voice_custom_id || null,
+        customVoiceName: chatbot?.voice_custom_name || null,
+        customVoiceGender: chatbot?.voice_custom_gender || null,
         ignoreEmoji: Boolean(chatbot?.voice_ignore_emoji),
       };
 
@@ -96,6 +106,9 @@ async function postMessage(req, res) {
             pausedVoice = await synthesizeTextResponse(pausedMessage, {
               gender: voiceConfig.gender,
               profile: voiceConfig.profile,
+              customVoiceId: voiceConfig.customVoiceId,
+              customVoiceName: voiceConfig.customVoiceName,
+              customVoiceGender: voiceConfig.customVoiceGender,
               ignoreEmoji: voiceConfig.ignoreEmoji,
             });
           } catch (voiceErr) {
@@ -134,6 +147,9 @@ async function postMessage(req, res) {
         voice = await synthesizeTextResponse(response, {
           gender: voiceConfig.gender,
           profile: voiceConfig.profile,
+          customVoiceId: voiceConfig.customVoiceId,
+          customVoiceName: voiceConfig.customVoiceName,
+          customVoiceGender: voiceConfig.customVoiceGender,
           ignoreEmoji: voiceConfig.ignoreEmoji,
         });
         if (!voice && process.env.ELEVENLABS_API_KEY) {
