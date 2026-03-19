@@ -36,6 +36,9 @@ async function getSettings(req, res) {
         emailEnabled: Boolean(company.lead_email_notifications_enabled),
         email: company.lead_notification_email || null,
       },
+      voice: {
+        enabled: Boolean(company.voice_mode_enabled),
+      },
       theme: mergeCompanyTheme(company.company_id, {
         primaryColor: company.theme_primary_color,
         primaryDarkColor: company.theme_primary_dark_color,
@@ -54,7 +57,7 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
   try {
-    const { displayName, iconUrl, greetingMessage, aiMode, theme, leadNotifications } = req.body;
+    const { displayName, iconUrl, greetingMessage, aiMode, theme, leadNotifications, voice } = req.body;
 
     if (aiMode !== undefined && !isValidConversationModeId(aiMode)) {
       return res.status(400).json({ error: 'Invalid aiMode value' });
@@ -80,6 +83,7 @@ async function updateSettings(req, res) {
       theme_secondary_light_color: theme?.secondaryLightColor !== undefined ? theme.secondaryLightColor : undefined,
       lead_email_notifications_enabled: emailEnabled !== undefined ? Boolean(emailEnabled) : undefined,
       lead_notification_email: email !== undefined ? email : undefined,
+      voice_mode_enabled: voice?.enabled !== undefined ? Boolean(voice.enabled) : undefined,
     });
 
     const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
@@ -94,6 +98,9 @@ async function updateSettings(req, res) {
       leadNotifications: {
         emailEnabled: Boolean(company.lead_email_notifications_enabled),
         email: company.lead_notification_email || null,
+      },
+      voice: {
+        enabled: Boolean(company.voice_mode_enabled),
       },
       theme: mergeCompanyTheme(company.company_id, {
         primaryColor: company.theme_primary_color,

@@ -148,6 +148,92 @@ textarea::placeholder {
   border-radius: 16px 16px 16px 0;
 }
 
+.chat-input-shell .chat-mic-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--chat-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.chat-input-shell .chat-mic-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--chat-text-heading);
+}
+
+[data-theme='dark'] .chat-input-shell .chat-mic-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chat-input-shell .chat-mic-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-input-shell .chat-mic-btn.is-recording {
+  background: var(--chat-accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.08);
+}
+
+.chat-mic-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  width: 16px;
+  height: 14px;
+}
+
+.chat-mic-wave::before,
+.chat-mic-wave::after,
+.chat-mic-wave span {
+  content: '';
+  display: block;
+  width: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: chat-mic-bars 0.9s infinite ease-in-out;
+}
+
+.chat-mic-wave span {
+  height: 70%;
+  animation-delay: 0.15s;
+}
+
+.chat-mic-wave::before {
+  height: 40%;
+  animation-delay: 0s;
+}
+
+.chat-mic-wave::after {
+  height: 55%;
+  animation-delay: 0.3s;
+}
+
+@keyframes chat-mic-bars {
+  0%,
+  100% {
+    transform: scaleY(0.6);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scaleY(1.2);
+    opacity: 1;
+  }
+}
+
 .typing-dots span {
   animation: blink 1.4s infinite;
 }

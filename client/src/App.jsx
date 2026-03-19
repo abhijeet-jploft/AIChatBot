@@ -809,6 +809,7 @@ export default function App() {
   const companyName = currentCompany?.displayName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const companyIconUrl = currentCompany?.iconUrl || null;
   const greetingMessage = currentCompany?.greetingMessage || null;
+  const voiceEnabled = Boolean(currentCompany?.voice?.enabled);
   const companyThemeStyle = buildCompanyThemeStyle(currentCompany?.theme, theme);
   const isFullPage = chatViewMode === CHAT_VIEW_MODES.FULL_PAGE;
   const isWidgetOpen = chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN;
@@ -855,6 +856,7 @@ export default function App() {
           greetingMessage={greetingMessage}
           scrollToLead={new URLSearchParams(location.search).get('scrollTo') === 'lead'}
           onScrolledToLead={handleScrolledToLead}
+          showMic={voiceEnabled}
         />
 
         <button

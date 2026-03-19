@@ -11,6 +11,7 @@ export default function Settings() {
   const [leadEmailNotificationsEnabled, setLeadEmailNotificationsEnabled] = useState(false);
   const [leadNotificationEmail, setLeadNotificationEmail] = useState('');
   const [saving, setSaving] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
 
   useEffect(() => {
     authFetch('/settings')
@@ -23,6 +24,7 @@ export default function Settings() {
         setGreetingMessage(d.greetingMessage || '');
         setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
         setLeadNotificationEmail(d.leadNotifications?.email || '');
+        setVoiceEnabled(Boolean(d.voice?.enabled));
       })
       .catch(() => showToast('Failed to load settings', 'error'));
   }, [authFetch, showToast]);
@@ -42,6 +44,9 @@ export default function Settings() {
             emailEnabled: leadEmailNotificationsEnabled,
             email: leadNotificationEmail.trim() || null,
           },
+          voice: {
+            enabled: voiceEnabled,
+          },
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -56,75 +61,123 @@ export default function Settings() {
   return (
     <div className="p-4">
       <h5 className="mb-4" style={{ color: 'var(--chat-text-heading)' }}>Company settings</h5>
-      <form onSubmit={handleSubmit} style={{ maxWidth: 500 }}>
-        <div className="mb-3">
-          <label className="form-label">Display name</label>
-          <input
-            type="text"
-            className="form-control"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Visible name in chatbot"
-            style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-          />
-        </div>
-        <div className="mb-3">
-          <label className="form-label">Icon URL</label>
-          <input
-            type="url"
-            className="form-control"
-            value={iconUrl}
-            onChange={(e) => setIconUrl(e.target.value)}
-            placeholder="https://example.com/icon.png"
-            style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-          />
-          {iconUrl && (
-            <div className="mt-2">
-              <img src={iconUrl} alt="Preview" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }} onError={(e) => e.target.style.display = 'none'} />
+      <form onSubmit={handleSubmit}>
+        <div className="row g-4 align-items-start">
+          <div className="col-12 col-lg-8">
+            <div className="mb-3">
+              <label className="form-label">Display name</label>
+              <input
+                type="text"
+                className="form-control"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Visible name in chatbot"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
             </div>
-          )}
-        </div>
-        <div className="mb-3">
-          <label className="form-label">Greeting message</label>
-          <textarea
-            className="form-control"
-            rows={3}
-            value={greetingMessage}
-            onChange={(e) => setGreetingMessage(e.target.value)}
-            placeholder="Custom welcome message"
-            style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-          />
-        </div>
-        <div className="mb-3">
-          <label className="form-label">Lead notifications</label>
-          <div className="form-check mb-2">
-            <input
-              className="form-check-input"
-              type="checkbox"
-              id="leadEmailEnabled"
-              checked={leadEmailNotificationsEnabled}
-              onChange={(e) => setLeadEmailNotificationsEnabled(e.target.checked)}
-            />
-            <label className="form-check-label" htmlFor="leadEmailEnabled">
-              Send email notification when a new lead is captured
-            </label>
+
+            <div className="mb-3">
+              <label className="form-label">Icon URL</label>
+              <input
+                type="url"
+                className="form-control"
+                value={iconUrl}
+                onChange={(e) => setIconUrl(e.target.value)}
+                placeholder="https://example.com/icon.png"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
+              {iconUrl && (
+                <div className="mt-2">
+                  <img
+                    src={iconUrl}
+                    alt="Preview"
+                    style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="mb-3">
+              <label className="form-label">Greeting message</label>
+              <textarea
+                className="form-control"
+                rows={3}
+                value={greetingMessage}
+                onChange={(e) => setGreetingMessage(e.target.value)}
+                placeholder="Custom welcome message"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="form-label">Lead notifications</label>
+              <div className="form-check mb-2">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="leadEmailEnabled"
+                  checked={leadEmailNotificationsEnabled}
+                  onChange={(e) => setLeadEmailNotificationsEnabled(e.target.checked)}
+                />
+                <label className="form-check-label" htmlFor="leadEmailEnabled">
+                  Send email notification when a new lead is captured
+                </label>
+              </div>
+              <input
+                type="email"
+                className="form-control"
+                value={leadNotificationEmail}
+                onChange={(e) => setLeadNotificationEmail(e.target.value)}
+                placeholder="owner@company.com"
+                disabled={!leadEmailNotificationsEnabled}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
+              <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+                Email includes lead name, requested service, and urgency level.
+              </div>
+            </div>
           </div>
-          <input
-            type="email"
-            className="form-control"
-            value={leadNotificationEmail}
-            onChange={(e) => setLeadNotificationEmail(e.target.value)}
-            placeholder="owner@company.com"
-            disabled={!leadEmailNotificationsEnabled}
-            style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-          />
-          <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
-            Email includes lead name, requested service, and urgency level.
+
+          <div className="col-12 col-lg-4">
+            <div
+              className="p-3 rounded-3"
+              style={{
+                background: 'var(--chat-surface)',
+                border: '1px solid var(--chat-border)',
+              }}
+            >
+              <div className="mb-2" style={{ color: 'var(--chat-text-heading)', fontWeight: 700 }}>
+                Voice settings
+              </div>
+
+              <div className="mb-1">
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="voiceEnabled"
+                    checked={voiceEnabled}
+                    onChange={(e) => setVoiceEnabled(e.target.checked)}
+                  />
+                  <label className="form-check-label" htmlFor="voiceEnabled">
+                    Enable voice input (mic button) in the chatbot
+                  </label>
+                </div>
+              </div>
+
+              <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+                When enabled, visitors can speak instead of typing. This reflects the Voice configuration in your AI agent settings.
+              </div>
+            </div>
           </div>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+
+        <div className="mt-4">
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
       </form>
     </div>
   );

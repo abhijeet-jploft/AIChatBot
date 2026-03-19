@@ -9,7 +9,8 @@ async function findByCompanyId(companyId) {
             theme_header_background, theme_header_shadow, theme_header_text_color,
             lead_email_notifications_enabled,
             lead_notification_email,
-            agent_paused
+            agent_paused,
+            voice_mode_enabled
      FROM chatbots WHERE company_id = $1`,
     [companyId]
   );
@@ -37,6 +38,7 @@ async function updateSettings(companyId, {
   theme_header_text_color,
   lead_email_notifications_enabled,
   lead_notification_email,
+  voice_mode_enabled,
 }) {
   const updates = [];
   const values = [];
@@ -92,6 +94,10 @@ async function updateSettings(companyId, {
   if (lead_notification_email !== undefined) {
     updates.push(`lead_notification_email = $${i++}`);
     values.push(lead_notification_email || null);
+  }
+  if (voice_mode_enabled !== undefined) {
+    updates.push(`voice_mode_enabled = $${i++}`);
+    values.push(Boolean(voice_mode_enabled));
   }
   if (updates.length === 0) return;
   values.push(companyId);

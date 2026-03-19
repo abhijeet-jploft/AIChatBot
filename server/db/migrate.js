@@ -56,6 +56,7 @@ ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_header_text_color VARCHAR(7)
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_email_notifications_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_notification_email TEXT;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS agent_paused BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

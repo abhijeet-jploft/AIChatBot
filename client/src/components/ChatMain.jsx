@@ -13,6 +13,7 @@ export default function ChatMain({
   compact = false,
   scrollToLead = false,
   onScrolledToLead,
+  showMic = true,
 }) {
   const scrollRef = useRef(null);
   const prevLoadingRef = useRef(loading);
@@ -79,7 +80,7 @@ export default function ChatMain({
         <ChatMessages messages={messages} loading={loading} greetingMessage={greetingMessage} />
       </div>
 
-      <ChatInput onSend={onSend} disabled={loading} />
+      <ChatInput onSend={onSend} disabled={loading} showMic={showMic} />
     </main>
   );
 }

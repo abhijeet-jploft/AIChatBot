@@ -17,7 +17,8 @@ async function getCompaniesList(req, res) {
       `SELECT company_id, display_name, icon_url, greeting_message,
               theme_primary_color, theme_primary_dark_color,
               theme_secondary_color, theme_secondary_light_color,
-              theme_header_background, theme_header_shadow, theme_header_text_color
+              theme_header_background, theme_header_shadow, theme_header_text_color,
+              voice_mode_enabled
          FROM chatbots
        WHERE company_id = ANY($1::text[])`,
       [companyIds]
@@ -29,6 +30,9 @@ async function getCompaniesList(req, res) {
       displayName: dbMap[c.id]?.display_name || c.name,
       iconUrl: dbMap[c.id]?.icon_url || null,
       greetingMessage: dbMap[c.id]?.greeting_message || null,
+      voice: {
+        enabled: Boolean(dbMap[c.id]?.voice_mode_enabled),
+      },
       theme: mergeCompanyTheme(c.id, {
         primaryColor: dbMap[c.id]?.theme_primary_color,
         primaryDarkColor: dbMap[c.id]?.theme_primary_dark_color,
