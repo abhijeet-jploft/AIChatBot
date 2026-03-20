@@ -409,22 +409,18 @@ export default function Dashboard() {
                 <div className="p-4 text-center small" style={{ color: 'var(--chat-muted)' }}>No leads yet</div>
               ) : (
                 <ul className="list-group list-group-flush">
-                  {recentLeads.slice(0, 5).map((lead) => {
-                    const isContacted = (lead.status || '').toLowerCase() === 'contacted';
-                    return (
+                  {recentLeads.slice(0, 5).map((lead) => (
                     <li
                       key={lead.id}
                       className="list-group-item d-flex justify-content-between align-items-start border-0 px-3 py-2"
                       style={{
-                        background: isContacted ? 'rgba(25, 135, 84, 0.08)' : 'transparent',
-                        borderLeft: isContacted ? '3px solid var(--bs-success)' : undefined,
+                        background: 'transparent',
                         borderColor: 'var(--chat-border)',
                       }}
                     >
                       <div className="ms-0 flex-grow-1 min-width-0 overflow-hidden">
-                        <div className="d-flex align-items-center gap-2 flex-wrap">
-                          <div className="fw-semibold text-truncate" style={{ color: 'var(--chat-text)' }} title={lead.name}>{lead.name}</div>
-                          {isContacted && <span className="badge bg-success" style={{ fontSize: '0.7rem' }}>Contacted</span>}
+                        <div className="fw-semibold text-truncate" style={{ color: 'var(--chat-text)' }} title={lead.name || 'Unnamed lead'}>
+                          {lead.name || 'Unnamed lead'}
                         </div>
                         <div
                           className="small"
@@ -441,63 +437,18 @@ export default function Dashboard() {
                         >
                           {lead.requirement}
                         </div>
-                        <div className="small text-truncate" style={{ color: 'var(--chat-muted)' }} title={lead.sourcePage}>
-                          {lead.sourcePage} · {formatTimeAgo(lead.timeReceived)}
+                        <div className="small text-truncate" style={{ color: 'var(--chat-muted)' }} title={lead.sourcePage || '-'}>
+                          Source: {lead.sourcePage || '-'}
+                        </div>
+                        <div className="small" style={{ color: 'var(--chat-muted)' }}>
+                          Received: {formatTimeAgo(lead.timeReceived)}
                         </div>
                       </div>
-                      <div className="d-flex flex-wrap gap-1 ms-2">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-secondary"
-                          onClick={() => { setNoteModalLead(lead); setNoteText(''); }}
-                          title="Add note"
-                        >
-                          Add note
-                        </button>
-                        {isContacted ? (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-success"
-                            disabled={markingContactedId === lead.id}
-                            onClick={() => unmarkLeadContacted(lead.id)}
-                            title="Click to unmark as contacted"
-                          >
-                            {markingContactedId === lead.id ? '…' : 'Contacted'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-success"
-                            disabled={markingContactedId === lead.id}
-                            onClick={() => markLeadContacted(lead.id)}
-                            title="Mark contacted"
-                          >
-                            {markingContactedId === lead.id ? '…' : 'Mark contacted'}
-                          </button>
-                        )}
-                        {lead.sessionId && (
-                          <>
-                            <Link
-                              to={`/admin/chat/${lead.sessionId}`}
-                              className="btn btn-sm btn-primary"
-                            >
-                              Operator chat
-                            </Link>
-                            <a
-                              href={`/?sessionId=${encodeURIComponent(lead.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}&scrollTo=lead`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn btn-sm btn-outline-secondary"
-                            >
-                              Visitor preview
-                            </a>
-                          </>
-                        )}
+                      <div className="ms-2">
                         <Link to={`/admin/leads/${lead.id}`} className="btn btn-sm btn-outline-secondary">View lead</Link>
                       </div>
                     </li>
-                    );
-                  })}
+                  ))}
                 </ul>
               )}
             </div>
@@ -516,28 +467,30 @@ export default function Dashboard() {
                 <div className="p-4 text-center small" style={{ color: 'var(--chat-muted)' }}>No conversations yet</div>
               ) : (
                 <ul className="list-group list-group-flush">
-                  {recentConversations.slice(0, 5).map((conv) => (
+                  {recentConversations.slice(0, 5).map((conv) => {
+                    const isLive = String(conv.status || '').toLowerCase() === 'active';
+                    return (
                     <li key={conv.id} className="list-group-item d-flex justify-content-between align-items-start border-0 px-3 py-2" style={{ background: 'transparent', borderColor: 'var(--chat-border)' }}>
                       <div className="ms-0 flex-grow-1 min-width-0 overflow-hidden">
-                        <div className="small text-truncate" style={{ color: 'var(--chat-text)' }} title={conv.firstMessage}>{conv.firstMessage}</div>
-                        <div className="small" style={{ color: 'var(--chat-muted)' }}>{conv.duration} · Lead: {conv.leadCaptured ? 'Yes' : 'No'} · {conv.status}</div>
+                        <div className="small text-truncate" style={{ color: 'var(--chat-text)' }} title={conv.firstMessage}>
+                          {conv.firstMessage}
+                        </div>
+                        <div className="small" style={{ color: 'var(--chat-muted)' }}>
+                          Duration: {conv.duration} · Lead: {conv.leadCaptured ? 'Yes' : 'No'} · Status: {conv.status}
+                        </div>
                       </div>
-                      {conv.leadCaptured ? (
-                        <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-secondary ms-2">View lead</Link>
-                      ) : null}
-                      <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary ms-2">
-                        Operator chat
-                      </Link>
-                      <a
-                        href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-sm btn-outline-secondary ms-2"
-                      >
-                        Visitor preview
-                      </a>
+                      <div className="d-flex flex-column gap-1 ms-2">
+                        <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-outline-secondary">
+                          Operator chat
+                        </Link>
+                        {isLive ? (
+                          <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary">
+                            Take over
+                          </Link>
+                        ) : null}
+                      </div>
                     </li>
-                  ))}
+                  );})}
                 </ul>
               )}
             </div>
