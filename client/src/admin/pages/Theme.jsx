@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 
@@ -85,8 +86,14 @@ export default function Theme() {
   return (
     <div className="p-4">
       <h5 className="mb-4" style={{ color: 'var(--chat-text-heading)' }}>Theme</h5>
-      <p className="text-muted small mb-4" style={{ color: 'var(--chat-muted)' }}>
+      <p className="text-muted small mb-2" style={{ color: 'var(--chat-muted)' }}>
         Control the chatbot header, colors, and accent shown to visitors. Changes apply to the main chat and embed widget.
+      </p>
+      <p className="small mb-4">
+        <Link to="/admin/settings#company-name" className="link-primary">
+          Edit company name, chatbot name, icon, and greeting
+        </Link>{' '}
+        <span style={{ color: 'var(--chat-muted)' }}>(Settings)</span>
       </p>
       <form onSubmit={handleSubmit} style={{ maxWidth: 560 }}>
         <div className="card mb-4" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>

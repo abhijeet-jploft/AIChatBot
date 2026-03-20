@@ -144,7 +144,9 @@ async function getSettings(req, res) {
     res.json({
       companyId: company.company_id,
       name: company.name,
-      displayName: company.display_name || company.name,
+      companyName: company.name,
+      chatbotName: company.display_name || '',
+      displayName: company.display_name || '',
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
       widget: {
@@ -205,7 +207,34 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
   try {
-    const { displayName, iconUrl, greetingMessage, widget, aiMode, ai, theme, leadNotifications, voice, escalation, safety, language } = req.body;
+    const {
+      companyName,
+      chatbotName,
+      displayName,
+      iconUrl,
+      greetingMessage,
+      widget,
+      aiMode,
+      ai,
+      theme,
+      leadNotifications,
+      voice,
+      escalation,
+      safety,
+      language,
+    } = req.body;
+
+    const resolvedCompanyName = companyName !== undefined ? String(companyName || '').trim() : undefined;
+    if (resolvedCompanyName !== undefined && !resolvedCompanyName) {
+      return res.status(400).json({ error: 'Company name cannot be empty' });
+    }
+
+    const chatbotTitle =
+      chatbotName !== undefined
+        ? String(chatbotName || '').trim() || null
+        : displayName !== undefined
+          ? String(displayName || '').trim() || null
+          : undefined;
     const normalizedAiProvider = normalizeAiProvider(ai?.provider);
     if (ai?.provider !== undefined && !normalizedAiProvider) {
       return res.status(400).json({ error: 'Invalid ai provider. Allowed values: anthropic, gemini' });
@@ -264,7 +293,8 @@ async function updateSettings(req, res) {
     }
 
     await CompanyAdmin.updateSettings(req.adminCompanyId, {
-      display_name: displayName !== undefined ? displayName : undefined,
+      company_name: resolvedCompanyName,
+      display_name: chatbotTitle,
       icon_url: iconUrl !== undefined ? iconUrl : undefined,
       greeting_message: greetingMessage !== undefined ? greetingMessage : undefined,
       widget_position: widget?.position !== undefined
@@ -344,7 +374,9 @@ async function updateSettings(req, res) {
     res.json({
       companyId: company.company_id,
       name: company.name,
-      displayName: company.display_name || company.name,
+      companyName: company.name,
+      chatbotName: company.display_name || '',
+      displayName: company.display_name || '',
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
       widget: {
@@ -414,7 +446,7 @@ async function listCompanies(req, res) {
     res.json(rows.map((r) => ({
       companyId: r.company_id,
       name: r.name,
-      displayName: r.display_name || r.name,
+      chatbotName: r.display_name || '',
     })));
   } catch (err) {
     console.error('[admin] list companies:', err);

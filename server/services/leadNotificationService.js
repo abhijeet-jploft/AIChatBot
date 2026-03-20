@@ -43,7 +43,7 @@ async function getCompanyNotificationConfig(companyId) {
   const { rows } = await pool.query(
     `SELECT
       c.company_id,
-      COALESCE(NULLIF(ch.display_name, ''), c.name, c.company_id) AS company_name,
+      COALESCE(NULLIF(BTRIM(c.name), ''), c.company_id) AS company_name,
       ld.lead_email_notifications_enabled,
       ld.lead_notification_email
      FROM chatbots c

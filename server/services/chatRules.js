@@ -38,7 +38,7 @@ const DOCX_RULES = [
   'Competitor or agency checking: Give safe company-level answers without exposing private client data or pricing.',
   'Feature shopper: Answer clearly, then stop checklist mode and redirect to the actual business need and consultation.',
   'Act as: Sales Executive + Product Consultant + Website Guide + Lead Generator. Not a CRM or FAQ bot.',
-  'Greeting: When greeting the user, first welcome the visitor to the company (e.g. "Hi! Welcome to [Company Name]!"), then introduce Anaya (e.g. "I\'m Anaya, your digital consultant.").',
+  'Greeting: When greeting the user, first welcome the visitor to the company (e.g. "Hi! Welcome to [Company Name]!").',
   'Discovery before recommendation: Always understand needs before suggesting solutions.',
   'Qualification: Budget, timeline, and requirement matter. Ask conversationally.',
   'Value building: Explain what they need instead of jumping to price.',
@@ -48,8 +48,17 @@ const DOCX_RULES = [
   'Phone validation: If the user shares a phone number without an explicit country code, ask a short follow-up for the country code before treating the number as complete.',
 ];
 
-function buildDocxRulesPrompt() {
-  return ['Operating Rules (from product specification):', ...DOCX_RULES.map((rule) => `- ${rule}`)].join('\n');
+function buildDocxRulesPrompt(options = {}) {
+  const configuredName = String(options?.assistantName || '').replace(/\s+/g, ' ').trim();
+  const greetingRule = configuredName
+    ? `Greeting continuation: Introduce yourself using the configured chatbot name exactly as "${configuredName}" (e.g. "I'm ${configuredName}, your digital consultant.").`
+    : 'Greeting continuation: Introduce yourself as the company\'s digital consultant.';
+
+  return [
+    'Operating Rules (from product specification):',
+    ...DOCX_RULES.map((rule) => `- ${rule}`),
+    `- ${greetingRule}`,
+  ].join('\n');
 }
 
 function isPricingQuestion(text = '') {
@@ -215,12 +224,44 @@ function buildJobSeekerSafeReply() {
   ].join('\n');
 }
 
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeAssistantIdentity(text = '', assistantName = '') {
+  const targetName = String(assistantName || '').replace(/\s+/g, ' ').trim();
+  if (!targetName) return String(text || '');
+
+  let output = String(text || '');
+  const hasTargetName = new RegExp(`\\b${escapeRegExp(targetName)}\\b`, 'i').test(output);
+  if (hasTargetName && !/\banaya\b/i.test(output)) {
+    return output;
+  }
+
+  output = output
+    .replace(/\b(i\s*(?:am|'m)\s+)anaya\b/gi, `$1${targetName}`)
+    .replace(/\b(it\s*(?:is|'s)\s+)anaya\b/gi, `$1${targetName}`)
+    .replace(/\b(this is\s+)anaya\b/gi, `$1${targetName}`)
+    .replace(/\b(my name is\s+)anaya\b/gi, `$1${targetName}`)
+    .replace(/\banaya(?=,\s*your digital consultant\b)/gi, targetName)
+    .replace(/\banaya(?=\s+here\b)/gi, targetName)
+    .replace(/\banaya(?=\s+from\b)/gi, targetName);
+
+  // Final fallback for greeting-style responses that still mention Anaya.
+  if (/\banaya\b/i.test(output) && /\b(hi|hello|hey|welcome|consultant)\b/i.test(output)) {
+    output = output.replace(/\banaya\b/gi, targetName);
+  }
+
+  return output;
+}
+
 function enforceOutputRules({
   latestUserMessage = '',
   modelText = '',
   messages = [],
   modeContext = null,
   safetyConfig = {},
+  assistantName = '',
 }) {
   const preventInternalData = safetyConfig?.preventInternalData !== false;
   const restrictDatabasePriceExposure = safetyConfig?.restrictDatabasePriceExposure !== false;
@@ -283,6 +324,8 @@ function enforceOutputRules({
   if (modeContext?.scenario === 'job_seeker' && violatesJobSeekerRule(output)) {
     output = buildJobSeekerSafeReply();
   }
+
+  output = normalizeAssistantIdentity(output, assistantName);
 
   return output;
 }

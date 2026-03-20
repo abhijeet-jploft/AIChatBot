@@ -8,7 +8,7 @@ const {
   normalizeConversationModeId,
 } = require('./conversationModes');
 
-const BASE_SYSTEM_PROMPT =
+const BASE_SYSTEM_PROMPT_PREFIX =
   'You are a helpful AI sales assistant. You represent the company professionally, ' +
   'help visitors understand offerings, and guide them toward booking consultations or ' +
   'taking action. Be friendly, concise, and focused on understanding their needs before ' +
@@ -20,8 +20,11 @@ const BASE_SYSTEM_PROMPT =
   '- If relevant source links are present in context, include the exact URL when suggesting a page or redirecting users. Never invent URLs.\n' +
   '- For generic out-of-domain tutorial or code-snippet requests, do not provide tutorial code. Politely redirect to business-focused guidance and discovery questions.\n' +
   '- Use emojis naturally in your responses to make the conversation fun and engaging (e.g. 👍 😊 ✨ 🎯 💡). Do not overuse—1–3 per message is enough.\n' +
-  '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n' +
-  buildDocxRulesPrompt();
+  '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n';
+
+function buildBaseSystemPrompt(assistantName = '') {
+  return BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName });
+}
 
 const GEMINI_MODEL_FALLBACKS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-latest'];
 
@@ -31,13 +34,13 @@ function isModelNotFoundError(err) {
   return (msg.includes('404') && (msg.includes('not found') || msg.includes('not supported'))) || msg.includes('429');
 }
 
-function buildPrompt(companyId, messages, modeId, modeContext) {
+function buildPrompt(companyId, messages, modeId, modeContext, assistantName = '') {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
   const context = loadCompanyContext(companyId, latestUserMessage);
   const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const convo = (messages || []).map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`).join('\n');
   return [
-    BASE_SYSTEM_PROMPT,
+    buildBaseSystemPrompt(assistantName),
     context
       ? `## Company Knowledge Base\nUse the following information to answer accurately and contextually:\n\n${context}`
       : '## Company Knowledge Base\nNo company-specific context found.',
@@ -50,7 +53,15 @@ function buildPrompt(companyId, messages, modeId, modeContext) {
 
 async function sendMessage(companyId, messages, options = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
-  const { modeId: requestedModeId, modeContext: providedModeContext, safetyConfig, apiKey, model, ..._rest } = options || {};
+  const {
+    modeId: requestedModeId,
+    modeContext: providedModeContext,
+    safetyConfig,
+    apiKey,
+    model,
+    assistantName,
+    ..._rest
+  } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
   const modeContext = providedModeContext || buildModeContext({ modeId, latestUserMessage, messages });
   if (process.env.AI_MODE_DEBUG === '1') {
@@ -64,7 +75,7 @@ async function sendMessage(companyId, messages, options = {}) {
   if (modelName.toLowerCase().includes('claude')) {
     modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   }
-  const prompt = buildPrompt(companyId, messages, modeId, modeContext);
+  const prompt = buildPrompt(companyId, messages, modeId, modeContext, assistantName);
   const candidates = [modelName, ...GEMINI_MODEL_FALLBACKS].filter((v, i, arr) => v && arr.indexOf(v) === i);
   try {
     for (let i = 0; i < candidates.length; i += 1) {
@@ -73,7 +84,7 @@ async function sendMessage(companyId, messages, options = {}) {
         const gModel = genAI.getGenerativeModel({ model: candidate });
         const result = await gModel.generateContent(prompt);
         const modelText = result?.response?.text?.() || '';
-        return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig });
+        return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig, assistantName });
       } catch (err) {
         if (isModelNotFoundError(err) && i < candidates.length - 1) continue;
         throw err;

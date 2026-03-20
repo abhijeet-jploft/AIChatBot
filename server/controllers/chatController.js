@@ -35,6 +35,7 @@ async function postMessage(req, res) {
       model: null,
       anthropicApiKey: null,
       geminiApiKey: null,
+      assistantName: null,
     };
     let voiceConfig = {
       enabled: false,
@@ -56,6 +57,7 @@ async function postMessage(req, res) {
         model: chatbot?.ai_model || null,
         anthropicApiKey: chatbot?.anthropic_api_key || null,
         geminiApiKey: chatbot?.gemini_api_key || null,
+        assistantName: String(chatbot?.display_name || '').trim() || null,
       };
 
       safetyConfig = {
@@ -155,8 +157,20 @@ async function postMessage(req, res) {
     }
 
     const response = aiConfig.provider === 'gemini'
-      ? await sendGeminiMessage(companyId, messages, { modeId: selectedModeId, safetyConfig, model: aiConfig.model, apiKey: aiConfig.geminiApiKey })
-      : await sendAnthropicMessage(companyId, messages, { modeId: selectedModeId, safetyConfig, model: aiConfig.model, apiKey: aiConfig.anthropicApiKey });
+      ? await sendGeminiMessage(companyId, messages, {
+        modeId: selectedModeId,
+        safetyConfig,
+        model: aiConfig.model,
+        apiKey: aiConfig.geminiApiKey,
+        assistantName: aiConfig.assistantName,
+      })
+      : await sendAnthropicMessage(companyId, messages, {
+        modeId: selectedModeId,
+        safetyConfig,
+        model: aiConfig.model,
+        apiKey: aiConfig.anthropicApiKey,
+        assistantName: aiConfig.assistantName,
+      });
     let voice = null;
 
     if (voiceConfig.enabled && voiceConfig.responseEnabled) {

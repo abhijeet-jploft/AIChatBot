@@ -26,6 +26,8 @@ async function findByCompanyId(companyId) {
   const { rows } = await pool.query(
     `SELECT
       c.company_id,
+      c.name AS company_name,
+      ch.display_name,
       ch.ai_mode,
       ch.ai_provider,
       ch.ai_model,

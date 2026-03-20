@@ -14,7 +14,7 @@ async function getCompaniesList(req, res) {
     }
     const companyIds = companies.map((c) => c.id);
     const { rows } = await pool.query(
-      `SELECT c.company_id, ch.display_name, ch.icon_url, ch.greeting_message, ch.widget_position,
+      `SELECT c.company_id, c.name AS db_company_name, ch.display_name, ch.icon_url, ch.greeting_message, ch.widget_position,
               th.theme_primary_color, th.theme_primary_dark_color,
               th.theme_secondary_color, th.theme_secondary_light_color,
               th.theme_header_background, th.theme_header_shadow, th.theme_header_text_color,
@@ -35,6 +35,8 @@ async function getCompaniesList(req, res) {
     const dbMap = Object.fromEntries(rows.map((r) => [r.company_id, r]));
     const enriched = companies.map((c) => {
       const dbRow = dbMap[c.id] || {};
+      const companyLabel = String(dbRow.db_company_name || '').trim() || c.name;
+      const chatbotRaw = String(dbRow.display_name || '').trim();
       const customAvailable = Boolean(dbRow.voice_custom_id);
       const resolvedProfile = customAvailable
         ? (dbRow.voice_profile === 'custom' ? 'custom' : (dbRow.voice_profile || 'professional'))
@@ -45,8 +47,10 @@ async function getCompaniesList(req, res) {
 
       return {
         id: c.id,
-        name: c.name,
-        displayName: dbRow.display_name || c.name,
+        name: companyLabel,
+        companyName: companyLabel,
+        chatbotName: chatbotRaw,
+        displayName: chatbotRaw || companyLabel,
         iconUrl: dbRow.icon_url || null,
         greetingMessage: dbRow.greeting_message || null,
         widgetPosition: String(dbRow.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',

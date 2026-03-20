@@ -59,7 +59,7 @@ export default function Login() {
               >
                 <option value="">Select company</option>
                 {companies.map((c) => (
-                  <option key={c.companyId} value={c.companyId}>{c.displayName || c.name}</option>
+                  <option key={c.companyId} value={c.companyId}>{c.name}</option>
                 ))}
               </select>
             </div>

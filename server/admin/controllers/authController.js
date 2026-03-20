@@ -33,7 +33,7 @@ async function login(req, res) {
       token,
       expiresAt: expiresAt.toISOString(),
       companyId: cid,
-      companyName: company.display_name || company.name,
+      companyName: company.name,
     });
   } catch (err) {
     console.error('[admin auth] login:', err);
@@ -71,7 +71,7 @@ async function setup(req, res) {
       token,
       expiresAt: expiresAt.toISOString(),
       companyId: cid,
-      companyName: company.display_name || company.name,
+      companyName: company.name,
     });
   } catch (err) {
     console.error('[admin auth] setup:', err);
@@ -102,7 +102,9 @@ async function me(req, res) {
     res.json({
       companyId: company.company_id,
       name: company.name,
-      displayName: company.display_name || company.name,
+      companyName: company.name,
+      chatbotName: company.display_name || '',
+      displayName: company.name,
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
     });

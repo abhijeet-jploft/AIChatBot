@@ -14,7 +14,7 @@ function getAnthropicClient(apiKey) {
   });
 }
 
-const BASE_SYSTEM_PROMPT =
+const BASE_SYSTEM_PROMPT_PREFIX =
   'You are a helpful AI sales assistant. You represent the company professionally, ' +
   'help visitors understand offerings, and guide them toward booking consultations or ' +
   'taking action. Be friendly, concise, and focused on understanding their needs before ' +
@@ -26,8 +26,11 @@ const BASE_SYSTEM_PROMPT =
   '- If relevant source links are present in context, include the exact URL when suggesting a page or redirecting users. Never invent URLs.\n' +
   '- For generic out-of-domain tutorial or code-snippet requests, do not provide tutorial code. Politely redirect to business-focused guidance and discovery questions.\n' +
   '- Use emojis naturally in your responses to make the conversation fun and engaging (e.g. 👍 😊 ✨ 🎯 💡). Do not overuse—1–3 per message is enough.\n' +
-  '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n' +
-  buildDocxRulesPrompt();
+  '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n';
+
+function buildBaseSystemPrompt(assistantName = '') {
+  return BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName });
+}
 
 /**
  * Build system prompt as an array of Anthropic content blocks with cache_control.
@@ -41,13 +44,14 @@ const BASE_SYSTEM_PROMPT =
  *
  * If there is no company context, the base persona block itself carries the cache marker.
  */
-function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext = null) {
+function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext = null, assistantName = '') {
   const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const context = loadCompanyContext(companyId, userQuery);
+  const baseSystemPrompt = buildBaseSystemPrompt(assistantName);
 
   if (context) {
     return [
-      { type: 'text', text: BASE_SYSTEM_PROMPT },
+      { type: 'text', text: baseSystemPrompt },
       {
         type: 'text',
         text:
@@ -62,7 +66,7 @@ function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext
   }
 
   return [
-    { type: 'text', text: BASE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: baseSystemPrompt, cache_control: { type: 'ephemeral' } },
     { type: 'text', text: modePrompt },
   ];
 }
@@ -112,7 +116,15 @@ function buildCachedMessages(messages) {
  */
 async function sendMessage(companyId, messages, options = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
-  const { modeId: requestedModeId, modeContext: providedModeContext, safetyConfig, apiKey, model, ...anthropicOptions } = options || {};
+  const {
+    modeId: requestedModeId,
+    modeContext: providedModeContext,
+    safetyConfig,
+    apiKey,
+    model,
+    assistantName,
+    ...anthropicOptions
+  } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
   const modeContext = providedModeContext || buildModeContext({ modeId, latestUserMessage, messages });
 
@@ -123,7 +135,7 @@ async function sendMessage(companyId, messages, options = {}) {
   const params = {
     model: model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 1024,
-    system: buildSystemBlocks(companyId, latestUserMessage, modeId, modeContext),
+    system: buildSystemBlocks(companyId, latestUserMessage, modeId, modeContext, assistantName),
     messages: buildCachedMessages(messages),
     ...anthropicOptions,
   };
@@ -132,7 +144,7 @@ async function sendMessage(companyId, messages, options = {}) {
   const response = await client.messages.create(params);
   const textBlock = response.content.find((b) => b.type === 'text');
   const modelText = textBlock ? textBlock.text : '';
-  return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig });
+  return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig, assistantName });
 }
 
 module.exports = { sendMessage, buildSystemBlocks };

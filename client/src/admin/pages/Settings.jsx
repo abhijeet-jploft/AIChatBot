@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 
@@ -11,10 +11,12 @@ function getEmbedAppOrigin() {
   return '';
 }
 
-function buildIntegrationDemoUrl({ embed, displayName }) {
+function buildIntegrationDemoUrl({ embed, companyName, chatbotName }) {
   const originFallback = getEmbedAppOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
   const host = embed?.slugHostUrl || `${originFallback}${embed?.slugHostPath || ''}`;
   if (!host) return `${originFallback}/embed-integration-demo.html`;
+
+  const widgetTitle = (chatbotName || '').trim() || (companyName || '').trim();
 
   try {
     const parsed = new URL(host, typeof window !== 'undefined' ? window.location.origin : originFallback);
@@ -27,7 +29,7 @@ function buildIntegrationDemoUrl({ embed, displayName }) {
       exactProject: parsed.origin === 'http://localhost:7001' ? '1' : '0',
       slug: embed?.slug || '',
       companyId,
-      companyName: displayName || '',
+      companyName: widgetTitle,
       apiKey,
     });
     return `${parsed.origin}/embed-integration-demo.html?${demoParams.toString()}`;
@@ -76,7 +78,9 @@ function defaultSafety() {
 export default function Settings() {
   const { authFetch } = useAuth();
   const { showToast } = useAdminToast();
-  const [displayName, setDisplayName] = useState('');
+  const location = useLocation();
+  const [companyName, setCompanyName] = useState('');
+  const [chatbotName, setChatbotName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
   const [widgetPosition, setWidgetPosition] = useState('right');
@@ -91,13 +95,23 @@ export default function Settings() {
   const [embed, setEmbed] = useState(null);
 
   useEffect(() => {
+    if (location.hash === '#chatbot-name' || location.hash === '#company-name') {
+      requestAnimationFrame(() => {
+        const id = location.hash === '#company-name' ? 'company-name' : 'chatbot-name';
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, [location.hash, location.pathname]);
+
+  useEffect(() => {
     authFetch('/settings')
       .then(async (settingsRes) => {
         if (!settingsRes.ok) throw new Error('Failed to load settings');
         const d = await settingsRes.json();
 
         setEmbed(d.embed || null);
-        setDisplayName(d.displayName || d.name || '');
+        setCompanyName(d.companyName || d.name || '');
+        setChatbotName(d.chatbotName ?? d.displayName ?? '');
         setIconUrl(d.iconUrl || '');
         setGreetingMessage(d.greetingMessage || '');
         setWidgetPosition(d.widget?.position === 'left' ? 'left' : 'right');
@@ -136,13 +150,19 @@ export default function Settings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const coName = companyName.trim();
+    if (!coName) {
+      showToast('Company name is required', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const res = await authFetch('/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          displayName: displayName.trim() || undefined,
+          companyName: coName,
+          chatbotName: chatbotName.trim(),
           iconUrl: iconUrl.trim() || undefined,
           greetingMessage: greetingMessage.trim() || undefined,
           widget: {
@@ -207,16 +227,36 @@ export default function Settings() {
       <form onSubmit={handleSubmit}>
         <div className="row g-4 align-items-start">
           <div className="col-12 col-lg-8">
-            <div className="mb-3">
-              <label className="form-label">Display name</label>
+            <div className="mb-3" id="company-name">
+              <label className="form-label">Company name</label>
               <input
                 type="text"
                 className="form-control"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Visible name in chatbot"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="e.g. Acme Corporation"
+                autoComplete="organization"
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               />
+              <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+                Your business or team name (admin, reports, lead emails, training context). Distinct from the name shown in the chat widget.
+              </div>
+            </div>
+
+            <div className="mb-3" id="chatbot-name">
+              <label className="form-label">AI chatbot name</label>
+              <input
+                type="text"
+                className="form-control"
+                value={chatbotName}
+                onChange={(e) => setChatbotName(e.target.value)}
+                placeholder="e.g. Acme Support Assistant"
+                autoComplete="off"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
+              <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+                Shown in the chat header, website widget, and embedded chat. If empty, the company name above is used in the widget.
+              </div>
             </div>
 
             <div className="mb-3">
@@ -343,7 +383,7 @@ export default function Settings() {
                   type="button"
                   className="btn btn-sm btn-outline-secondary"
                   onClick={() => {
-                    const demoUrl = buildIntegrationDemoUrl({ embed, displayName });
+                    const demoUrl = buildIntegrationDemoUrl({ embed, companyName, chatbotName });
                     window.open(demoUrl, '_blank', 'noopener,noreferrer');
                   }}
                 >

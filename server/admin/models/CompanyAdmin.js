@@ -91,6 +91,7 @@ async function flushTableUpdate(table, companyId, setFragments, values) {
 }
 
 async function updateSettings(companyId, {
+  company_name,
   display_name,
   icon_url,
   greeting_message,
@@ -138,6 +139,13 @@ async function updateSettings(companyId, {
   language_auto_detect_enabled,
   language_manual_switch_enabled,
 }) {
+  if (company_name !== undefined) {
+    const n = String(company_name || '').trim().slice(0, 255);
+    if (n) {
+      await pool.query(`UPDATE chatbots SET name = $1 WHERE company_id = $2`, [n, companyId]);
+    }
+  }
+
   const chatU = [];
   const chatV = [];
   let i = 1;

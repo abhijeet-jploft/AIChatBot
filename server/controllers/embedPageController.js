@@ -13,7 +13,8 @@ async function renderEmbedPage(req, res) {
   }
   try {
     const { rows } = await pool.query(
-      `SELECT c.company_id, COALESCE(ch.display_name, c.name) AS display_name
+      `SELECT c.company_id,
+              COALESCE(NULLIF(BTRIM(ch.display_name), ''), c.name) AS widget_title
        FROM embed_settings em
        INNER JOIN chatbots c ON c.company_id = em.company_id
        LEFT JOIN chat_settings ch ON ch.company_id = em.company_id
@@ -45,7 +46,7 @@ async function renderEmbedPage(req, res) {
 window.JPLoftChatConfig = {
   apiUrl: ${JSON.stringify(apiUrl)},
   companyId: ${JSON.stringify(row.company_id)},
-  companyName: ${JSON.stringify(row.display_name || 'Chat')},
+  companyName: ${JSON.stringify(row.widget_title || 'Chat')},
   apiKey: ${JSON.stringify(token)}
 };
 </script>

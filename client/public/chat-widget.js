@@ -5,7 +5,7 @@
  * Optional apiKey is sent as header X-Embed-Api-Key on API requests (per-company key from your dashboard).
  *
  * Activation (per doc): 6-10s on page OR 40% scroll OR 8s idle.
- * Opening message: Hi! Welcome to JP Loft! I'm Anaya, your digital consultant. Are you looking to build something or just exploring ideas?
+ * Opening message uses company settings (greeting message if configured, otherwise company + chatbot names).
  */
 (function () {
   'use strict';
@@ -15,13 +15,15 @@
   var apiUrl = (script && script.getAttribute('data-api-url')) || config.apiUrl || '';
   var companyId = (script && script.getAttribute('data-company-id')) || config.companyId || '_JP_Loft';
   var companyName = (script && script.getAttribute('data-company-name')) || config.companyName || 'JP Loft';
+  var companyLegalName = companyName;
+  var chatbotDisplayName = '';
   var apiKey = (script && script.getAttribute('data-api-key')) || config.apiKey || '';
   var widgetSide = ((script && script.getAttribute('data-widget-side')) || config.widgetSide || 'right').toLowerCase() === 'left' ? 'left' : 'right';
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
   var companyIconUrl = null;
   var companyGreetingMessage = null;
 
-  var OPENING_MSG = "Hi! Welcome to JP Loft!\nI'm Anaya, your digital consultant.\nAre you looking to build something or just exploring ideas?";
+  var DEFAULT_OPENING_QUESTION = 'Are you looking to build something or just exploring ideas?';
   var CHAT_STATE_KEY = 'ai-chat-state';
   var ACTIVATION_MIN = 6000;
   var ACTIVATION_MAX = 10000;
@@ -635,7 +637,15 @@
   }
 
   function getOpeningMessage() {
-    return (companyGreetingMessage && companyGreetingMessage.trim()) ? companyGreetingMessage.trim() : OPENING_MSG;
+    if (companyGreetingMessage && companyGreetingMessage.trim()) return companyGreetingMessage.trim();
+
+    var welcomeCompany = String(companyLegalName || companyName || 'our company').trim() || 'our company';
+    var introName = String(chatbotDisplayName || '').trim();
+    var introLine = introName
+      ? "I'm " + introName + ', your digital consultant.'
+      : "I'm your digital consultant.";
+
+    return 'Hi! Welcome to ' + welcomeCompany + '!\n' + introLine + '\n' + DEFAULT_OPENING_QUESTION;
   }
 
   function openPanel() {
@@ -907,6 +917,8 @@
         if (!Array.isArray(companies) || !widgetRoot) return;
         var company = companies.find(function (c) { return c.id === companyId; });
         if (company) {
+          if (company.companyName) companyLegalName = company.companyName;
+          if (company.chatbotName) chatbotDisplayName = company.chatbotName;
           if (company.displayName) companyName = company.displayName;
           companyIconUrl = company.iconUrl || null;
           companyGreetingMessage = company.greetingMessage || null;

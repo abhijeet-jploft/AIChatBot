@@ -6,9 +6,36 @@ import Landing from './pages/Landing';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-const OPENING_MESSAGE = `Hi! Welcome to JP Loft!
-I'm Anaya, your digital consultant.
-Are you looking to build something or just exploring ideas?`;
+function buildDefaultOpeningMessage(companyName, chatbotName) {
+  const safeCompanyName = String(companyName || DEFAULT_COMPANY_NAME).trim() || DEFAULT_COMPANY_NAME;
+  const safeChatbotName = String(chatbotName || '').trim();
+  const introLine = safeChatbotName
+    ? `I'm ${safeChatbotName}, your digital consultant.`
+    : "I'm your digital consultant.";
+
+  return `Hi! Welcome to ${safeCompanyName}!\n${introLine}\nAre you looking to build something or just exploring ideas?`;
+}
+
+function normalizeAssistantNameInText(text, chatbotName) {
+  const safeChatbotName = String(chatbotName || '').replace(/\s+/g, ' ').trim();
+  if (!safeChatbotName) return String(text || '');
+
+  let output = String(text || '');
+  output = output
+    .replace(/\b(i\s*(?:am|'m)\s+)anaya\b/gi, `$1${safeChatbotName}`)
+    .replace(/\b(it\s*(?:is|'s)\s+)anaya\b/gi, `$1${safeChatbotName}`)
+    .replace(/\b(this is\s+)anaya\b/gi, `$1${safeChatbotName}`)
+    .replace(/\b(my name is\s+)anaya\b/gi, `$1${safeChatbotName}`)
+    .replace(/\banaya(?=,\s*your digital consultant\b)/gi, safeChatbotName)
+    .replace(/\banaya(?=\s+here\b)/gi, safeChatbotName)
+    .replace(/\banaya(?=\s+from\b)/gi, safeChatbotName);
+
+  if (/\banaya\b/i.test(output) && /\b(hi|hello|hey|welcome|consultant)\b/i.test(output)) {
+    output = output.replace(/\banaya\b/gi, safeChatbotName);
+  }
+
+  return output;
+}
 
 const ACTIVATION_DELAY_MS_MIN = 6000;
 const ACTIVATION_DELAY_MS_MAX = 10000;
@@ -345,6 +372,10 @@ export default function App() {
   const [loading, setLoading]       = useState(false);
   const [sessionId, setSessionId]   = useState(() => initialChatState?.sessionId || null);
   const [sessions, setSessions]     = useState([]);
+  const currentCompany = companies.find((c) => c.id === companyId);
+  const companyNameForOpening = currentCompany?.companyName || currentCompany?.name || DEFAULT_COMPANY_NAME;
+  const chatbotNameForOpening = String(currentCompany?.chatbotName || '').trim();
+  const openingMessageText = String(currentCompany?.greetingMessage || '').trim() || buildDefaultOpeningMessage(companyNameForOpening, chatbotNameForOpening);
 
   const dragStateRef = useRef({
     pointerId: null,
@@ -684,12 +715,12 @@ export default function App() {
 
     setCurrentPage('chat');
     if (messages.length === 0 && !openingMessageShown) {
-      setMessages([{ role: 'assistant', content: OPENING_MESSAGE }]);
+      setMessages([{ role: 'assistant', content: openingMessageText }]);
       setOpeningMessageShown(true);
     }
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
     setAutoPopupHandled(true);
-  }, [isWebsiteView, widgetActivated, autoPopupHandled, messages.length, openingMessageShown]);
+  }, [isWebsiteView, widgetActivated, autoPopupHandled, messages.length, openingMessageShown, openingMessageText]);
 
   // â”€â”€ Resize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
@@ -727,13 +758,28 @@ export default function App() {
       });
   }, []);
 
+  useEffect(() => {
+    if (!chatbotNameForOpening) return;
+    setMessages((prev) => {
+      let changed = false;
+      const normalized = prev.map((message) => {
+        if (message?.role !== 'assistant' || typeof message.content !== 'string') return message;
+        const nextContent = normalizeAssistantNameInText(message.content, chatbotNameForOpening);
+        if (nextContent === message.content) return message;
+        changed = true;
+        return { ...message, content: nextContent };
+      });
+      return changed ? normalized : prev;
+    });
+  }, [chatbotNameForOpening]);
+
   // â”€â”€ Sessions (reload whenever companyId changes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadSessions = useCallback(() => {
     fetch(`${API_BASE}/sessions?companyId=${encodeURIComponent(companyId)}`)
       .then((r) => r.json())
       .then((data) => setSessions(Array.isArray(data) ? data : []))
       .catch(() => setSessions([]));
-  }, [companyId]);
+  }, [companyId, chatbotNameForOpening]);
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
@@ -769,7 +815,8 @@ export default function App() {
           try {
             const msg = JSON.parse(ev.data);
             if (msg.type === 'message' && msg.content != null) {
-              setMessages((prev) => [...prev, { role: 'assistant', content: String(msg.content) }]);
+              const content = normalizeAssistantNameInText(String(msg.content), chatbotNameForOpening);
+              setMessages((prev) => [...prev, { role: 'assistant', content }]);
             }
           } catch (_) {}
         };
@@ -901,12 +948,13 @@ export default function App() {
       }
 
       const data = await res.json();
+      const normalizedAssistantContent = normalizeAssistantNameInText(String(data?.content || ''), chatbotNameForOpening);
       const responseAudioDataUrl = data?.voice?.audioDataUrl;
       // Index of the new assistant message: we already added the user message earlier, so it's messages.length + 1
       const newAssistantIndex = messages.length + 1;
       setMessages((prev) => [...prev, {
         role: 'assistant',
-        content: data.content,
+        content: normalizedAssistantContent,
         voiceUrl: responseAudioDataUrl || undefined,
       }]);
       if (responseAudioDataUrl) {
@@ -915,7 +963,7 @@ export default function App() {
         const voiceGender = currentCompany?.voice?.gender === 'male' ? 'male' : 'female';
         const ignoreEmoji = Boolean(currentCompany?.voice?.ignoreEmoji);
         setPlayingMessageIndex(newAssistantIndex);
-        speakWithBrowserVoice(data?.content, voiceGender, ignoreEmoji, () => setPlayingMessageIndex(null));
+        speakWithBrowserVoice(normalizedAssistantContent, voiceGender, ignoreEmoji, () => setPlayingMessageIndex(null));
       }
 
       // Update active session ID (server returns the created/used session)
@@ -988,7 +1036,7 @@ export default function App() {
     setCurrentPage('chat');
     if (isWebsiteView) setAutoPopupHandled(true);
     if (isWebsiteView && messages.length === 0 && !openingMessageShown) {
-      setMessages([{ role: 'assistant', content: OPENING_MESSAGE }]);
+      setMessages([{ role: 'assistant', content: openingMessageText }]);
       setOpeningMessageShown(true);
     }
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
@@ -1114,7 +1162,6 @@ export default function App() {
     action();
   };
 
-  const currentCompany = companies.find((c) => c.id === companyId);
   const companyName = currentCompany?.displayName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const companyIconUrl = currentCompany?.iconUrl || null;
   const widgetSide = currentCompany?.widgetPosition === 'left' ? 'left' : 'right';
