@@ -23,6 +23,14 @@ const BASE_SYSTEM_PROMPT =
   '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n' +
   buildDocxRulesPrompt();
 
+const GEMINI_MODEL_FALLBACKS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-latest'];
+
+function isModelNotFoundError(err) {
+  const msg = String(err?.message || '').toLowerCase();
+  // We can skip 404s (not found) and 429s (quota/rate-limited) if we want to fallback
+  return (msg.includes('404') && (msg.includes('not found') || msg.includes('not supported'))) || msg.includes('429');
+}
+
 function buildPrompt(companyId, messages, modeId, modeContext) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
   const context = loadCompanyContext(companyId, latestUserMessage);
@@ -52,12 +60,30 @@ async function sendMessage(companyId, messages, options = {}) {
   const key = apiKey || process.env.GEMINI_API_KEY || '';
   if (!key) throw new Error('Gemini API key not configured');
   const genAI = new GoogleGenerativeAI(key);
-  const modelName = model || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-  const gModel = genAI.getGenerativeModel({ model: modelName });
+  let modelName = model || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  if (modelName.toLowerCase().includes('claude')) {
+    modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  }
   const prompt = buildPrompt(companyId, messages, modeId, modeContext);
-  const result = await gModel.generateContent(prompt);
-  const modelText = result?.response?.text?.() || '';
-  return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig });
+  const candidates = [modelName, ...GEMINI_MODEL_FALLBACKS].filter((v, i, arr) => v && arr.indexOf(v) === i);
+  try {
+    for (let i = 0; i < candidates.length; i += 1) {
+      const candidate = candidates[i];
+      try {
+        const gModel = genAI.getGenerativeModel({ model: candidate });
+        const result = await gModel.generateContent(prompt);
+        const modelText = result?.response?.text?.() || '';
+        return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig });
+      } catch (err) {
+        if (isModelNotFoundError(err) && i < candidates.length - 1) continue;
+        throw err;
+      }
+    }
+    throw new Error('No supported Gemini model available');
+  } catch (err) {
+    console.error('GEMINI ERROR:', err);
+    throw err;
+  }
 }
 
 module.exports = { sendMessage };

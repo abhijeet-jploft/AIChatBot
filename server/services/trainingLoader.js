@@ -238,6 +238,12 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
                     docParts.push(`Document (${o.name || 'doc'}): ${o.content}`);
                   } else if (o.type === 'manual' && o.content != null) {
                     manualParts.push(String(o.content));
+                  } else if (o.type === 'media') {
+                    const mediaText = String(o.content || '').trim();
+                    if (mediaText) {
+                      const mediaLabel = [o.mediaType, o.name].filter(Boolean).join(': ');
+                      docParts.push(`Media${mediaLabel ? ` (${mediaLabel})` : ''}: ${mediaText}`);
+                    }
                   } else if (o.messages && (o.source || o.system)) {
                     scrapedLines.push(line);
                   }

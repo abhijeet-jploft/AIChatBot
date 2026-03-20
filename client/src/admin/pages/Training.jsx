@@ -13,6 +13,7 @@ const TABS = [
   { id: 'scrape', label: 'Website scraping' },
   { id: 'conversational', label: 'Conversational' },
   { id: 'documents', label: 'Documents' },
+  { id: 'media', label: 'Media training' },
   { id: 'structured', label: 'Structured (CSV / Excel)' },
   { id: 'manual', label: 'Manual knowledge' },
 ];
@@ -38,6 +39,13 @@ export default function Training() {
   const [docFiles, setDocFiles] = useState(null);
   const [docSaving, setDocSaving] = useState(false);
 
+  // Media
+  const [mediaFiles, setMediaFiles] = useState(null);
+  const [mediaTranscript, setMediaTranscript] = useState('');
+  const [mediaJsonl, setMediaJsonl] = useState('');
+  const [mediaTranscribing, setMediaTranscribing] = useState(false);
+  const [mediaSaving, setMediaSaving] = useState(false);
+
   // Structured (JSON body)
   const [structuredJson, setStructuredJson] = useState('');
   const [structuredFile, setStructuredFile] = useState(null);
@@ -47,16 +55,28 @@ export default function Training() {
   const [manualContent, setManualContent] = useState('');
   const [manualLoading, setManualLoading] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
+  const [manualRecording, setManualRecording] = useState(false);
 
   // Training files list
   const [files, setFiles] = useState([]);
 
   const logRef = useRef(null);
   const pollRef = useRef(null);
+  const manualRecognitionRef = useRef(null);
+  const manualShouldBeRecordingRef = useRef(false);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [job?.log]);
+
+  useEffect(() => () => {
+    try {
+      manualShouldBeRecordingRef.current = false;
+      manualRecognitionRef.current?.stop?.();
+    } catch {
+      // ignore cleanup errors
+    }
+  }, []);
 
   useEffect(() => {
     if (!jobId) return undefined;
@@ -209,6 +229,67 @@ export default function Training() {
     }
   };
 
+  // ─── Media ─────────────────────────────────────────────────────────────────
+  const handleMediaSubmit = async (e) => {
+    e.preventDefault();
+    if (!mediaFiles?.length) {
+      showToast('Select at least one media file (image/audio/video).', 'error');
+      return;
+    }
+    if (!mediaJsonl.trim()) {
+      showToast('Wait for transcription to complete before saving.', 'error');
+      return;
+    }
+    setMediaSaving(true);
+    try {
+      const form = new FormData();
+      Array.from(mediaFiles).forEach((f) => form.append('files', f));
+      form.append('transcript', mediaTranscript.trim());
+      form.append('jsonlContent', mediaJsonl.trim());
+      const res = await authFetch('/training/media', { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.saved) {
+        showToast(
+          `Saved ${data.files?.length || 0} media file(s). JSONL appended: ${data.linesAppended ?? 0}${data.linesSkipped ? ` (${data.linesSkipped} skipped as duplicates)` : ''}.`,
+          'success'
+        );
+        setMediaFiles(null);
+        setMediaTranscript('');
+        setMediaJsonl('');
+        document.getElementById('training-media-input')?.form?.reset();
+        loadFiles();
+      } else showToast(data.error || 'Save failed.', 'error');
+    } catch {
+      showToast('Network error.', 'error');
+    } finally {
+      setMediaSaving(false);
+    }
+  };
+
+  const handleMediaFileChange = async (fileList) => {
+    setMediaFiles(fileList);
+    setMediaTranscript('');
+    setMediaJsonl('');
+
+    if (!fileList?.length) return;
+
+    setMediaTranscribing(true);
+    try {
+      const form = new FormData();
+      Array.from(fileList).forEach((f) => form.append('files', f));
+      const res = await authFetch('/training/media/transcribe', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to transcribe media');
+      setMediaTranscript(data.transcriptPreview || '');
+      setMediaJsonl(data.jsonlContent || '');
+      showToast('Media transcribed successfully.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to transcribe media', 'error');
+    } finally {
+      setMediaTranscribing(false);
+    }
+  };
+
   // ─── Structured ───────────────────────────────────────────────────────────
   const handleStructuredSubmit = async (e) => {
     e.preventDefault();
@@ -289,7 +370,92 @@ export default function Training() {
     }
   };
 
+  const ensureManualRecognition = () => {
+    if (typeof window === 'undefined') return null;
+    if (manualRecognitionRef.current) return manualRecognitionRef.current;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    recognition.onresult = (event) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        if (result.isFinal && result[0]?.transcript) {
+          finalTranscript += result[0].transcript;
+        }
+      }
+      if (finalTranscript.trim()) {
+        setManualContent((prev) =>
+          prev ? `${prev.trim()} ${finalTranscript.trim()}` : finalTranscript.trim()
+        );
+      }
+    };
+
+    recognition.onend = () => {
+      if (manualShouldBeRecordingRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          // ignore restart errors
+        }
+      } else {
+        setManualRecording(false);
+      }
+    };
+
+    recognition.onerror = () => {
+      manualShouldBeRecordingRef.current = false;
+      setManualRecording(false);
+    };
+
+    manualRecognitionRef.current = recognition;
+    return recognition;
+  };
+
+  const handleManualMicClick = () => {
+    if (manualLoading || manualSaving) return;
+    if (manualRecording) {
+      try {
+        manualRecognitionRef.current?.stop?.();
+      } catch {
+        // ignore
+      }
+      manualShouldBeRecordingRef.current = false;
+      setManualRecording(false);
+      return;
+    }
+
+    const recognition = ensureManualRecognition();
+    if (!recognition) return;
+
+    try {
+      manualShouldBeRecordingRef.current = true;
+      recognition.start();
+      setManualRecording(true);
+    } catch {
+      setManualRecording(false);
+    }
+  };
+
   const isScrapeRunning = job?.status === 'running' || submitting;
+  const manualMicButtonStyle = {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: `1px solid ${manualRecording ? 'var(--chat-accent)' : 'var(--chat-border)'}`,
+    background: manualRecording ? 'color-mix(in srgb, var(--chat-accent) 16%, var(--chat-bg) 84%)' : 'var(--chat-bg)',
+    color: manualRecording ? 'var(--chat-accent)' : 'var(--chat-text)',
+    transition: 'all 0.2s ease',
+  };
 
   return (
     <div className="flex-grow-1 overflow-auto" style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)' }}>
@@ -426,6 +592,55 @@ export default function Training() {
           </form>
         )}
 
+        {/* Tab: Media */}
+        {activeTab === 'media' && (
+          <form onSubmit={handleMediaSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
+            <p className="small text-muted mb-3">
+              Upload images, audio, or video. Optionally add caption/transcript text so AI can use media context in answers.
+            </p>
+            <div className="mb-3">
+              <label className="form-label small">Media files</label>
+              <input
+                id="training-media-input"
+                type="file"
+                accept="image/*,audio/*,video/*"
+                multiple
+                className="form-control"
+                onChange={(e) => handleMediaFileChange(e.target.files)}
+                style={{ background: 'var(--chat-bg)', borderColor: 'var(--chat-border)' }}
+                disabled={mediaSaving || mediaTranscribing}
+              />
+            </div>
+            <div className="mb-3">
+              <label className="form-label small">Auto transcript preview</label>
+              <textarea
+                className="form-control"
+                rows={4}
+                value={mediaTranscript}
+                onChange={(e) => setMediaTranscript(e.target.value)}
+                placeholder={mediaTranscribing ? 'Transcribing media files...' : 'Transcript will be generated automatically'}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                disabled={mediaTranscribing}
+              />
+            </div>
+            <div className="mb-3">
+              <label className="form-label small">Generated JSONL entries</label>
+              <textarea
+                className="form-control font-monospace"
+                rows={8}
+                value={mediaJsonl}
+                onChange={(e) => setMediaJsonl(e.target.value)}
+                placeholder={mediaTranscribing ? 'Generating JSONL...' : 'JSONL entries will appear after transcription'}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)', fontSize: 12 }}
+                disabled={mediaTranscribing}
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={mediaSaving || mediaTranscribing || !mediaFiles?.length || !mediaJsonl.trim()}>
+              {mediaTranscribing ? 'Transcribing...' : mediaSaving ? 'Saving...' : `Save ${mediaFiles?.length || 0} media file(s)`}
+            </button>
+          </form>
+        )}
+
         {/* Tab: Structured */}
         {activeTab === 'structured' && (
           <form onSubmit={handleStructuredSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
@@ -450,6 +665,38 @@ export default function Training() {
             <p className="small text-muted mb-3">FAQs, policies, business description. Stored in <strong>scraped_website.jsonl</strong> (manual section); replaces previous manual knowledge.</p>
             {manualLoading ? <div className="text-muted small">Loading...</div> : (
               <>
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <label className="form-label small mb-0" style={{ color: 'var(--chat-muted)' }}>
+                    Manual knowledge text
+                  </label>
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="small" style={{ color: manualRecording ? 'var(--chat-accent)' : 'var(--chat-muted)' }}>
+                      {manualRecording ? 'Recording...' : 'Use mic'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleManualMicClick}
+                      aria-label={manualRecording ? 'Stop voice input' : 'Start voice input'}
+                      disabled={manualSaving}
+                      title={manualRecording ? 'Stop voice input' : 'Start voice input'}
+                      style={manualMicButtonStyle}
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="22" />
+                        <line x1="8" y1="22" x2="16" y2="22" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
                 <textarea className="form-control mb-3" rows={12} value={manualContent} onChange={(e) => setManualContent(e.target.value)} placeholder="Enter FAQs, policies, instructions..." style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }} />
                 <button type="submit" className="btn btn-primary" disabled={manualSaving}>{manualSaving ? 'Saving...' : 'Save manual knowledge'}</button>
               </>

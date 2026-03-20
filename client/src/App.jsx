@@ -879,7 +879,7 @@ export default function App() {
     } catch (err) {
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: 'Bal: We are facing some technical issue' },
+        { role: 'assistant', content: 'We are facing some technical issue.' },
       ]);
     } finally {
       setLoading(false);

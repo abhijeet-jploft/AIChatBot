@@ -67,6 +67,8 @@ router.post('/training/scrape/save/:jobId', requireAuth, trainingController.scra
 
 router.post('/training/conversational', requireAuth, trainingController.saveConversational);
 router.post('/training/documents', requireAuth, uploadMemory.array('files', 10), trainingController.saveDocuments);
+router.post('/training/media/transcribe', requireAuth, uploadMemory.array('files', 10), trainingController.transcribeMedia);
+router.post('/training/media', requireAuth, uploadMemory.array('files', 10), trainingController.saveMedia);
 router.post('/training/structured', requireAuth, trainingController.saveStructured);
 router.post('/training/structured/upload', requireAuth, uploadMemory.single('file'), trainingController.saveStructured);
 router.get('/training/manual', requireAuth, trainingController.getManual);

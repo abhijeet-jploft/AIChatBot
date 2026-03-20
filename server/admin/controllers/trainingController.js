@@ -5,6 +5,8 @@ const { appendSystemLog } = require('../../services/adminLogStore');
 const {
   appendConversational,
   saveUploadedDoc,
+  saveUploadedMedia,
+  appendJsonlLinesOnlyIfNew,
   appendStructured,
   getManualKnowledge,
   setManualKnowledge,
@@ -12,6 +14,8 @@ const {
   mergeScrapedContent,
 } = require('../../services/trainingDataService');
 const { extractFromBuffer } = require('../../services/documentExtractor');
+const { transcribeMediaFiles } = require('../../services/mediaTranscriptionService');
+const CompanyAdmin = require('../models/CompanyAdmin');
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
@@ -159,6 +163,83 @@ async function saveDocuments(req, res) {
   }
 }
 
+// ─── Media training (images, audio, video) ──────────────────────────────────
+async function saveMedia(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const files = req.files || [];
+    const transcript = req.body?.transcript != null ? String(req.body.transcript) : '';
+    const jsonlContent = req.body?.jsonlContent != null ? String(req.body.jsonlContent) : '';
+    if (!files.length) {
+      return res.status(400).json({ error: 'No media files uploaded' });
+    }
+
+    const saved = [];
+    for (const f of files) {
+      const result = saveUploadedMedia(companyId, f, transcript);
+      saved.push({
+        originalName: f.originalname,
+        mediaType: result.mediaType,
+        storedAs: result.savedName,
+        appended: Boolean(result.appended),
+      });
+    }
+
+    let appended = 0;
+    let skipped = 0;
+    if (jsonlContent.trim()) {
+      const merged = appendJsonlLinesOnlyIfNew(companyId, jsonlContent);
+      appended = merged.appended;
+      skipped = merged.skipped;
+    }
+
+    setLastTrainingCompleted(companyId);
+    res.json({ saved: true, mode: 'media', files: saved, linesAppended: appended, linesSkipped: skipped });
+  } catch (err) {
+    console.error('[admin training] media:', err);
+    appendSystemLog('error', `Training media: ${err.message}`, { companyId: req.adminCompanyId });
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function transcribeMedia(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const files = req.files || [];
+    if (!files.length) {
+      return res.status(400).json({ error: 'No media files uploaded' });
+    }
+
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    const apiKey = String(company?.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Gemini API key is required for auto media transcription' });
+    }
+
+    let modelName = company?.ai_model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    if (String(modelName).toLowerCase().includes('claude')) {
+      modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    }
+
+    const entries = await transcribeMediaFiles(files, {
+      apiKey,
+      model: modelName,
+    });
+    const jsonlContent = entries.map((e) => JSON.stringify(e)).join('\n');
+
+    res.json({
+      ok: true,
+      files: entries.map((e) => ({ name: e.name, mediaType: e.mediaType })),
+      jsonlContent,
+      transcriptPreview: entries.map((e) => `${e.name}:\n${e.content}`).join('\n\n'),
+    });
+  } catch (err) {
+    console.error('[admin training] media transcribe:', err);
+    appendSystemLog('error', `Training media transcribe: ${err.message}`, { companyId: req.adminCompanyId });
+    res.status(500).json({ error: err.message });
+  }
+}
+
 // ─── Structured data (JSON array, CSV, or Excel — append to scraped_website.jsonl if not already present) ─────────────────
 async function saveStructured(req, res) {
   try {
@@ -252,6 +333,8 @@ module.exports = {
   scrapeSave,
   saveConversational,
   saveDocuments,
+  transcribeMedia,
+  saveMedia,
   saveStructured,
   getManual,
   setManual,

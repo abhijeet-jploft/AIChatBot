@@ -10,6 +10,7 @@ const { TRAIN_DATA_DIR } = require('./trainingLoader');
 const SCRAPED_FILE = 'scraped_website.jsonl';
 const MANUAL_FILE = 'manual_knowledge.txt';
 const UPLOADED_DOCS_DIR = 'uploaded_docs';
+const UPLOADED_MEDIA_DIR = 'uploaded_media';
 
 function getCompanyDir(companyId) {
   const dir = path.join(TRAIN_DATA_DIR, companyId);
@@ -85,6 +86,15 @@ function appendToScrapedOnlyIfNew(companyId, entries) {
   return { appended: toAppend.length, skipped: entries.length - toAppend.length };
 }
 
+function appendJsonlLinesOnlyIfNew(companyId, jsonlContent) {
+  const lines = String(jsonlContent || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (!lines.length) return { appended: 0, skipped: 0 };
+  return appendToScrapedOnlyIfNew(companyId, lines);
+}
+
 /**
  * Merge new scrape content into scraped_website.jsonl. Appends only lines not already present.
  */
@@ -151,6 +161,40 @@ function saveUploadedDoc(companyId, originalName, text) {
   };
   const { appended } = appendToScrapedOnlyIfNew(companyId, [line]);
   return appended ? SCRAPED_FILE : null;
+}
+
+function inferMediaType(mime = '', originalName = '') {
+  const m = String(mime || '').toLowerCase();
+  const n = String(originalName || '').toLowerCase();
+  if (m.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/.test(n)) return 'image';
+  if (m.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/.test(n)) return 'audio';
+  if (m.startsWith('video/') || /\.(mp4|mov|avi|mkv|webm|m4v)$/.test(n)) return 'video';
+  return 'media';
+}
+
+function saveUploadedMedia(companyId, file, transcript = '') {
+  const dir = path.join(getCompanyDir(companyId), UPLOADED_MEDIA_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const base = safeFileName(file?.originalname || 'media');
+  const stamp = Date.now();
+  const savedName = `${stamp}_${base}`;
+  const fullPath = path.join(dir, savedName);
+  fs.writeFileSync(fullPath, file?.buffer || Buffer.alloc(0));
+
+  const mediaType = inferMediaType(file?.mimetype, file?.originalname);
+  const content = String(transcript || '').trim() || `Media training asset uploaded: ${file?.originalname || savedName}`;
+  const entry = {
+    type: 'media',
+    mediaType,
+    name: file?.originalname || savedName,
+    file: `${UPLOADED_MEDIA_DIR}/${savedName}`,
+    mimetype: file?.mimetype || '',
+    content,
+    ts: new Date().toISOString(),
+  };
+  const { appended } = appendToScrapedOnlyIfNew(companyId, [entry]);
+  return { appended, savedName, mediaType };
 }
 
 /**
@@ -245,6 +289,8 @@ module.exports = {
   getCompanyDir,
   appendConversational,
   saveUploadedDoc,
+  saveUploadedMedia,
+  appendJsonlLinesOnlyIfNew,
   appendStructured,
   getManualKnowledge,
   setManualKnowledge,
@@ -254,4 +300,5 @@ module.exports = {
   SCRAPED_FILE,
   MANUAL_FILE,
   UPLOADED_DOCS_DIR,
+  UPLOADED_MEDIA_DIR,
 };
