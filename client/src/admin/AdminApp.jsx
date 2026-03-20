@@ -41,7 +41,6 @@ function AdminLayout({ children }) {
       label: 'Configuration',
       items: [
         { to: '/admin/settings', label: 'Settings' },
-        { to: '/admin/api-settings', label: 'API Settings' },
         { to: '/admin/voice-settings', label: 'Voice Settings' },
         { to: '/admin/theme', label: 'Theme' },
         { to: '/admin/modes', label: 'AI Mode' },
@@ -49,15 +48,21 @@ function AdminLayout({ children }) {
     },
   ];
 
-  const currentPageLabel = (
+  /** Pages reachable by URL but not listed in the sidebar (hidden from nav). */
+  const hiddenPageTitles = {
+    '/admin/api-settings': 'API Settings',
+  };
+
+  const currentPageLabel =
     navGroups
       .flatMap((group) => group.items)
       .find(
         (item) =>
           item.to === location.pathname ||
           (item.end === false && location.pathname.startsWith(item.to + '/'))
-      )?.label || 'Dashboard'
-  );
+      )?.label ||
+    hiddenPageTitles[location.pathname] ||
+    'Dashboard';
 
   if (loading) {
     return (
