@@ -3,94 +3,55 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Embed widget — iframe demo</title>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet" />
+  <title>Chat embed host</title>
   <style>
-    * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; }
-    body {
-      font-family: 'Outfit', system-ui, sans-serif;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-      background: #f4f4f5;
-      color: #18181b;
-    }
-    .bar {
-      flex-shrink: 0;
-      padding: 0.75rem 1rem;
-      background: #fff;
-      border-bottom: 1px solid #e4e4e7;
-      font-size: 0.875rem;
-    }
-    .bar strong { color: #4f46e5; }
-    .bar code { font-size: 0.8rem; word-break: break-all; }
-    .frame-wrap {
-      flex: 1;
-      min-height: 0;
-      position: relative;
-      background: #fff;
-    }
-    .frame-wrap iframe {
-      position: absolute;
+    html, body { margin: 0; height: 100%; background: #0b1220; }
+    #frame-wrap {
+      position: fixed;
       inset: 0;
+      display: none;
+    }
+    #frame-wrap.show { display: block; }
+    iframe {
       width: 100%;
       height: 100%;
       border: 0;
+      display: block;
+      background: transparent;
     }
-    pre {
-      margin: 0.5rem 0 0;
-      padding: 0.75rem;
-      background: #0f172a;
+    #help {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       color: #e2e8f0;
+      padding: 1.5rem;
+      max-width: 42rem;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+    #help h1 { font-size: 1.125rem; margin: 0 0 0.75rem; color: #fff; }
+    #help p { margin: 0 0 0.75rem; font-size: 0.875rem; color: #94a3b8; }
+    #help code {
+      font-size: 0.8rem;
+      background: #1e293b;
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      color: #bae6fd;
+      word-break: break-all;
+    }
+    #help .box {
+      background: #111827;
+      border: 1px solid #334155;
       border-radius: 8px;
-      overflow-x: auto;
-      font-size: 0.75rem;
-      line-height: 1.45;
+      padding: 0.75rem 1rem;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
     }
   </style>
 </head>
 <body>
-  <div class="bar">
-    <strong>Iframe-only widget demo.</strong> Prefer the <strong>unique embed URL</strong> from Admin → Settings (slug + secret token):
-    <code style="background:#f4f4f5;padding:0.15rem 0.35rem;border-radius:4px;">/embed/your-company-slug/64-char-secret</code>
-    — same host as the API serves <code>chat-widget.js</code>.
-    Legacy query form: <code>embed-widget-frame.html?companyId=…</code> (optional <code>apiKey</code> as <code>X-Embed-Api-Key</code>).
-    <pre><code>&lt;iframe
-  src="https://your-app.com/embed/your-slug/your-secret-token"
-  style="width:100%;height:600px;border:0;"
-  title="Chat"&gt;&lt;/iframe&gt;</code></pre>
-    <div style="margin-top:0.5rem;color:#71717a;font-size:0.8rem;">
-      Current iframe URL (use <code>?embed=/embed/slug/token</code> from Settings, or legacy query params):
-    </div>
-    <code id="frame-url"></code>
+  <div id="help"></div>
+  <div id="frame-wrap" aria-hidden="true">
+    <iframe src="/jp-loft?apiKey=ba6d20d0722f560415ed0f6c1e0dcba4bb429aad3f7dff237a28029d12a30a9a&companyId=_JP_Loft" title="Chat" style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483646;" allow="clipboard-write" loading="lazy"></iframe>
   </div>
-  <div class="frame-wrap">
-    <iframe id="embed-frame" title="Chat widget"></iframe>
-  </div>
-  <script>
-    (function () {
-      var params = new URLSearchParams(window.location.search);
-      var embedPath = params.get('embed');
-      var src;
-      if (embedPath && embedPath.indexOf('/embed/') === 0) {
-        src = window.location.origin + embedPath.split('?')[0];
-      } else {
-        var base = window.location.origin + '/embed-widget-frame.html';
-        if (!params.has('companyId') && !params.has('company_id')) {
-          params.set('companyId', '_JP_Loft');
-        }
-        if (!params.has('apiKey') && !params.has('api_key')) {
-          params.set('apiKey', '');
-        }
-        if (!params.has('companyName') && !params.has('company_name')) {
-          params.set('companyName', 'JP Loft');
-        }
-        src = base + '?' + params.toString();
-      }
-      document.getElementById('embed-frame').src = src;
-      document.getElementById('frame-url').textContent = src;
-    })();
-  </script>
+ 
 </body>
 </html>

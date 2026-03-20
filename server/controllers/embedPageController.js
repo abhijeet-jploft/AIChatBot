@@ -1,8 +1,8 @@
 const pool = require('../db/index');
 
 /**
- * GET /embed/:slug/:token
- * Unique public URL per company: slug (from company name) + opaque secret token.
+ * GET /embed/:slug/:token?companyId=...
+ * Requires query companyId to match the chatbot row (with slug + token). Otherwise 404.
  * Serves minimal HTML that loads chat-widget.js with JPLoftChatConfig (apiKey = token for X-Embed-Api-Key).
  */
 async function renderEmbedPage(req, res) {
@@ -24,6 +24,10 @@ async function renderEmbedPage(req, res) {
       return res.status(404).type('text/plain').send('Not found');
     }
     const row = rows[0];
+    const companyIdParam = String(req.query.companyId || req.query.company_id || '').trim();
+    if (!companyIdParam || companyIdParam !== row.company_id) {
+      return res.status(404).type('text/plain').send('Not found');
+    }
     const host = req.get('host') || 'localhost';
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
     const apiUrl = `${proto}://${host}/api`;

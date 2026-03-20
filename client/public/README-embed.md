@@ -1,5 +1,17 @@
 # Embeddable Chat Widget
 
+## Host page URL (iframe-friendly)
+
+On your deployed app (same host as `/api`):
+
+`https://your-host/<embed_slug>?apiKey=<embed_secret>&companyId=<company_folder_id>`
+
+Both **apiKey** and **companyId** are required. The host page loads an iframe to `/embed/<slug>/<secret>?companyId=...`, which returns 404 if `companyId` does not match that embed.
+
+Vite dev (port 7001) and Express both support the `/<embed_slug>` path.
+
+---
+
 Use the widget on any website with a single script tag (like DataTables).
 
 ## Quick start

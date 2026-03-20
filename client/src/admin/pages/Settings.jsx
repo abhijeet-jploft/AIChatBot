@@ -224,13 +224,33 @@ export default function Settings() {
 
             {embed?.embedPath && (
               <div className="mb-3 p-3 rounded-3" style={{ ...cardStyle, background: 'var(--chat-bg)' }}>
-                <div className="fw-semibold mb-2" style={headingStyle}>Website embed (unique URL)</div>
+                <div className="fw-semibold mb-2" style={headingStyle}>Website embed</div>
                 <p className="small mb-2" style={mutedStyle}>
-                  Public widget URL uses a name-based slug and a unique secret token (stored server-side). Use this in an iframe or the embed demo.
+                  Third‑party iframe: use <code>/{embed.slug}?apiKey=…&amp;companyId=…</code>. Both parameters are <strong>required</strong> (embed secret + your company / train_data id). Omitting either disables the widget.
                 </p>
                 <div className="small mb-1" style={labelStyle}>Slug</div>
                 <code className="small d-block mb-2" style={{ wordBreak: 'break-all' }}>{embed.slug}</code>
-                <div className="small mb-1" style={labelStyle}>Full URL</div>
+                <div className="small mb-1" style={labelStyle}>Host page URL (iframe or new tab)</div>
+                <div className="input-group input-group-sm mb-2">
+                  <input
+                    type="text"
+                    readOnly
+                    className="form-control font-monospace"
+                    style={{ fontSize: '0.8rem' }}
+                    value={embed.slugHostUrl || `${getEmbedAppOrigin()}${embed.slugHostPath || ''}`}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => {
+                      const v = embed.slugHostUrl || `${getEmbedAppOrigin()}${embed.slugHostPath || ''}`;
+                      navigator.clipboard.writeText(v).then(() => showToast('Host URL copied', 'success')).catch(() => {});
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <div className="small mb-1" style={labelStyle}>Direct chat URL (inner)</div>
                 <div className="input-group input-group-sm mb-2">
                   <input
                     type="text"
@@ -252,22 +272,25 @@ export default function Settings() {
                 </div>
                 {!embed.embedUrl && (
                   <p className="small mb-2" style={mutedStyle}>
-                    Set <code>PUBLIC_APP_URL</code> on the server for a canonical URL in API responses. Otherwise the field uses <code>VITE_API_URL</code> origin (without <code>/api</code>) or this page&apos;s origin.
+                    Set <code>PUBLIC_APP_URL</code> on the server for canonical URLs. Otherwise values use <code>VITE_API_URL</code> origin (without <code>/api</code>) or this page&apos;s origin.
                   </p>
                 )}
-                <div className="small mb-1" style={labelStyle}>Iframe demo</div>
-                <p className="small mb-1" style={mutedStyle}>
-                  Open <code>/embed-widget-iframe-demo.html?embed={encodeURIComponent(embed.embedPath)}</code> on the chat app host.
-                </p>
+                <div className="small mb-1" style={labelStyle}>Full-page iframe (customer site)</div>
+                <textarea
+                  readOnly
+                  className="form-control font-monospace mb-2"
+                  style={{ fontSize: '0.75rem', minHeight: '4.5rem' }}
+                  value={embed.iframeHostSnippet || ''}
+                />
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-primary"
+                  className="btn btn-sm btn-outline-primary me-2"
                   onClick={() => {
-                    const q = `${getEmbedAppOrigin()}/embed-widget-iframe-demo.html?embed=${encodeURIComponent(embed.embedPath)}`;
-                    window.open(q, '_blank', 'noopener,noreferrer');
+                    const u = embed.slugHostUrl || `${getEmbedAppOrigin()}${embed.slugHostPath || ''}`;
+                    window.open(u, '_blank', 'noopener,noreferrer');
                   }}
                 >
-                  Open iframe demo (new tab)
+                  Open host page (new tab)
                 </button>
               </div>
             )}

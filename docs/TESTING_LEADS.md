@@ -39,7 +39,7 @@ Use either:
 - **Main app:**  
   `http://localhost:5173` (or your client URL). Default company is `_JP_Loft`.
 - **Embed demo:**  
-  `http://localhost:5173/embed-demo.html` (or where you serve `embed-demo.html`). It uses `companyId: '_JP_Loft'` in `JPLoftChatConfig`.
+  Host page: `http://localhost:7001/<embed_slug>?apiKey=<embed_secret>&companyId=<folder_id>` — both query params are required.
 
 So in both cases, leads will be stored for company **`_JP_Loft`**.
 
