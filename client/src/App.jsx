@@ -260,8 +260,6 @@ export default function App() {
     isWebsiteView && !initialChatState?.sessionId ? false : (initialChatState?.autoPopupHandled ?? true)
   );
   const [openingMessageShown, setOpeningMessageShown] = useState(() => initialChatState?.openingMessageShown ?? false);
-  const [hasOpenedWidgetOnce, setHasOpenedWidgetOnce] = useState(false);
-  const [isFirstOpenPinned, setIsFirstOpenPinned] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
@@ -630,10 +628,9 @@ export default function App() {
       setMessages([{ role: 'assistant', content: OPENING_MESSAGE }]);
       setOpeningMessageShown(true);
     }
-    if (!hasOpenedWidgetOnce) setIsFirstOpenPinned(true);
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
     setAutoPopupHandled(true);
-  }, [isWebsiteView, widgetActivated, autoPopupHandled, messages.length, openingMessageShown, hasOpenedWidgetOnce]);
+  }, [isWebsiteView, widgetActivated, autoPopupHandled, messages.length, openingMessageShown]);
 
   // ── Resize ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -896,24 +893,15 @@ export default function App() {
       setMessages([{ role: 'assistant', content: OPENING_MESSAGE }]);
       setOpeningMessageShown(true);
     }
-    if (!hasOpenedWidgetOnce) setIsFirstOpenPinned(true);
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
   };
 
   const handleCloseWidget = () => {
-    if (isFirstOpenPinned) {
-      setIsFirstOpenPinned(false);
-      setHasOpenedWidgetOnce(true);
-    }
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_CLOSED);
   };
 
   const handleMaximizeWidget = () => {
     setCurrentPage('chat');
-    if (isFirstOpenPinned) {
-      setIsFirstOpenPinned(false);
-      setHasOpenedWidgetOnce(true);
-    }
     setChatViewMode(CHAT_VIEW_MODES.FULL_PAGE);
   };
 
@@ -1015,18 +1003,7 @@ export default function App() {
   };
 
   const panelStyle = isWidgetOpen && !isSmallScreen ? (() => {
-    if (isFirstOpenPinned) {
-      return { left: '24px', top: '24px', right: 'auto', bottom: 'auto' };
-    }
-    const { width, height } = getViewport();
-    const gap = 12;
-    const panelW = Math.min(370, width - 48);
-    const panelH = Math.min(610, height - 128);
-    const btnRight = widgetButtonPos.x + WIDGET_BUTTON_SIZE;
-    const btnTop = widgetButtonPos.y;
-    const bottom = Math.min(height - panelH - 24, Math.max(24, height - btnTop + gap));
-    const right = Math.max(24, Math.min(width - panelW - 24, width - btnRight));
-    return { bottom: `${bottom}px`, right: `${right}px`, left: 'auto', top: 'auto' };
+    return { left: '24px', top: '24px', right: 'auto', bottom: 'auto' };
   })() : undefined;
 
   if (isFullPage) {
