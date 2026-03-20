@@ -34,6 +34,13 @@ function normalizeVoiceGenderInput(value) {
   return null;
 }
 
+function normalizeAiProvider(value) {
+  if (value === undefined) return undefined;
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'anthropic' || normalized === 'gemini') return normalized;
+  return null;
+}
+
 function getCompanyCustomVoice(company) {
   const voiceId = String(company?.voice_custom_id || '').trim();
   if (!voiceId) return null;
@@ -108,6 +115,25 @@ function buildEmbedPayload(company) {
   };
 }
 
+function buildAiPayload(company) {
+  const provider = String(company?.ai_provider || 'anthropic').toLowerCase() === 'gemini' ? 'gemini' : 'anthropic';
+  const model = String(company?.ai_model || '').trim() || null;
+  const hasAnthropicKey = Boolean(String(company?.anthropic_api_key || '').trim());
+  const hasGeminiKey = Boolean(String(company?.gemini_api_key || '').trim());
+  return {
+    provider,
+    model,
+    hasAnthropicKey,
+    hasGeminiKey,
+    hasElevenlabsKey: Boolean(String(company?.elevenlabs_api_key || '').trim()),
+    fallbackAnthropicEnv: Boolean(process.env.ANTHROPIC_API_KEY),
+    fallbackGeminiEnv: Boolean(process.env.GEMINI_API_KEY),
+    fallbackElevenlabsEnv: Boolean(process.env.ELEVENLABS_API_KEY),
+    fallbackAnthropicModel: process.env.ANTHROPIC_MODEL || null,
+    fallbackGeminiModel: process.env.GEMINI_MODEL || null,
+  };
+}
+
 async function getSettings(req, res) {
   try {
     const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
@@ -122,6 +148,7 @@ async function getSettings(req, res) {
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
       aiMode: modeCatalog.active,
+      ai: buildAiPayload(company),
       leadNotifications: {
         emailEnabled: Boolean(company.lead_email_notifications_enabled),
         email: company.lead_notification_email || null,
@@ -175,7 +202,12 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
   try {
-    const { displayName, iconUrl, greetingMessage, aiMode, theme, leadNotifications, voice, escalation, safety, language } = req.body;
+    const { displayName, iconUrl, greetingMessage, aiMode, ai, theme, leadNotifications, voice, escalation, safety, language } = req.body;
+    const normalizedAiProvider = normalizeAiProvider(ai?.provider);
+    if (ai?.provider !== undefined && !normalizedAiProvider) {
+      return res.status(400).json({ error: 'Invalid ai provider. Allowed values: anthropic, gemini' });
+    }
+
 
     if (aiMode !== undefined && !isValidConversationModeId(aiMode)) {
       return res.status(400).json({ error: 'Invalid aiMode value' });
@@ -233,6 +265,11 @@ async function updateSettings(req, res) {
       icon_url: iconUrl !== undefined ? iconUrl : undefined,
       greeting_message: greetingMessage !== undefined ? greetingMessage : undefined,
       ai_mode: aiMode !== undefined ? normalizeConversationModeId(aiMode) : undefined,
+      ai_provider: normalizedAiProvider !== undefined ? normalizedAiProvider : undefined,
+      ai_model: ai?.model !== undefined ? String(ai.model || '').trim() || null : undefined,
+      anthropic_api_key: ai?.anthropicApiKey !== undefined ? String(ai.anthropicApiKey || '').trim() || null : undefined,
+      gemini_api_key: ai?.geminiApiKey !== undefined ? String(ai.geminiApiKey || '').trim() || null : undefined,
+      elevenlabs_api_key: ai?.elevenlabsApiKey !== undefined ? String(ai.elevenlabsApiKey || '').trim() || null : undefined,
       theme_primary_color: theme?.primaryColor !== undefined ? theme.primaryColor : undefined,
       theme_primary_dark_color: theme?.primaryDarkColor !== undefined ? theme.primaryDarkColor : undefined,
       theme_secondary_color: theme?.secondaryColor !== undefined ? theme.secondaryColor : undefined,
@@ -305,6 +342,7 @@ async function updateSettings(req, res) {
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
       aiMode: modeCatalog.active,
+      ai: buildAiPayload(company),
       leadNotifications: {
         emailEnabled: Boolean(company.lead_email_notifications_enabled),
         email: company.lead_notification_email || null,
@@ -428,6 +466,7 @@ async function previewVoice(req, res) {
       });
 
     const voice = await synthesizeTextResponse(previewText, {
+      apiKey: company?.elevenlabs_api_key || null,
       gender,
       profile,
       customVoiceId: customVoice?.voiceId,
@@ -507,6 +546,7 @@ async function trainCustomVoice(req, res) {
     }
 
     const trainedVoice = await createCustomVoiceFromSamples({
+      apiKey: company?.elevenlabs_api_key || null,
       name: voiceName,
       gender: voiceGender,
       files: audioFiles,

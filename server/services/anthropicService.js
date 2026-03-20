@@ -8,9 +8,11 @@ const {
   normalizeConversationModeId,
 } = require('./conversationModes');
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+function getAnthropicClient(apiKey) {
+  return new Anthropic({
+    apiKey: apiKey || process.env.ANTHROPIC_API_KEY,
+  });
+}
 
 const BASE_SYSTEM_PROMPT =
   'You are a helpful AI sales assistant. You represent the company professionally, ' +
@@ -110,7 +112,7 @@ function buildCachedMessages(messages) {
  */
 async function sendMessage(companyId, messages, options = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
-  const { modeId: requestedModeId, modeContext: providedModeContext, safetyConfig, ...anthropicOptions } = options || {};
+  const { modeId: requestedModeId, modeContext: providedModeContext, safetyConfig, apiKey, model, ...anthropicOptions } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
   const modeContext = providedModeContext || buildModeContext({ modeId, latestUserMessage, messages });
 
@@ -119,14 +121,15 @@ async function sendMessage(companyId, messages, options = {}) {
   }
 
   const params = {
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+    model: model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 1024,
     system: buildSystemBlocks(companyId, latestUserMessage, modeId, modeContext),
     messages: buildCachedMessages(messages),
     ...anthropicOptions,
   };
 
-  const response = await anthropic.messages.create(params);
+  const client = getAnthropicClient(apiKey);
+  const response = await client.messages.create(params);
   const textBlock = response.content.find((b) => b.type === 'text');
   const modelText = textBlock ? textBlock.text : '';
   return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig });

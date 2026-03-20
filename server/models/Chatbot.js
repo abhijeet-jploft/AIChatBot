@@ -27,8 +27,13 @@ async function findByCompanyId(companyId) {
     `SELECT
       c.company_id,
       ch.ai_mode,
+      ch.ai_provider,
+      ch.ai_model,
+      ch.anthropic_api_key,
+      ch.gemini_api_key,
       ch.agent_paused,
       vo.voice_mode_enabled,
+      vo.elevenlabs_api_key,
       vo.voice_gender,
       vo.voice_profile,
       vo.voice_custom_id,

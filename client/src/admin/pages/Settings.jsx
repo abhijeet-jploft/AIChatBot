@@ -163,6 +163,7 @@ export default function Settings() {
         }),
       });
       if (!res.ok) throw new Error('Save failed');
+      await res.json();
       showToast('Settings saved', 'success');
     } catch {
       showToast('Failed to save settings', 'error');

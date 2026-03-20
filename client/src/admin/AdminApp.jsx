@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
 import Conversations from './pages/Conversations';
 import Settings from './pages/Settings';
+import ApiSettings from './pages/ApiSettings';
 import VoiceSettings from './pages/VoiceSettings';
 import Theme from './pages/Theme';
 import ConversationMode from './pages/ConversationMode';
@@ -40,6 +41,7 @@ function AdminLayout({ children }) {
       label: 'Configuration',
       items: [
         { to: '/admin/settings', label: 'Settings' },
+        { to: '/admin/api-settings', label: 'API Settings' },
         { to: '/admin/voice-settings', label: 'Voice Settings' },
         { to: '/admin/theme', label: 'Theme' },
         { to: '/admin/modes', label: 'AI Mode' },
@@ -181,6 +183,18 @@ export default function AdminApp() {
             token ? (
               <AdminLayout>
                 <Settings />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="api-settings"
+          element={
+            token ? (
+              <AdminLayout>
+                <ApiSettings />
               </AdminLayout>
             ) : (
               <Navigate to="/admin/login" replace />

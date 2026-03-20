@@ -1,4 +1,5 @@
-const { sendMessage } = require('../services/anthropicService');
+const { sendMessage: sendAnthropicMessage } = require('../services/anthropicService');
+const { sendMessage: sendGeminiMessage } = require('../services/geminiService');
 const { captureLeadFromConversation } = require('../services/leadCaptureService');
 const { sendNewLeadNotification } = require('../services/leadNotificationService');
 const { record: recordActiveVisitor, broadcastAlert } = require('../services/activeVisitorsService');
@@ -29,6 +30,12 @@ async function postMessage(req, res) {
     let selectedModeId = null;
     let safetyConfig = {};
     let escalationConfig = {};
+    let aiConfig = {
+      provider: 'anthropic',
+      model: null,
+      anthropicApiKey: null,
+      geminiApiKey: null,
+    };
     let voiceConfig = {
       enabled: false,
       gender: 'female',
@@ -44,6 +51,12 @@ async function postMessage(req, res) {
       await Chatbot.findOrCreate(companyId);
       const chatbot = await Chatbot.findByCompanyId(companyId);
       selectedModeId = chatbot?.ai_mode || null;
+      aiConfig = {
+        provider: String(chatbot?.ai_provider || 'anthropic').toLowerCase(),
+        model: chatbot?.ai_model || null,
+        anthropicApiKey: chatbot?.anthropic_api_key || null,
+        geminiApiKey: chatbot?.gemini_api_key || null,
+      };
 
       safetyConfig = {
         blockTopicsEnabled: Boolean(chatbot?.safety_block_topics_enabled),
@@ -72,6 +85,7 @@ async function postMessage(req, res) {
 
       voiceConfig = {
         enabled: Boolean(chatbot?.voice_mode_enabled),
+        elevenlabsApiKey: chatbot?.elevenlabs_api_key || null,
         responseEnabled: Boolean(chatbot?.voice_response_enabled !== false),
         gender: normalizeVoiceGender(chatbot?.voice_gender),
         profile: normalizeVoiceProfile(chatbot?.voice_profile) || 'professional',
@@ -104,6 +118,7 @@ async function postMessage(req, res) {
         if (voiceConfig.enabled && voiceConfig.responseEnabled) {
           try {
             pausedVoice = await synthesizeTextResponse(pausedMessage, {
+              apiKey: voiceConfig.elevenlabsApiKey,
               gender: voiceConfig.gender,
               profile: voiceConfig.profile,
               customVoiceId: voiceConfig.customVoiceId,
@@ -139,12 +154,15 @@ async function postMessage(req, res) {
       appendChatLog('error', `Chat DB pre-write: ${dbErr.message}`, { sessionId: sid, companyId });
     }
 
-    const response = await sendMessage(companyId, messages, { modeId: selectedModeId, safetyConfig });
+    const response = aiConfig.provider === 'gemini'
+      ? await sendGeminiMessage(companyId, messages, { modeId: selectedModeId, safetyConfig, model: aiConfig.model, apiKey: aiConfig.geminiApiKey })
+      : await sendAnthropicMessage(companyId, messages, { modeId: selectedModeId, safetyConfig, model: aiConfig.model, apiKey: aiConfig.anthropicApiKey });
     let voice = null;
 
     if (voiceConfig.enabled && voiceConfig.responseEnabled) {
       try {
         voice = await synthesizeTextResponse(response, {
+          apiKey: voiceConfig.elevenlabsApiKey,
           gender: voiceConfig.gender,
           profile: voiceConfig.profile,
           customVoiceId: voiceConfig.customVoiceId,

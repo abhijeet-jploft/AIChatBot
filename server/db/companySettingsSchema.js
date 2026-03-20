@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS chat_settings (
   icon_url TEXT,
   greeting_message TEXT,
   ai_mode VARCHAR(64) NOT NULL DEFAULT 'mixed_mode',
+  ai_provider VARCHAR(32) NOT NULL DEFAULT 'anthropic',
+  ai_model VARCHAR(128),
+  anthropic_api_key TEXT,
+  gemini_api_key TEXT,
   agent_paused BOOLEAN NOT NULL DEFAULT FALSE
 );
 
@@ -52,6 +56,7 @@ CREATE TABLE IF NOT EXISTS voice_settings (
   company_id VARCHAR(255) PRIMARY KEY REFERENCES chatbots(company_id) ON DELETE CASCADE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   voice_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  elevenlabs_api_key TEXT,
   voice_gender VARCHAR(10) NOT NULL DEFAULT 'female',
   voice_profile VARCHAR(20) NOT NULL DEFAULT 'professional',
   voice_custom_id TEXT,

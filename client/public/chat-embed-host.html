@@ -102,11 +102,25 @@
       var base = window.location.origin;
       var inner = base + '/embed/' + encodeURIComponent(embedSlug) + '/' + encodeURIComponent(apiKey) +
         '?companyId=' + encodeURIComponent(companyId);
-      frame.src = inner;
-      help.style.display = 'none';
-      wrap.classList.add('show');
-      wrap.setAttribute('aria-hidden', 'false');
-      document.title = 'Chat · ' + embedSlug;
+
+      fetch(inner, { method: 'GET', credentials: 'omit' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('invalid-credentials');
+          frame.src = inner;
+          help.style.display = 'none';
+          wrap.classList.add('show');
+          wrap.setAttribute('aria-hidden', 'false');
+          document.title = 'Chat · ' + embedSlug;
+        })
+        .catch(function () {
+          help.innerHTML =
+            '<h1>Invalid embed credentials</h1>' +
+            '<p>The provided <code>apiKey</code>, <code>companyId</code>, or slug is invalid.</p>' +
+            '<div class="box"><code>http://' + escapeHtml(window.location.host) + '/' +
+            escapeHtml(embedSlug) + '?apiKey=' + escapeHtml('YOUR_EMBED_SECRET') +
+            '&amp;companyId=' + escapeHtml('_YourCompany') + '</code></div>' +
+            '<p>Use the exact values from <strong>Admin → Settings</strong>.</p>';
+        });
     })();
   </script>
 </body>

@@ -248,7 +248,7 @@ function extractElevenLabsErrorMessage(payload, fallback) {
 }
 
 async function createCustomVoiceFromSamples(options = {}) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = String(options.apiKey || process.env.ELEVENLABS_API_KEY || '').trim();
   if (!apiKey) {
     const err = new Error('ELEVENLABS_API_KEY is not set. Add it in .env to train a custom voice.');
     err.status = 400;
@@ -376,7 +376,7 @@ function sanitizeTextForSpeech(text, options = {}) {
 }
 
 async function synthesizeTextResponse(text, options = {}) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = String(options.apiKey || process.env.ELEVENLABS_API_KEY || '').trim();
   if (!apiKey) {
     console.warn('[ElevenLabs] ELEVENLABS_API_KEY is not set. Response voice will not be generated. Set it in .env to enable TTS.');
     return null;

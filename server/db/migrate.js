@@ -278,6 +278,11 @@ async function tableExists(client, tableName) {
 
 async function ensureModuleSettingsTables(client) {
   await client.query(MODULE_SETTINGS_SCHEMA_SQL);
+  await client.query(`ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS ai_provider VARCHAR(32) NOT NULL DEFAULT 'anthropic'`);
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS ai_model VARCHAR(128)');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS anthropic_api_key TEXT');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS gemini_api_key TEXT');
+  await client.query('ALTER TABLE voice_settings ADD COLUMN IF NOT EXISTS elevenlabs_api_key TEXT');
 }
 
 async function splitMonolithicSettingsIntoModules(client) {
@@ -313,7 +318,17 @@ async function migrateLegacyChatbotSettingsToModules(client) {
   await client.query('DROP INDEX IF EXISTS idx_chatbots_embed_secret_unique');
 
   for (const sql of copyModuleSettingsFromSourceSql('chatbots')) {
-    await client.query(sql);
+    try {
+      await client.query(sql);
+    } catch (err) {
+      // Older deployments can have only a subset of legacy chatbot columns.
+      // Skip that module copy if its source columns do not exist.
+      if (err && err.code === '42703') {
+        console.warn(`[db] Skipping partial legacy copy due to missing column: ${err.message}`);
+        continue;
+      }
+      throw err;
+    }
   }
 
   for (const col of LEGACY_SETTINGS_COLUMNS) {

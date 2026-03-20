@@ -28,6 +28,10 @@ export default defineConfig({
           });
         },
       },
+      '/embed': {
+        target: 'http://localhost:7022',
+        changeOrigin: true,
+      },
     },
   },
 });

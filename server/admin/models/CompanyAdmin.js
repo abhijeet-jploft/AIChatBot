@@ -19,6 +19,7 @@ async function findByCompanyId(companyId) {
     `SELECT c.id, c.company_id, c.name, c.password_hash,
             ch.display_name, ch.icon_url, ch.greeting_message,
             ch.ai_mode,
+            ch.ai_provider, ch.ai_model, ch.anthropic_api_key, ch.gemini_api_key,
             th.theme_primary_color, th.theme_primary_dark_color,
             th.theme_secondary_color, th.theme_secondary_light_color,
             th.theme_header_background, th.theme_header_shadow, th.theme_header_text_color,
@@ -26,6 +27,7 @@ async function findByCompanyId(companyId) {
             ld.lead_notification_email,
             ch.agent_paused,
             vo.voice_mode_enabled,
+            vo.elevenlabs_api_key,
             vo.voice_gender,
             vo.voice_profile,
             vo.voice_custom_id,
@@ -92,6 +94,10 @@ async function updateSettings(companyId, {
   icon_url,
   greeting_message,
   ai_mode,
+  ai_provider,
+  ai_model,
+  anthropic_api_key,
+  gemini_api_key,
   theme_primary_color,
   theme_primary_dark_color,
   theme_secondary_color,
@@ -102,6 +108,7 @@ async function updateSettings(companyId, {
   lead_email_notifications_enabled,
   lead_notification_email,
   voice_mode_enabled,
+  elevenlabs_api_key,
   voice_gender,
   voice_profile,
   voice_custom_id,
@@ -147,6 +154,22 @@ async function updateSettings(companyId, {
   if (ai_mode !== undefined) {
     chatU.push(`ai_mode = $${i++}`);
     chatV.push(ai_mode);
+  }
+  if (ai_provider !== undefined) {
+    chatU.push(`ai_provider = $${i++}`);
+    chatV.push(ai_provider);
+  }
+  if (ai_model !== undefined) {
+    chatU.push(`ai_model = $${i++}`);
+    chatV.push(ai_model || null);
+  }
+  if (anthropic_api_key !== undefined) {
+    chatU.push(`anthropic_api_key = $${i++}`);
+    chatV.push(anthropic_api_key || null);
+  }
+  if (gemini_api_key !== undefined) {
+    chatU.push(`gemini_api_key = $${i++}`);
+    chatV.push(gemini_api_key || null);
   }
 
   const themeUpdates = [];
@@ -199,6 +222,10 @@ async function updateSettings(companyId, {
   if (voice_mode_enabled !== undefined) {
     voiceUpdates.push(`voice_mode_enabled = $${vi++}`);
     voiceValues.push(Boolean(voice_mode_enabled));
+  }
+  if (elevenlabs_api_key !== undefined) {
+    voiceUpdates.push(`elevenlabs_api_key = $${vi++}`);
+    voiceValues.push(String(elevenlabs_api_key || '').trim() || null);
   }
   if (voice_gender !== undefined) {
     voiceUpdates.push(`voice_gender = $${vi++}`);
