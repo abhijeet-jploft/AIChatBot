@@ -2,6 +2,11 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const pool = require('./index');
+const {
+  MODULE_SETTINGS_SCHEMA_SQL,
+  MODULE_SETTINGS_TABLE_NAMES,
+  LEGACY_SETTINGS_COLUMNS,
+} = require('./companySettingsSchema');
 
 const TRAIN_DATA_DIR = path.join(__dirname, '../../train_data');
 
@@ -41,55 +46,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 CREATE INDEX IF NOT EXISTS idx_sessions_company   ON chat_sessions(company_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_session   ON chat_messages(session_id, created_at ASC);
 
--- Admin: company auth and settings
+-- Admin: login only on chatbots; config lives in module *settings tables
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS password_hash TEXT;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS icon_url TEXT;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS greeting_message TEXT;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS ai_mode VARCHAR(64) NOT NULL DEFAULT 'mixed_mode';
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_primary_color VARCHAR(7);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_primary_dark_color VARCHAR(7);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_secondary_color VARCHAR(7);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_secondary_light_color VARCHAR(7);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_header_background VARCHAR(255);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_header_shadow VARCHAR(255);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS theme_header_text_color VARCHAR(7);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_email_notifications_enabled BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS lead_notification_email TEXT;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS agent_paused BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_gender VARCHAR(10) NOT NULL DEFAULT 'female';
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_profile VARCHAR(20) NOT NULL DEFAULT 'professional';
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_custom_id TEXT;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_custom_name VARCHAR(255);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_custom_gender VARCHAR(10);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_ignore_emoji BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS voice_response_enabled BOOLEAN NOT NULL DEFAULT TRUE;
-
--- 4.5.10 Escalation settings (human intervention triggers/actions)
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_user_requests_human BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_ai_confidence_low BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_urgent_keywords BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_angry_sentiment BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_trigger_high_value_lead BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_action_instant_notification BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_action_auto_schedule_meeting BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_action_chat_takeover_alert BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS escalation_high_value_lead_score_threshold INTEGER NOT NULL DEFAULT 75;
-
--- 4.5.11 Safety & compliance controls
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_block_topics_enabled BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_block_topics TEXT;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_prevent_internal_data BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_restrict_database_price_exposure BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_disable_competitor_comparisons BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS safety_restrict_file_sharing BOOLEAN NOT NULL DEFAULT TRUE;
-
--- 4.8 Settings: language preferences (basic storage for now)
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_primary VARCHAR(50) NOT NULL DEFAULT 'English';
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_multi_enabled BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_auto_detect_enabled BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS language_manual_switch_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -166,12 +124,6 @@ CREATE TABLE IF NOT EXISTS lead_activities (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_lead_activities_lead ON lead_activities(lead_id, created_at DESC);
-
--- Unique public embed path: /embed/{embed_slug}/{embed_secret} (slug from company name, secret = opaque token)
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS embed_slug VARCHAR(255);
-ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS embed_secret VARCHAR(128);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_chatbots_embed_slug_unique ON chatbots(embed_slug) WHERE embed_slug IS NOT NULL AND embed_slug <> '';
-CREATE UNIQUE INDEX IF NOT EXISTS idx_chatbots_embed_secret_unique ON chatbots(embed_secret) WHERE embed_secret IS NOT NULL AND embed_secret <> '';
 `;
 
 // ─── Chatbot seeder ───────────────────────────────────────────────────────────
@@ -211,9 +163,180 @@ function slugifyForEmbed(str) {
   return s || 'company';
 }
 
+/** @param {'chatbots'|'settings'|'company_settings'} source */
+function copyModuleSettingsFromSourceSql(source) {
+  const allowed = new Set(['chatbots', 'settings', 'company_settings']);
+  if (!allowed.has(source)) throw new Error(`Invalid settings copy source: ${source}`);
+  return [
+    `INSERT INTO chat_settings (company_id, display_name, icon_url, greeting_message, ai_mode, agent_paused)
+     SELECT company_id, display_name, icon_url, greeting_message, ai_mode, agent_paused FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       display_name = EXCLUDED.display_name,
+       icon_url = EXCLUDED.icon_url,
+       greeting_message = EXCLUDED.greeting_message,
+       ai_mode = EXCLUDED.ai_mode,
+       agent_paused = EXCLUDED.agent_paused,
+       updated_at = NOW()`,
+    `INSERT INTO theme_settings (
+       company_id, theme_primary_color, theme_primary_dark_color, theme_secondary_color, theme_secondary_light_color,
+       theme_header_background, theme_header_shadow, theme_header_text_color
+     )
+     SELECT company_id, theme_primary_color, theme_primary_dark_color, theme_secondary_color, theme_secondary_light_color,
+            theme_header_background, theme_header_shadow, theme_header_text_color FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       theme_primary_color = EXCLUDED.theme_primary_color,
+       theme_primary_dark_color = EXCLUDED.theme_primary_dark_color,
+       theme_secondary_color = EXCLUDED.theme_secondary_color,
+       theme_secondary_light_color = EXCLUDED.theme_secondary_light_color,
+       theme_header_background = EXCLUDED.theme_header_background,
+       theme_header_shadow = EXCLUDED.theme_header_shadow,
+       theme_header_text_color = EXCLUDED.theme_header_text_color,
+       updated_at = NOW()`,
+    `INSERT INTO lead_settings (company_id, lead_email_notifications_enabled, lead_notification_email)
+     SELECT company_id, lead_email_notifications_enabled, lead_notification_email FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       lead_email_notifications_enabled = EXCLUDED.lead_email_notifications_enabled,
+       lead_notification_email = EXCLUDED.lead_notification_email,
+       updated_at = NOW()`,
+    `INSERT INTO voice_settings (
+       company_id, voice_mode_enabled, voice_gender, voice_profile, voice_custom_id, voice_custom_name, voice_custom_gender,
+       voice_ignore_emoji, voice_response_enabled
+     )
+     SELECT company_id, voice_mode_enabled, voice_gender, voice_profile, voice_custom_id, voice_custom_name, voice_custom_gender,
+            voice_ignore_emoji, voice_response_enabled FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       voice_mode_enabled = EXCLUDED.voice_mode_enabled,
+       voice_gender = EXCLUDED.voice_gender,
+       voice_profile = EXCLUDED.voice_profile,
+       voice_custom_id = EXCLUDED.voice_custom_id,
+       voice_custom_name = EXCLUDED.voice_custom_name,
+       voice_custom_gender = EXCLUDED.voice_custom_gender,
+       voice_ignore_emoji = EXCLUDED.voice_ignore_emoji,
+       voice_response_enabled = EXCLUDED.voice_response_enabled,
+       updated_at = NOW()`,
+    `INSERT INTO escalation_settings (
+       company_id, escalation_trigger_user_requests_human, escalation_trigger_ai_confidence_low,
+       escalation_trigger_urgent_keywords, escalation_trigger_angry_sentiment, escalation_trigger_high_value_lead,
+       escalation_action_instant_notification, escalation_action_auto_schedule_meeting, escalation_action_chat_takeover_alert,
+       escalation_high_value_lead_score_threshold
+     )
+     SELECT company_id, escalation_trigger_user_requests_human, escalation_trigger_ai_confidence_low,
+            escalation_trigger_urgent_keywords, escalation_trigger_angry_sentiment, escalation_trigger_high_value_lead,
+            escalation_action_instant_notification, escalation_action_auto_schedule_meeting, escalation_action_chat_takeover_alert,
+            escalation_high_value_lead_score_threshold FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       escalation_trigger_user_requests_human = EXCLUDED.escalation_trigger_user_requests_human,
+       escalation_trigger_ai_confidence_low = EXCLUDED.escalation_trigger_ai_confidence_low,
+       escalation_trigger_urgent_keywords = EXCLUDED.escalation_trigger_urgent_keywords,
+       escalation_trigger_angry_sentiment = EXCLUDED.escalation_trigger_angry_sentiment,
+       escalation_trigger_high_value_lead = EXCLUDED.escalation_trigger_high_value_lead,
+       escalation_action_instant_notification = EXCLUDED.escalation_action_instant_notification,
+       escalation_action_auto_schedule_meeting = EXCLUDED.escalation_action_auto_schedule_meeting,
+       escalation_action_chat_takeover_alert = EXCLUDED.escalation_action_chat_takeover_alert,
+       escalation_high_value_lead_score_threshold = EXCLUDED.escalation_high_value_lead_score_threshold,
+       updated_at = NOW()`,
+    `INSERT INTO safety_settings (
+       company_id, safety_block_topics_enabled, safety_block_topics, safety_prevent_internal_data,
+       safety_restrict_database_price_exposure, safety_disable_competitor_comparisons, safety_restrict_file_sharing
+     )
+     SELECT company_id, safety_block_topics_enabled, safety_block_topics, safety_prevent_internal_data,
+            safety_restrict_database_price_exposure, safety_disable_competitor_comparisons, safety_restrict_file_sharing FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       safety_block_topics_enabled = EXCLUDED.safety_block_topics_enabled,
+       safety_block_topics = EXCLUDED.safety_block_topics,
+       safety_prevent_internal_data = EXCLUDED.safety_prevent_internal_data,
+       safety_restrict_database_price_exposure = EXCLUDED.safety_restrict_database_price_exposure,
+       safety_disable_competitor_comparisons = EXCLUDED.safety_disable_competitor_comparisons,
+       safety_restrict_file_sharing = EXCLUDED.safety_restrict_file_sharing,
+       updated_at = NOW()`,
+    `INSERT INTO language_settings (
+       company_id, language_primary, language_multi_enabled, language_auto_detect_enabled, language_manual_switch_enabled
+     )
+     SELECT company_id, language_primary, language_multi_enabled, language_auto_detect_enabled, language_manual_switch_enabled FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       language_primary = EXCLUDED.language_primary,
+       language_multi_enabled = EXCLUDED.language_multi_enabled,
+       language_auto_detect_enabled = EXCLUDED.language_auto_detect_enabled,
+       language_manual_switch_enabled = EXCLUDED.language_manual_switch_enabled,
+       updated_at = NOW()`,
+    `INSERT INTO embed_settings (company_id, embed_slug, embed_secret)
+     SELECT company_id, embed_slug, embed_secret FROM ${source}
+     ON CONFLICT (company_id) DO UPDATE SET
+       embed_slug = EXCLUDED.embed_slug,
+       embed_secret = EXCLUDED.embed_secret,
+       updated_at = NOW()`,
+  ];
+}
+
+async function tableExists(client, tableName) {
+  const { rows } = await client.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1`,
+    [tableName]
+  );
+  return rows.length > 0;
+}
+
+async function ensureModuleSettingsTables(client) {
+  await client.query(MODULE_SETTINGS_SCHEMA_SQL);
+}
+
+async function splitMonolithicSettingsIntoModules(client) {
+  // Prefer `settings` first; loop in case both legacy names exist.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let source = null;
+    if (await tableExists(client, 'settings')) source = 'settings';
+    else if (await tableExists(client, 'company_settings')) source = 'company_settings';
+    if (!source) break;
+
+    for (const sql of copyModuleSettingsFromSourceSql(source)) {
+      await client.query(sql);
+    }
+    await client.query(`DROP TABLE IF EXISTS ${source} CASCADE`);
+    console.log(`[db] Split monolithic ${source} into module settings tables`);
+  }
+}
+
+async function chatbotsHasLegacySettingsColumns(client) {
+  const { rows } = await client.query(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'chatbots' AND column_name = 'display_name'`
+  );
+  return rows.length > 0;
+}
+
+async function migrateLegacyChatbotSettingsToModules(client) {
+  const hasLegacy = await chatbotsHasLegacySettingsColumns(client);
+  if (!hasLegacy) return;
+
+  await client.query('DROP INDEX IF EXISTS idx_chatbots_embed_slug_unique');
+  await client.query('DROP INDEX IF EXISTS idx_chatbots_embed_secret_unique');
+
+  for (const sql of copyModuleSettingsFromSourceSql('chatbots')) {
+    await client.query(sql);
+  }
+
+  for (const col of LEGACY_SETTINGS_COLUMNS) {
+    await client.query(`ALTER TABLE chatbots DROP COLUMN IF EXISTS ${col}`);
+  }
+}
+
+async function ensureModuleSettingsRows(client) {
+  const allowed = new Set(MODULE_SETTINGS_TABLE_NAMES);
+  for (const table of MODULE_SETTINGS_TABLE_NAMES) {
+    if (!allowed.has(table)) throw new Error(`Invalid module settings table: ${table}`);
+    await client.query(
+      `INSERT INTO ${table} (company_id) SELECT company_id FROM chatbots ON CONFLICT (company_id) DO NOTHING`
+    );
+  }
+}
+
 async function backfillEmbedCredentials(client) {
   const { rows } = await client.query(
-    `SELECT company_id, name, display_name, embed_slug, embed_secret FROM chatbots`
+    `SELECT em.company_id, c.name, ch.display_name, em.embed_slug, em.embed_secret
+     FROM embed_settings em
+     JOIN chatbots c ON c.company_id = em.company_id
+     LEFT JOIN chat_settings ch ON ch.company_id = em.company_id`
   );
   for (const r of rows) {
     if (r.embed_slug && r.embed_secret) continue;
@@ -223,7 +346,7 @@ async function backfillEmbedCredentials(client) {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const clash = await client.query(
-        `SELECT 1 FROM chatbots WHERE embed_slug = $1 AND company_id <> $2`,
+        `SELECT 1 FROM embed_settings WHERE embed_slug = $1 AND company_id <> $2`,
         [slug, r.company_id]
       );
       if (!clash.rows.length) break;
@@ -231,7 +354,7 @@ async function backfillEmbedCredentials(client) {
     }
     const secret = crypto.randomBytes(32).toString('hex');
     await client.query(
-      `UPDATE chatbots SET embed_slug = $1, embed_secret = $2 WHERE company_id = $3`,
+      `UPDATE embed_settings SET embed_slug = $1, embed_secret = $2, updated_at = NOW() WHERE company_id = $3`,
       [slug, secret, r.company_id]
     );
   }
@@ -243,8 +366,15 @@ async function migrate() {
   try {
     await client.query(SCHEMA);
     console.log('[db] Schema ready');
+    await ensureModuleSettingsTables(client);
+    await splitMonolithicSettingsIntoModules(client);
+    console.log('[db] Module settings tables ready');
+    await migrateLegacyChatbotSettingsToModules(client);
+    console.log('[db] Legacy chatbots settings migrated (if any)');
     await syncChatbots(client);
     console.log('[db] Chatbots synced');
+    await ensureModuleSettingsRows(client);
+    console.log('[db] Module settings rows ensured');
     await backfillEmbedCredentials(client);
     console.log('[db] Embed paths ready');
   } finally {

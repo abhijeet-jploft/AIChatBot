@@ -14,19 +14,22 @@ async function getCompaniesList(req, res) {
     }
     const companyIds = companies.map((c) => c.id);
     const { rows } = await pool.query(
-      `SELECT company_id, display_name, icon_url, greeting_message,
-              theme_primary_color, theme_primary_dark_color,
-              theme_secondary_color, theme_secondary_light_color,
-              theme_header_background, theme_header_shadow, theme_header_text_color,
-              voice_mode_enabled,
-              voice_gender,
-              voice_profile,
-              voice_custom_id,
-              voice_custom_gender,
-              voice_ignore_emoji,
-              voice_response_enabled
-         FROM chatbots
-       WHERE company_id = ANY($1::text[])`,
+      `SELECT c.company_id, ch.display_name, ch.icon_url, ch.greeting_message,
+              th.theme_primary_color, th.theme_primary_dark_color,
+              th.theme_secondary_color, th.theme_secondary_light_color,
+              th.theme_header_background, th.theme_header_shadow, th.theme_header_text_color,
+              vo.voice_mode_enabled,
+              vo.voice_gender,
+              vo.voice_profile,
+              vo.voice_custom_id,
+              vo.voice_custom_gender,
+              vo.voice_ignore_emoji,
+              vo.voice_response_enabled
+         FROM chatbots c
+         INNER JOIN chat_settings ch ON ch.company_id = c.company_id
+         INNER JOIN theme_settings th ON th.company_id = c.company_id
+         INNER JOIN voice_settings vo ON vo.company_id = c.company_id
+       WHERE c.company_id = ANY($1::text[])`,
       [companyIds]
     );
     const dbMap = Object.fromEntries(rows.map((r) => [r.company_id, r]));

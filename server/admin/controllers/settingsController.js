@@ -350,9 +350,11 @@ async function updateSettings(req, res) {
 async function listCompanies(req, res) {
   try {
     const { rows } = await pool.query(
-      `SELECT company_id, name, display_name FROM chatbots
-       WHERE company_id != '_default'
-       ORDER BY name ASC`
+      `SELECT c.company_id, c.name, ch.display_name
+       FROM chatbots c
+       LEFT JOIN chat_settings ch ON ch.company_id = c.company_id
+       WHERE c.company_id != '_default'
+       ORDER BY c.name ASC`
     );
     res.json(rows.map((r) => ({
       companyId: r.company_id,

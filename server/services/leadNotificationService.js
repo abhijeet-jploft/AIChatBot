@@ -42,12 +42,14 @@ function formatLeadName(lead = {}) {
 async function getCompanyNotificationConfig(companyId) {
   const { rows } = await pool.query(
     `SELECT
-      company_id,
-      COALESCE(NULLIF(display_name, ''), name, company_id) AS company_name,
-      lead_email_notifications_enabled,
-      lead_notification_email
-     FROM chatbots
-     WHERE company_id = $1`,
+      c.company_id,
+      COALESCE(NULLIF(ch.display_name, ''), c.name, c.company_id) AS company_name,
+      ld.lead_email_notifications_enabled,
+      ld.lead_notification_email
+     FROM chatbots c
+     INNER JOIN chat_settings ch ON ch.company_id = c.company_id
+     INNER JOIN lead_settings ld ON ld.company_id = c.company_id
+     WHERE c.company_id = $1`,
     [companyId]
   );
 

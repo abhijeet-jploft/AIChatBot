@@ -13,9 +13,11 @@ async function renderEmbedPage(req, res) {
   }
   try {
     const { rows } = await pool.query(
-      `SELECT company_id, COALESCE(display_name, name) AS display_name
-       FROM chatbots
-       WHERE embed_slug = $1 AND embed_secret = $2`,
+      `SELECT c.company_id, COALESCE(ch.display_name, c.name) AS display_name
+       FROM embed_settings em
+       INNER JOIN chatbots c ON c.company_id = em.company_id
+       LEFT JOIN chat_settings ch ON ch.company_id = em.company_id
+       WHERE em.embed_slug = $1 AND em.embed_secret = $2`,
       [slug, token]
     );
     if (!rows.length) {
