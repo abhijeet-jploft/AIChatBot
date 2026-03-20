@@ -273,16 +273,17 @@ export default function App() {
   });
   const [chatViewMode, setChatViewMode] = useState(() => {
     const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
-    // Open from admin (URL has sessionId): always open maximized on chatbot side
-    if (isWebsiteView && initialChatState?.sessionId) return CHAT_VIEW_MODES.FULL_PAGE;
+    // By user request: "never open in full screen mode"
+    if (isWebsiteView && initialChatState?.sessionId) return CHAT_VIEW_MODES.WIDGET_OPEN;
     // On landing, always start closed so activation (6–10s / scroll / idle) runs
     if (isWebsiteView) return fallback;
     if (Object.values(CHAT_VIEW_MODES).includes(initialChatState?.chatViewMode)) {
-      return initialChatState.chatViewMode;
+      return initialChatState.chatViewMode === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : initialChatState.chatViewMode;
     }
     try {
       const stored = localStorage.getItem(CHAT_VIEW_MODE_KEY);
-      return Object.values(CHAT_VIEW_MODES).includes(stored) ? stored : fallback;
+      const mode = Object.values(CHAT_VIEW_MODES).includes(stored) ? stored : fallback;
+      return mode === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : mode;
     } catch {
       return fallback;
     }
@@ -555,11 +556,11 @@ export default function App() {
       setCompanyId(chatState.companyId || DEFAULT_COMPANY_ID);
       setMessages(Array.isArray(chatState.messages) ? chatState.messages : []);
       setSessionId(chatState.sessionId || null);
-      setChatViewMode(
-        Object.values(CHAT_VIEW_MODES).includes(chatState.chatViewMode)
-          ? chatState.chatViewMode
-          : CHAT_VIEW_MODES.WIDGET_CLOSED
-      );
+      let newMode = Object.values(CHAT_VIEW_MODES).includes(chatState.chatViewMode)
+        ? chatState.chatViewMode
+        : CHAT_VIEW_MODES.WIDGET_CLOSED;
+      if (newMode === CHAT_VIEW_MODES.FULL_PAGE) newMode = CHAT_VIEW_MODES.WIDGET_OPEN;
+      setChatViewMode(newMode);
     };
 
     window.addEventListener('popstate', onPopState);
@@ -902,7 +903,7 @@ export default function App() {
 
   const handleMaximizeWidget = () => {
     setCurrentPage('chat');
-    setChatViewMode(CHAT_VIEW_MODES.FULL_PAGE);
+    setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN); // Disabled full page mode
   };
 
   const handleMinimizeToWidget = () => {
