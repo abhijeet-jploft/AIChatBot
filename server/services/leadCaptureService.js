@@ -189,22 +189,11 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
     || consultationRequested
     || urgencyMentioned;
 
-  // 4.5.6: Lead Capture Rules
-  // If the user provides personal information directly, treat it as a lead signal.
-  // - Email always qualifies.
-  // - Phone qualifies even if name is missing (e.g. "Call me at ...").
-  // - Name alone qualifies so it reflects in admin Leads (e.g. "My name is John").
-  const shouldCreate = Boolean(email)
-    || Boolean(phone)
-    || Boolean(name)
-    || consultationRequested
-    || pricingRequested
-    || contactRequested
-    || meetingRequested
-    || highIntent;
-
-  if (!shouldCreate) {
-    return { captured: false, reason: 'no_lead_signal' };
+  // Lead capture: only when we can reach the visitor — email or mobile (phone).
+  // Name alone, pricing/consultation/meeting asks, or generic high intent do NOT create a lead.
+  const hasContact = Boolean(email) || Boolean(phone);
+  if (!hasContact) {
+    return { captured: false, reason: 'no_contact_details' };
   }
 
   const leadScore = scoreLead({
