@@ -269,7 +269,7 @@ export default function VoiceSettings() {
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 402) {
-        showToast(data?.error || 'ElevenLabs quota exceeded or payment required. Upgrade at elevenlabs.io', 'error');
+        showToast(data?.error || 'Voice synthesis quota may be exceeded or a plan upgrade is required. Check your provider account.', 'error');
         return;
       }
 
@@ -339,7 +339,7 @@ export default function VoiceSettings() {
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 402) {
-        showToast(data?.error || 'ElevenLabs quota exceeded or payment required. Upgrade at elevenlabs.io', 'error');
+        showToast(data?.error || 'Voice synthesis quota may be exceeded or a plan upgrade is required. Check your provider account.', 'error');
         return;
       }
 
@@ -436,7 +436,7 @@ export default function VoiceSettings() {
         </div>
 
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
-          <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Train your own voice (ElevenLabs)</h6>
+          <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Train your own voice</h6>
           <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>
             Upload your voice samples, choose male or female before training, then test and select your own voice.
           </p>
@@ -531,7 +531,7 @@ export default function VoiceSettings() {
         </div>
 
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
-          <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>ElevenLabs voices</h6>
+          <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Preset voices</h6>
           <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>
             Search and filter by gender or voice type, then use Hear voice to preview and Choose to select.
           </p>

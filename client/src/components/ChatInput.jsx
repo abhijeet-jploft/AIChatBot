@@ -124,7 +124,7 @@ export default function ChatInput({ onSend, disabled, showMic = true }) {
             className="form-control border-0 flex-grow-1 bg-transparent"
             style={{
               resize: 'none',
-              minHeight: 44,
+              minHeight: 100,
               maxHeight: 200,
               color: 'var(--chat-text)',
             }}

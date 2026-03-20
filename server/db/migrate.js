@@ -168,12 +168,13 @@ function copyModuleSettingsFromSourceSql(source) {
   const allowed = new Set(['chatbots', 'settings', 'company_settings']);
   if (!allowed.has(source)) throw new Error(`Invalid settings copy source: ${source}`);
   return [
-    `INSERT INTO chat_settings (company_id, display_name, icon_url, greeting_message, ai_mode, agent_paused)
-     SELECT company_id, display_name, icon_url, greeting_message, ai_mode, agent_paused FROM ${source}
+    `INSERT INTO chat_settings (company_id, display_name, icon_url, greeting_message, widget_position, ai_mode, agent_paused)
+     SELECT company_id, display_name, icon_url, greeting_message, widget_position, ai_mode, agent_paused FROM ${source}
      ON CONFLICT (company_id) DO UPDATE SET
        display_name = EXCLUDED.display_name,
        icon_url = EXCLUDED.icon_url,
        greeting_message = EXCLUDED.greeting_message,
+       widget_position = EXCLUDED.widget_position,
        ai_mode = EXCLUDED.ai_mode,
        agent_paused = EXCLUDED.agent_paused,
        updated_at = NOW()`,
@@ -278,6 +279,7 @@ async function tableExists(client, tableName) {
 
 async function ensureModuleSettingsTables(client) {
   await client.query(MODULE_SETTINGS_SCHEMA_SQL);
+  await client.query(`ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS widget_position VARCHAR(10) NOT NULL DEFAULT 'right'`);
   await client.query(`ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS ai_provider VARCHAR(32) NOT NULL DEFAULT 'anthropic'`);
   await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS ai_model VARCHAR(128)');
   await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS anthropic_api_key TEXT');

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import ChatSidebar from './components/ChatSidebar';
 import ChatMain from './components/ChatMain';
@@ -17,6 +17,8 @@ const SCROLL_THRESHOLD = 0.4;
 const THEME_KEY = 'ai-chat-theme';
 const CHAT_VIEW_MODE_KEY = 'ai-chat-view-mode';
 const WIDGET_BUTTON_POS_KEY = 'ai-chat-widget-button-position';
+const WIDGET_PANEL_SIDE_KEY = 'ai-chat-widget-panel-side';
+const WIDGET_BUTTON_DRAGGED_KEY = 'ai-chat-widget-button-dragged';
 const CHAT_STATE_KEY = 'ai-chat-state';
 const DEFAULT_COMPANY_ID = '_JP_Loft';
 const DEFAULT_COMPANY_NAME = 'JP Loft';
@@ -198,13 +200,14 @@ function clampWidgetButtonPosition(position, viewportWidth, viewportHeight) {
   };
 }
 
-function getDefaultWidgetButtonPosition(viewportWidth, viewportHeight) {
+function getDefaultWidgetButtonPosition(viewportWidth, viewportHeight, side = 'right') {
   const margin = getWidgetButtonMargin(viewportWidth);
+  const x =
+    side === 'left'
+      ? margin
+      : viewportWidth - WIDGET_BUTTON_SIZE - margin;
   return clampWidgetButtonPosition(
-    {
-      x: viewportWidth - WIDGET_BUTTON_SIZE - margin,
-      y: viewportHeight - WIDGET_BUTTON_SIZE - margin,
-    },
+    { x, y: viewportHeight - WIDGET_BUTTON_SIZE - margin },
     viewportWidth,
     viewportHeight
   );
@@ -251,14 +254,21 @@ export default function App() {
   const location = useLocation();
   const isWebsiteView = location.pathname === '/' || location.pathname === '';
   const initialChatState = readInitialChatState();
+  const hasPersistedWidgetButtonPosRef = useRef(false);
 
-  // On landing page always start with activation not yet triggered so 6–10s / 40% scroll / 8s idle run; open from admin (sessionId in URL) = already activated
-  const [widgetActivated, setWidgetActivated] = useState(() =>
-    isWebsiteView && !initialChatState?.sessionId ? false : (initialChatState?.widgetActivated ?? true)
-  );
-  const [autoPopupHandled, setAutoPopupHandled] = useState(() =>
-    isWebsiteView && !initialChatState?.sessionId ? false : (initialChatState?.autoPopupHandled ?? true)
-  );
+  // Website: activation timers only if panel was closed; restore open panel from persistence
+  const [widgetActivated, setWidgetActivated] = useState(() => {
+    if (!isWebsiteView) return initialChatState?.widgetActivated ?? true;
+    if (initialChatState?.sessionId) return initialChatState?.widgetActivated ?? true;
+    if (initialChatState?.chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN) return true;
+    return initialChatState?.widgetActivated ?? false;
+  });
+  const [autoPopupHandled, setAutoPopupHandled] = useState(() => {
+    if (!isWebsiteView) return initialChatState?.autoPopupHandled ?? true;
+    if (initialChatState?.sessionId) return initialChatState?.autoPopupHandled ?? true;
+    if (initialChatState?.chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN) return true;
+    return initialChatState?.autoPopupHandled ?? false;
+  });
   const [openingMessageShown, setOpeningMessageShown] = useState(() => initialChatState?.openingMessageShown ?? false);
 
   const [isMobile, setIsMobile] = useState(() =>
@@ -273,24 +283,46 @@ export default function App() {
   });
   const [chatViewMode, setChatViewMode] = useState(() => {
     const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
-    // By user request: "never open in full screen mode"
-    if (isWebsiteView && initialChatState?.sessionId) return CHAT_VIEW_MODES.WIDGET_OPEN;
-    // On landing, always start closed so activation (6–10s / scroll / idle) runs
-    if (isWebsiteView) return fallback;
+    try {
+      const stored = localStorage.getItem(CHAT_VIEW_MODE_KEY);
+      if (Object.values(CHAT_VIEW_MODES).includes(stored)) {
+        return stored === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : stored;
+      }
+    } catch {
+      // Ignore localStorage failures and fallback to other persisted sources.
+    }
+
     if (Object.values(CHAT_VIEW_MODES).includes(initialChatState?.chatViewMode)) {
       return initialChatState.chatViewMode === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : initialChatState.chatViewMode;
     }
-    try {
-      const stored = localStorage.getItem(CHAT_VIEW_MODE_KEY);
-      const mode = Object.values(CHAT_VIEW_MODES).includes(stored) ? stored : fallback;
-      return mode === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : mode;
-    } catch {
-      return fallback;
-    }
+
+    // By user request: "never open in full screen mode"
+    if (isWebsiteView && initialChatState?.sessionId) return CHAT_VIEW_MODES.WIDGET_OPEN;
+
+    return fallback;
   });
   const [widgetButtonPos, setWidgetButtonPos] = useState(() => {
     const { width, height } = getViewport();
-    const fallback = getDefaultWidgetButtonPosition(width, height);
+    let wasDragged = initialChatState?.widgetButtonDragged === true;
+    if (!wasDragged) {
+      try { wasDragged = localStorage.getItem(WIDGET_BUTTON_DRAGGED_KEY) === '1'; } catch {}
+    }
+    hasPersistedWidgetButtonPosRef.current = wasDragged;
+
+    let fallbackSide = 'right';
+    try {
+      const panelSide = localStorage.getItem(WIDGET_PANEL_SIDE_KEY);
+      if (panelSide === 'left') fallbackSide = 'right';
+      if (panelSide === 'right') fallbackSide = 'left';
+    } catch {
+      // Use right as a safe default if panel side cannot be read.
+    }
+    const fallback = getDefaultWidgetButtonPosition(width, height, fallbackSide);
+
+    const fromChat = initialChatState?.widgetButtonPos;
+    if (fromChat && typeof fromChat.x === 'number' && typeof fromChat.y === 'number') {
+      return clampWidgetButtonPosition(fromChat, width, height);
+    }
 
     try {
       const raw = localStorage.getItem(WIDGET_BUTTON_POS_KEY);
@@ -487,7 +519,7 @@ export default function App() {
     };
   }, []);
 
-  // ── Theme ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem(THEME_KEY, theme); } catch {}
@@ -511,9 +543,12 @@ export default function App() {
       messages,
       sessionId,
       chatViewMode,
+      widgetButtonPos,
+      widgetButtonDragged: hasPersistedWidgetButtonPosRef.current,
     };
 
     try { localStorage.setItem(CHAT_STATE_KEY, JSON.stringify(chatState)); } catch {}
+    try { localStorage.setItem(WIDGET_BUTTON_DRAGGED_KEY, hasPersistedWidgetButtonPosRef.current ? '1' : '0'); } catch {}
 
     try {
       window.history.replaceState(
@@ -530,6 +565,7 @@ export default function App() {
     messages,
     sessionId,
     chatViewMode,
+    widgetButtonPos,
   ]);
 
   useEffect(() => {
@@ -561,13 +597,35 @@ export default function App() {
         : CHAT_VIEW_MODES.WIDGET_CLOSED;
       if (newMode === CHAT_VIEW_MODES.FULL_PAGE) newMode = CHAT_VIEW_MODES.WIDGET_OPEN;
       setChatViewMode(newMode);
+      hasPersistedWidgetButtonPosRef.current = chatState.widgetButtonDragged === true;
+      if (chatState.widgetButtonPos && typeof chatState.widgetButtonPos.x === 'number' && typeof chatState.widgetButtonPos.y === 'number') {
+        const { width, height } = getViewport();
+        setWidgetButtonPos(clampWidgetButtonPosition(chatState.widgetButtonPos, width, height));
+      }
     };
 
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [isWebsiteView]);
 
-  // ── Website view: when widget is open, keep activation/popup handled; when not website view, always activated ─
+  // Re-clamp launcher when switching company; if not dragged/persisted, keep it on the opposite side of the panel.
+  useEffect(() => {
+    const { width, height } = getViewport();
+    const selected = companies.find((c) => c.id === companyId);
+    const panelSide = selected?.widgetPosition === 'left' ? 'left' : 'right';
+    const oppositeSide = panelSide === 'left' ? 'right' : 'left';
+
+    setWidgetButtonPos((prev) => {
+      if (hasPersistedWidgetButtonPosRef.current) {
+        return clampWidgetButtonPosition(prev, width, height);
+      }
+      return getDefaultWidgetButtonPosition(width, height, oppositeSide);
+    });
+
+    try { localStorage.setItem(WIDGET_PANEL_SIDE_KEY, panelSide); } catch {}
+  }, [companyId, companies]);
+
+  // â”€â”€ Website view: when widget is open, keep activation/popup handled; when not website view, always activated â”€
   useEffect(() => {
     if (isWebsiteView) {
       if (chatViewMode !== CHAT_VIEW_MODES.WIDGET_CLOSED) {
@@ -580,7 +638,7 @@ export default function App() {
     }
   }, [isWebsiteView, chatViewMode]);
 
-  // ── Widget activation (doc: 6–10s OR 40% scroll OR 8s idle) ─────────────────
+  // â”€â”€ Widget activation (doc: 6â€“10s OR 40% scroll OR 8s idle) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!isWebsiteView || widgetActivated) return;
 
@@ -620,7 +678,7 @@ export default function App() {
     };
   }, [isWebsiteView, widgetActivated]);
 
-  // ── Activation checks open popup once (icon is always visible/clickable) ───
+  // â”€â”€ Activation checks open popup once (icon is always visible/clickable) â”€â”€â”€
   useEffect(() => {
     if (!isWebsiteView || !widgetActivated || autoPopupHandled) return;
 
@@ -633,7 +691,7 @@ export default function App() {
     setAutoPopupHandled(true);
   }, [isWebsiteView, widgetActivated, autoPopupHandled, messages.length, openingMessageShown]);
 
-  // ── Resize ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Resize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const onResize = () => {
       const { width, height } = getViewport();
@@ -647,7 +705,7 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // ── Companies ──────────────────────────────────────────────────────────────
+  // â”€â”€ Companies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     fetch(`${API_BASE}/train/companies`)
       .then((r) => r.json())
@@ -669,7 +727,7 @@ export default function App() {
       });
   }, []);
 
-  // ── Sessions (reload whenever companyId changes) ───────────────────────────
+  // â”€â”€ Sessions (reload whenever companyId changes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadSessions = useCallback(() => {
     fetch(`${API_BASE}/sessions?companyId=${encodeURIComponent(companyId)}`)
       .then((r) => r.json())
@@ -679,7 +737,7 @@ export default function App() {
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
-  // ── Active visitor presence via WebSocket (for dashboard live activity) ───────
+  // â”€â”€ Active visitor presence via WebSocket (for dashboard live activity) â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!companyId) return;
     const getWsUrl = () => {
@@ -781,7 +839,7 @@ export default function App() {
     };
   }, [sessionId, messages.length]);
 
-  // ── Select a session: load its messages ───────────────────────────────────
+  // â”€â”€ Select a session: load its messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSelectSession = async (id) => {
     setSessionId(id);
     try {
@@ -793,21 +851,21 @@ export default function App() {
     }
   };
 
-  // ── Delete a session ──────────────────────────────────────────────────────
+  // â”€â”€ Delete a session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDeleteSession = async (id) => {
     try { await fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' }); } catch {}
     if (sessionId === id) { setSessionId(null); setMessages([]); }
     loadSessions();
   };
 
-  // ── New chat ───────────────────────────────────────────────────────────────
+  // â”€â”€ New chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const clearChat = () => {
     setSessionId(null);
     setMessages([]);
     setOpeningMessageShown(false);
   };
 
-  // ── Change company ─────────────────────────────────────────────────────────
+  // â”€â”€ Change company â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSelectCompany = (id) => {
     setCompanyId(id);
     setSessionId(null);
@@ -815,7 +873,7 @@ export default function App() {
     setOpeningMessageShown(false);
   };
 
-  // ── Send message ───────────────────────────────────────────────────────────
+  // â”€â”€ Send message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sendMessage = async (content) => {
     if (!content.trim() || loading) return;
 
@@ -887,6 +945,45 @@ export default function App() {
     }
   };
 
+  const persistUiStateNow = useCallback((nextMode, nextWidgetButtonPos = widgetButtonPos, overrides = {}) => {
+    const safeMode = nextMode === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : nextMode;
+    const persisted = readPersistedChatState() || {};
+    const nextState = {
+      ...persisted,
+      widgetActivated,
+      autoPopupHandled,
+      openingMessageShown,
+      currentPage,
+      companyId,
+      messages,
+      sessionId,
+      chatViewMode: safeMode,
+      widgetButtonPos: nextWidgetButtonPos,
+      widgetButtonDragged: hasPersistedWidgetButtonPosRef.current,
+      ...overrides,
+    };
+
+    try { localStorage.setItem(CHAT_VIEW_MODE_KEY, safeMode); } catch {}
+    try { localStorage.setItem(WIDGET_BUTTON_POS_KEY, JSON.stringify(nextWidgetButtonPos)); } catch {}
+    try { localStorage.setItem(WIDGET_BUTTON_DRAGGED_KEY, hasPersistedWidgetButtonPosRef.current ? '1' : '0'); } catch {}
+    try { localStorage.setItem(CHAT_STATE_KEY, JSON.stringify(nextState)); } catch {}
+    try {
+      window.history.replaceState(
+        { ...(window.history.state || {}), aiChat: nextState },
+        ''
+      );
+    } catch {}
+  }, [
+    widgetButtonPos,
+    widgetActivated,
+    autoPopupHandled,
+    openingMessageShown,
+    currentPage,
+    companyId,
+    messages,
+    sessionId,
+  ]);
+
   const handleOpenWidget = () => {
     setCurrentPage('chat');
     if (isWebsiteView) setAutoPopupHandled(true);
@@ -895,20 +992,44 @@ export default function App() {
       setOpeningMessageShown(true);
     }
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
+    persistUiStateNow(CHAT_VIEW_MODES.WIDGET_OPEN, widgetButtonPos, {
+      currentPage: 'chat',
+      widgetActivated: true,
+      autoPopupHandled: true,
+      openingMessageShown: openingMessageShown || (isWebsiteView && messages.length === 0),
+    });
   };
 
   const handleCloseWidget = () => {
+    if (isWebsiteView) {
+      setWidgetActivated(true);
+      setAutoPopupHandled(true);
+    }
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_CLOSED);
+    persistUiStateNow(CHAT_VIEW_MODES.WIDGET_CLOSED, widgetButtonPos, {
+      widgetActivated: true,
+      autoPopupHandled: true,
+    });
   };
 
   const handleMaximizeWidget = () => {
     setCurrentPage('chat');
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN); // Disabled full page mode
+    persistUiStateNow(CHAT_VIEW_MODES.WIDGET_OPEN, widgetButtonPos, {
+      currentPage: 'chat',
+      widgetActivated: true,
+      autoPopupHandled: true,
+    });
   };
 
   const handleMinimizeToWidget = () => {
     setCurrentPage('chat');
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
+    persistUiStateNow(CHAT_VIEW_MODES.WIDGET_OPEN, widgetButtonPos, {
+      currentPage: 'chat',
+      widgetActivated: true,
+      autoPopupHandled: true,
+    });
   };
 
   const handleWidgetButtonPointerDown = (event) => {
@@ -958,6 +1079,18 @@ export default function App() {
 
     if (drag.moved) {
       ignoreButtonClickRef.current = true;
+      const { width, height } = getViewport();
+      const next = clampWidgetButtonPosition(
+        {
+          x: drag.originX + (event.clientX - drag.startClientX),
+          y: drag.originY + (event.clientY - drag.startClientY),
+        },
+        width,
+        height
+      );
+      hasPersistedWidgetButtonPosRef.current = true;
+      setWidgetButtonPos(next);
+      persistUiStateNow(chatViewMode, next);
     }
 
     dragStateRef.current = {
@@ -984,6 +1117,7 @@ export default function App() {
   const currentCompany = companies.find((c) => c.id === companyId);
   const companyName = currentCompany?.displayName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const companyIconUrl = currentCompany?.iconUrl || null;
+  const widgetSide = currentCompany?.widgetPosition === 'left' ? 'left' : 'right';
   const greetingMessage = currentCompany?.greetingMessage || null;
   const voiceEnabled = Boolean(currentCompany?.voice?.enabled);
   const voiceResponseEnabled = currentCompany?.voice?.responseEnabled !== false;
@@ -996,6 +1130,7 @@ export default function App() {
   const companyThemeStyle = buildCompanyThemeStyle(currentCompany?.theme, theme);
   const isFullPage = chatViewMode === CHAT_VIEW_MODES.FULL_PAGE;
   const isWidgetOpen = chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN;
+  /** Draggable launcher / minimize control â€” position persisted in localStorage + CHAT_STATE_KEY */
   const widgetButtonStyle = {
     left: `${widgetButtonPos.x}px`,
     top: `${widgetButtonPos.y}px`,
@@ -1003,8 +1138,24 @@ export default function App() {
     bottom: 'auto',
   };
 
+  /** Full-height sidebar when widget is open (desktop), docked left/right from admin setting */
   const panelStyle = isWidgetOpen && !isSmallScreen ? (() => {
-    return { left: '24px', top: '24px', right: 'auto', bottom: 'auto' };
+    const w = 'min(420px, calc(100vw - 48px))';
+    const base = {
+      top: 0,
+      bottom: 0,
+      height: '100dvh',
+      maxHeight: '100dvh',
+      width: w,
+      borderRadius: 0,
+      boxShadow:
+        widgetSide === 'left'
+          ? '8px 0 28px -10px rgba(0,0,0,0.22)'
+          : '-8px 0 28px -10px rgba(0,0,0,0.22)',
+    };
+    return widgetSide === 'left'
+      ? { ...base, left: 0, right: 'auto' }
+      : { ...base, right: 0, left: 'auto' };
   })() : undefined;
 
   if (isFullPage) {
@@ -1073,23 +1224,23 @@ export default function App() {
             style={panelStyle}
           >
             <header className="chat-widget-header">
-              <button
-                type="button"
-                className="chat-widget-icon-btn"
-                onClick={handleCloseWidget}
-                aria-label="Close widget"
-                title="Close"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </button>
-
               <div className="chat-widget-title-wrap">
                 <span className="chat-widget-title">{companyName}</span>
               </div>
 
               <div className="d-flex align-items-center gap-2">
+                <button
+                  type="button"
+                  className="chat-widget-icon-btn"
+                  onClick={handleCloseWidget}
+                  aria-label="Close widget"
+                  title="Close"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
                 <button
                   type="button"
                   className="chat-widget-icon-btn d-none"
@@ -1134,24 +1285,6 @@ export default function App() {
               />
             </div>
           </section>
-
-          <button
-            type="button"
-            className={`chat-widget-close-fab chat-widget-draggable${isDraggingWidgetButton ? ' is-dragging' : ''}`}
-            style={widgetButtonStyle}
-            onClick={withDragGuard(handleCloseWidget)}
-            onPointerDown={handleWidgetButtonPointerDown}
-            onPointerMove={handleWidgetButtonPointerMove}
-            onPointerUp={handleWidgetButtonPointerUp}
-            onPointerCancel={handleWidgetButtonPointerUp}
-            aria-label="Close chatbot"
-            title="Close"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
         </>
       ) : (
         <button

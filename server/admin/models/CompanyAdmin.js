@@ -18,6 +18,7 @@ async function findByCompanyId(companyId) {
   const { rows } = await pool.query(
     `SELECT c.id, c.company_id, c.name, c.password_hash,
             ch.display_name, ch.icon_url, ch.greeting_message,
+            ch.widget_position,
             ch.ai_mode,
             ch.ai_provider, ch.ai_model, ch.anthropic_api_key, ch.gemini_api_key,
             th.theme_primary_color, th.theme_primary_dark_color,
@@ -93,6 +94,7 @@ async function updateSettings(companyId, {
   display_name,
   icon_url,
   greeting_message,
+  widget_position,
   ai_mode,
   ai_provider,
   ai_model,
@@ -150,6 +152,10 @@ async function updateSettings(companyId, {
   if (greeting_message !== undefined) {
     chatU.push(`greeting_message = $${i++}`);
     chatV.push(greeting_message);
+  }
+  if (widget_position !== undefined) {
+    chatU.push(`widget_position = $${i++}`);
+    chatV.push(widget_position === 'left' ? 'left' : 'right');
   }
   if (ai_mode !== undefined) {
     chatU.push(`ai_mode = $${i++}`);

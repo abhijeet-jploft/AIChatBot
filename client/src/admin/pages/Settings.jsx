@@ -79,6 +79,7 @@ export default function Settings() {
   const [displayName, setDisplayName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
+  const [widgetPosition, setWidgetPosition] = useState('right');
   const [leadEmailNotificationsEnabled, setLeadEmailNotificationsEnabled] = useState(false);
   const [leadNotificationEmail, setLeadNotificationEmail] = useState('');
   const [saving, setSaving] = useState(false);
@@ -99,6 +100,7 @@ export default function Settings() {
         setDisplayName(d.displayName || d.name || '');
         setIconUrl(d.iconUrl || '');
         setGreetingMessage(d.greetingMessage || '');
+        setWidgetPosition(d.widget?.position === 'left' ? 'left' : 'right');
         setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
         setLeadNotificationEmail(d.leadNotifications?.email || '');
         if (d.escalation) {
@@ -143,6 +145,9 @@ export default function Settings() {
           displayName: displayName.trim() || undefined,
           iconUrl: iconUrl.trim() || undefined,
           greetingMessage: greetingMessage.trim() || undefined,
+          widget: {
+            position: widgetPosition,
+          },
           leadNotifications: {
             emailEnabled: leadEmailNotificationsEnabled,
             email: leadNotificationEmail.trim() || null,
@@ -246,6 +251,22 @@ export default function Settings() {
                 placeholder="Custom welcome message"
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               />
+            </div>
+
+            <div className="mb-3">
+              <label className="form-label">Widget side</label>
+              <select
+                className="form-select"
+                value={widgetPosition}
+                onChange={(e) => setWidgetPosition(e.target.value === 'left' ? 'left' : 'right')}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              >
+                <option value="right">Right side</option>
+                <option value="left">Left side</option>
+              </select>
+              <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+                Controls launcher and chat panel alignment on website widget.
+              </div>
             </div>
 
             {embed?.embedPath && (

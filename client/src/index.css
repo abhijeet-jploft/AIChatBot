@@ -261,16 +261,17 @@ textarea::placeholder {
 
 .chat-widget-panel {
   position: fixed;
-  /* desktop: positioned via inline style relative to widget button */
-  right: 24px;
-  bottom: 96px;
-  width: min(370px, calc(100vw - 48px));
-  height: min(610px, calc(100dvh - 128px));
-  max-height: calc(100dvh - 128px);
+  /* desktop: full-height sidebar via inline style (left/right from admin) */
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(420px, calc(100vw - 48px));
+  height: 100dvh;
+  max-height: 100dvh;
   border: 1px solid var(--chat-border);
-  border-radius: 14px;
+  border-radius: 0;
   background: var(--chat-surface);
-  box-shadow: 0 28px 65px -26px rgba(0, 0, 0, 0.45);
+  box-shadow: -8px 0 28px -10px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   z-index: 40;
   display: flex;

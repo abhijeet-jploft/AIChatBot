@@ -16,6 +16,7 @@
   var companyId = (script && script.getAttribute('data-company-id')) || config.companyId || '_JP_Loft';
   var companyName = (script && script.getAttribute('data-company-name')) || config.companyName || 'JP Loft';
   var apiKey = (script && script.getAttribute('data-api-key')) || config.apiKey || '';
+  var widgetSide = ((script && script.getAttribute('data-widget-side')) || config.widgetSide || 'right').toLowerCase() === 'left' ? 'left' : 'right';
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
   var companyIconUrl = null;
   var companyGreetingMessage = null;
@@ -59,21 +60,8 @@
   var sessionId = null;
   var sessions = [];
   var loading = false;
+  var persistedWidgetOpen = false;
 
-  (function readPersistedState() {
-    try {
-      var raw = typeof localStorage !== 'undefined' && localStorage.getItem(CHAT_STATE_KEY);
-      if (!raw) return;
-      var s = JSON.parse(raw);
-      if (s && typeof s === 'object') {
-        if (s.companyId && s.companyId === companyId) {
-          if (Array.isArray(s.messages)) messages = s.messages;
-          if (s.sessionId != null) sessionId = s.sessionId;
-          if (s.openingMessageShown != null) openingMessageShown = s.openingMessageShown;
-        }
-      }
-    } catch (e) {}
-  })();
   var presenceWs = null;
   var wsReconnectTimer = null;
   var WS_RECONNECT_MS = 5000;
@@ -101,6 +89,23 @@
 
   var viewport = getViewport();
   var widgetButtonPos = getDefaultWidgetButtonPosition(viewport.width, viewport.height);
+
+  (function readPersistedState() {
+    try {
+      var raw = typeof localStorage !== 'undefined' && localStorage.getItem(CHAT_STATE_KEY);
+      if (!raw) return;
+      var s = JSON.parse(raw);
+      if (s && typeof s === 'object' && s.companyId && s.companyId === companyId) {
+        if (Array.isArray(s.messages)) messages = s.messages;
+        if (s.sessionId != null) sessionId = s.sessionId;
+        if (s.openingMessageShown != null) openingMessageShown = s.openingMessageShown;
+        if (s.widgetButtonPos && typeof s.widgetButtonPos.x === 'number' && typeof s.widgetButtonPos.y === 'number') {
+          widgetButtonPos = clampWidgetButtonPosition(s.widgetButtonPos, viewport.width, viewport.height);
+        }
+        if (s.widgetOpen === true) persistedWidgetOpen = true;
+      }
+    } catch (e) {}
+  })();
 
   function getViewport() {
     return {
@@ -214,7 +219,7 @@
     var margin = getWidgetButtonMargin(viewportWidth);
     return clampWidgetButtonPosition(
       {
-        x: viewportWidth - WIDGET_BUTTON_SIZE - margin,
+        x: widgetSide === 'left' ? margin : (viewportWidth - WIDGET_BUTTON_SIZE - margin),
         y: viewportHeight - WIDGET_BUTTON_SIZE - margin,
       },
       viewportWidth,
@@ -244,9 +249,9 @@
   }
 
   function applyWidgetButtonPosition() {
-    if (!launcher || !closeFab) return;
+    if (!launcher) return;
 
-    [launcher, closeFab].forEach(function (el) {
+    [launcher].forEach(function (el) {
       el.style.left = widgetButtonPos.x + 'px';
       el.style.top = widgetButtonPos.y + 'px';
       el.style.right = 'auto';
@@ -277,25 +282,7 @@
 
   function updateCloseFabVisibility() {
     if (!closeFab) return;
-    if (!opened) {
-      closeFab.style.display = 'none';
-      return;
-    }
-    closeFab.style.display = isSmallScreen() ? 'none' : 'flex';
-    if (!isSmallScreen()) {
-      closeFab.style.zIndex = isFullscreen ? '2147483647' : '100000';
-      if (isFullscreen) {
-        closeFab.setAttribute('aria-label', 'Minimize to widget');
-        closeFab.setAttribute('title', 'Minimize');
-        closeFab.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="10" y1="14" x2="3" y2="21"/></svg>';
-        closeFab.onclick = withDragGuard(toggleFullscreen);
-      } else {
-        closeFab.setAttribute('aria-label', 'Close chatbot');
-        closeFab.setAttribute('title', 'Close');
-        closeFab.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-        closeFab.onclick = withDragGuard(closePanel);
-      }
-    }
+    closeFab.style.display = 'none';
   }
 
   function updatePanelPosition() {
@@ -315,15 +302,21 @@
       panel.style.maxWidth = '100vw';
       panel.style.maxHeight = '100dvh';
     } else {
+      var sideProp = widgetSide === 'left' ? 'left' : 'right';
+      var resetProp = sideProp === 'left' ? 'right' : 'left';
       panel.classList.remove('is-fullscreen');
-      panel.style.left = '24px';
-      panel.style.top = '24px';
-      panel.style.right = 'auto';
-      panel.style.bottom = 'auto';
-      panel.style.width = 'min(370px,calc(100vw - 48px))';
-      panel.style.height = 'min(610px,calc(100dvh - 128px))';
+      panel.style[sideProp] = '0';
+      panel.style[resetProp] = 'auto';
+      panel.style.top = '0';
+      panel.style.bottom = '0';
+      panel.style.width = 'min(420px,calc(100vw - 48px))';
+      panel.style.height = '100dvh';
       panel.style.maxWidth = '';
-      panel.style.maxHeight = 'calc(100dvh - 128px)';
+      panel.style.maxHeight = '100dvh';
+      panel.style.borderRadius = '0';
+      panel.style.boxShadow = sideProp === 'left'
+        ? '8px 0 28px -10px rgba(0,0,0,0.22)'
+        : '-8px 0 28px -10px rgba(0,0,0,0.22)';
     }
 
     updateMaxButtonState();
@@ -400,6 +393,18 @@
     if (dragState.moved) {
       ignoreButtonClick = true;
       event.preventDefault();
+      var vp = getViewport();
+      widgetButtonPos = clampWidgetButtonPosition(
+        {
+          x: dragState.originX + (event.clientX - dragState.startClientX),
+          y: dragState.originY + (event.clientY - dragState.startClientY),
+        },
+        vp.width,
+        vp.height
+      );
+      applyWidgetButtonPosition();
+      updatePanelPosition();
+      persistState();
     }
 
     if (event.currentTarget && event.currentTarget.releasePointerCapture) {
@@ -525,7 +530,7 @@
       '#jploft-chat-root .jploft-draggable.is-dragging{cursor:grabbing;transition:none;transform:none}',
       '#jploft-chat-root .jploft-close-fab{display:none;z-index:100000}',
 
-      '#jploft-chat-root .jploft-panel{position:fixed;right:24px;bottom:96px;width:min(370px,calc(100vw - 48px));height:min(610px,calc(100dvh - 128px));max-height:calc(100dvh - 128px);border:1px solid var(--chat-border);border-radius:14px;background:var(--chat-surface);box-shadow:0 28px 65px -26px rgba(0,0,0,.45);z-index:99999;display:flex;flex-direction:column;overflow:hidden}',
+      '#jploft-chat-root .jploft-panel{position:fixed;right:0;top:0;bottom:0;width:min(420px,calc(100vw - 48px));height:100dvh;max-height:100dvh;border:1px solid var(--chat-border);border-radius:0;background:var(--chat-surface);box-shadow:-8px 0 28px -10px rgba(0,0,0,.22);z-index:99999;display:flex;flex-direction:column;overflow:hidden}',
       '#jploft-chat-root .jploft-panel.is-fullscreen{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:100% !important;height:100% !important;max-width:100% !important;max-height:100% !important;border-radius:0;border:0;box-shadow:none;z-index:2147483647 !important;overflow:hidden}',
       '#jploft-chat-root .jploft-fullscreen-inner{display:flex;flex:1;min-height:0;min-width:0;overflow:hidden}',
       '#jploft-chat-root .jploft-sidebar{display:none;flex-direction:column;width:260px;min-width:260px;flex-shrink:0;background:var(--chat-sidebar,var(--chat-bg));border-right:1px solid var(--chat-border);overflow:hidden}',
@@ -594,6 +599,8 @@
         messages: messages,
         sessionId: sessionId,
         openingMessageShown: openingMessageShown,
+        widgetButtonPos: { x: widgetButtonPos.x, y: widgetButtonPos.y },
+        widgetOpen: opened,
       };
       localStorage.setItem(CHAT_STATE_KEY, JSON.stringify(state));
     } catch (e) {}
@@ -646,6 +653,7 @@
     panel.style.display = 'flex';
     updatePanelPosition();
     setSendButtonState();
+    persistState();
 
     setTimeout(function () {
       if (inputEl) inputEl.focus();
@@ -660,6 +668,7 @@
     panel.style.display = 'none';
     if (closeFab) closeFab.style.display = 'none';
     launcher.style.display = 'flex';
+    persistState();
   }
 
   function sendToApi(userContent, callback) {
@@ -745,13 +754,10 @@
     panel.style.display = 'none';
     panel.innerHTML =
       '<header class="jploft-header">' +
-        '<button type="button" class="jploft-icon-btn jploft-close-btn" aria-label="Close widget" title="Close">' +
-          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
-        '</button>' +
         '<div class="jploft-title-wrap"><span class="jploft-title">' + escapeHtml(companyName) + '</span></div>' +
         '<div class="jploft-right">' +
-          '<button type="button" class="jploft-icon-btn jploft-max-btn" aria-label="Expand chat" title="Expand">' +
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>' +
+          '<button type="button" class="jploft-icon-btn jploft-close-btn" aria-label="Close widget" title="Close">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
           '</button>' +
           '<span class="jploft-avatar" aria-hidden="true"><span class="jploft-avatar-text">' + escapeHtml(avatarLetter) + '</span></span>' +
         '</div>' +
@@ -783,7 +789,7 @@
     closeBtn.onclick = closePanel;
 
     maxBtn = panel.querySelector('.jploft-max-btn');
-    maxBtn.onclick = toggleFullscreen;
+    if (maxBtn) maxBtn.onclick = toggleFullscreen;
 
     [launcher, closeFab].forEach(function (el) {
       el.addEventListener('pointerdown', onWidgetButtonPointerDown);
@@ -812,6 +818,23 @@
     root.appendChild(panel);
     root.appendChild(closeFab);
     document.body.appendChild(root);
+
+    applyWidgetButtonPosition();
+    if (persistedWidgetOpen) {
+      activated = true;
+      opened = true;
+      if (launcher) launcher.style.display = 'none';
+      if (panel) {
+        panel.style.display = 'flex';
+        if (messages.length === 0 && !openingMessageShown) {
+          messages.push({ role: 'assistant', content: getOpeningMessage() });
+          openingMessageShown = true;
+        }
+        renderMessages();
+        updatePanelPosition();
+      }
+      persistState();
+    }
 
     connectPresenceWs();
     if (typeof window !== 'undefined') {
@@ -887,6 +910,11 @@
           if (company.displayName) companyName = company.displayName;
           companyIconUrl = company.iconUrl || null;
           companyGreetingMessage = company.greetingMessage || null;
+          widgetSide = company.widgetPosition === 'left' ? 'left' : 'right';
+          var vp = getViewport();
+          widgetButtonPos = clampWidgetButtonPosition(widgetButtonPos, vp.width, vp.height);
+          applyWidgetButtonPosition();
+          updatePanelPosition();
           var titleEl = widgetRoot.querySelector('.jploft-title');
           if (titleEl) titleEl.textContent = companyName;
           var avatarEl = widgetRoot.querySelector('.jploft-avatar');
@@ -928,6 +956,8 @@
   }
 
   function runActivation() {
+    if (activated) return;
+
     var delay = ACTIVATION_MIN + Math.random() * (ACTIVATION_MAX - ACTIVATION_MIN);
     var delayTimer = setTimeout(activate, delay);
 

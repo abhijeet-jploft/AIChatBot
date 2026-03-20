@@ -147,6 +147,9 @@ async function getSettings(req, res) {
       displayName: company.display_name || company.name,
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
+      widget: {
+        position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
+      },
       aiMode: modeCatalog.active,
       ai: buildAiPayload(company),
       leadNotifications: {
@@ -202,7 +205,7 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
   try {
-    const { displayName, iconUrl, greetingMessage, aiMode, ai, theme, leadNotifications, voice, escalation, safety, language } = req.body;
+    const { displayName, iconUrl, greetingMessage, widget, aiMode, ai, theme, leadNotifications, voice, escalation, safety, language } = req.body;
     const normalizedAiProvider = normalizeAiProvider(ai?.provider);
     if (ai?.provider !== undefined && !normalizedAiProvider) {
       return res.status(400).json({ error: 'Invalid ai provider. Allowed values: anthropic, gemini' });
@@ -264,6 +267,9 @@ async function updateSettings(req, res) {
       display_name: displayName !== undefined ? displayName : undefined,
       icon_url: iconUrl !== undefined ? iconUrl : undefined,
       greeting_message: greetingMessage !== undefined ? greetingMessage : undefined,
+      widget_position: widget?.position !== undefined
+        ? (String(widget.position).toLowerCase() === 'left' ? 'left' : 'right')
+        : undefined,
       ai_mode: aiMode !== undefined ? normalizeConversationModeId(aiMode) : undefined,
       ai_provider: normalizedAiProvider !== undefined ? normalizedAiProvider : undefined,
       ai_model: ai?.model !== undefined ? String(ai.model || '').trim() || null : undefined,
@@ -341,6 +347,9 @@ async function updateSettings(req, res) {
       displayName: company.display_name || company.name,
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
+      widget: {
+        position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
+      },
       aiMode: modeCatalog.active,
       ai: buildAiPayload(company),
       leadNotifications: {
