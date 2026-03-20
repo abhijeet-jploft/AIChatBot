@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
 import Conversations from './pages/Conversations';
+import LiveMonitoring from './pages/LiveMonitoring';
 import Settings from './pages/Settings';
 import ApiSettings from './pages/ApiSettings';
 import VoiceSettings from './pages/VoiceSettings';
@@ -15,6 +16,7 @@ import Logs from './pages/Logs';
 import MissedConversations from './pages/MissedConversations';
 import SupportRequests from './pages/SupportRequests';
 import TakeOver from './pages/TakeOver';
+import AdminOperatorChat from './pages/AdminOperatorChat';
 import './index.css';
 
 function AdminLayout({ children }) {
@@ -30,6 +32,7 @@ function AdminLayout({ children }) {
         { to: '/admin', label: 'Dashboard' },
         { to: '/admin/leads', label: 'Leads', end: false },
         { to: '/admin/conversations', label: 'Conversations' },
+        { to: '/admin/live-monitoring', label: 'Live monitoring' },
         { to: '/admin/missed-conversations', label: 'Missed conversations' },
         { to: '/admin/support-requests', label: 'Support requests' },
         { to: '/admin/take-over', label: 'Take over' },
@@ -183,6 +186,18 @@ export default function AdminApp() {
           }
         />
         <Route
+          path="live-monitoring"
+          element={
+            token ? (
+              <AdminLayout>
+                <LiveMonitoring />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
           path="settings"
           element={
             token ? (
@@ -301,6 +316,10 @@ export default function AdminApp() {
               <Navigate to="/admin/login" replace />
             )
           }
+        />
+        <Route
+          path="chat/:sessionId"
+          element={token ? <AdminOperatorChat /> : <Navigate to="/admin/login" replace />}
         />
         <Route path="*" element={<Navigate to="/admin/" replace />} />
       </Routes>

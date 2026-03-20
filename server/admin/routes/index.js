@@ -25,6 +25,7 @@ router.get('/companies', settingsController.listCompanies);
 // ─── Protected ──────────────────────────────────────────────────────────────
 router.post('/auth/logout', requireAuth, authController.logout);
 router.get('/auth/me', requireAuth, authController.me);
+router.post('/auth/change-password', requireAuth, authController.changePassword);
 
 router.get('/settings', requireAuth, settingsController.getSettings);
 router.put('/settings', requireAuth, settingsController.updateSettings);
@@ -46,6 +47,8 @@ router.patch('/agent/status', requireAuth, agentController.updateStatus);
 
 router.get('/leads', requireAuth, leadsController.listLeads);
 router.get('/conversations', requireAuth, conversationsController.listConversations);
+router.get('/conversations/:sessionId', requireAuth, conversationsController.getConversationDetail);
+router.get('/conversations/:sessionId/messages', requireAuth, conversationsController.getMessages);
 router.post('/conversations/:sessionId/send', requireAuth, conversationsController.sendMessage);
 router.get('/logs', requireAuth, logsController.listLogs);
 router.get('/missed-conversations', requireAuth, missedConversationsController.listMissedConversations);

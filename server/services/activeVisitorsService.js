@@ -7,6 +7,7 @@
 const ACTIVE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 min
 const OPEN = 1;
+const TYPING_TTL_MS = 4500;
 
 const store = new Map();
 /** socket -> { companyId, sessionId } for quick unregister on close */
@@ -44,6 +45,13 @@ function scheduleCleanup() {
   if (cleanupTimer.unref) cleanupTimer.unref();
 }
 
+function summarizeText(text, maxLen = 180) {
+  const trimmed = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!trimmed) return '';
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen - 1)}...`;
+}
+
 function notifySubscribers(companyId) {
   const subs = subscribers.get(companyId);
   if (!subs || subs.size === 0) return;
@@ -63,13 +71,73 @@ function record(companyId, sessionId, pageUrl, isChatting = false) {
   scheduleCleanup();
   const sessions = getOrCreateCompany(companyId);
   const key = sessionId || `anon-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const existing = sessions.get(key) || { pageUrl: '', lastSeen: 0, messageCount: 0 };
+  const now = Date.now();
+  const existing = sessions.get(key) || {
+    pageUrl: '',
+    lastSeen: 0,
+    messageCount: 0,
+    firstSeen: now,
+    typingUntil: 0,
+  };
   sessions.set(key, {
     ...existing,
     pageUrl: pageUrl || existing.pageUrl,
-    lastSeen: Date.now(),
+    firstSeen: existing.firstSeen || now,
+    lastSeen: now,
     messageCount: isChatting ? (existing.messageCount || 0) + 1 : (existing.messageCount || 0),
   });
+  notifySubscribers(companyId);
+}
+
+function recordMessage(companyId, sessionId, role, content, pageUrl) {
+  if (!companyId || !sessionId) return;
+  scheduleCleanup();
+  const sessions = getOrCreateCompany(companyId);
+  const now = Date.now();
+  const existing = sessions.get(sessionId) || {
+    pageUrl: '',
+    lastSeen: 0,
+    messageCount: 0,
+    firstSeen: now,
+    typingUntil: 0,
+  };
+
+  const normalizedRole = String(role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
+  sessions.set(sessionId, {
+    ...existing,
+    pageUrl: pageUrl || existing.pageUrl,
+    firstSeen: existing.firstSeen || now,
+    lastSeen: now,
+    messageCount: (existing.messageCount || 0) + 1,
+    lastMessageRole: normalizedRole,
+    lastMessageAt: now,
+    lastMessagePreview: summarizeText(content),
+    typingUntil: normalizedRole === 'user' ? 0 : (existing.typingUntil || 0),
+  });
+
+  notifySubscribers(companyId);
+}
+
+function setTyping(companyId, sessionId, isTyping) {
+  if (!companyId || !sessionId) return;
+  scheduleCleanup();
+  const sessions = getOrCreateCompany(companyId);
+  const now = Date.now();
+  const existing = sessions.get(sessionId) || {
+    pageUrl: '',
+    lastSeen: 0,
+    messageCount: 0,
+    firstSeen: now,
+    typingUntil: 0,
+  };
+
+  sessions.set(sessionId, {
+    ...existing,
+    firstSeen: existing.firstSeen || now,
+    lastSeen: now,
+    typingUntil: isTyping ? now + TYPING_TTL_MS : 0,
+  });
+
   notifySubscribers(companyId);
 }
 
@@ -83,11 +151,23 @@ function registerSocket(companyId, sessionId, pageUrl, socket) {
   scheduleCleanup();
   const sessions = getOrCreateCompany(companyId);
   const key = sessionId || `ws-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const existing = sessions.get(key) || { pageUrl: '', lastSeen: 0, messageCount: 0 };
+  const now = Date.now();
+  const existing = sessions.get(key) || {
+    pageUrl: '',
+    lastSeen: 0,
+    messageCount: 0,
+    firstSeen: now,
+    typingUntil: 0,
+  };
   sessions.set(key, {
     pageUrl: pageUrl || existing.pageUrl,
-    lastSeen: Date.now(),
+    firstSeen: existing.firstSeen || now,
+    lastSeen: now,
     messageCount: existing.messageCount || 0,
+    typingUntil: existing.typingUntil || 0,
+    lastMessageRole: existing.lastMessageRole,
+    lastMessageAt: existing.lastMessageAt,
+    lastMessagePreview: existing.lastMessagePreview,
     socket,
   });
   socketToKey.set(socket, { companyId, sessionId: key });
@@ -134,6 +214,12 @@ function updatePageSocket(socket, pageUrl) {
     entry.lastSeen = Date.now();
     notifySubscribers(key.companyId);
   }
+}
+
+function setTypingForSocket(socket, isTyping) {
+  const key = socketToKey.get(socket);
+  if (!key) return;
+  setTyping(key.companyId, key.sessionId, Boolean(isTyping));
 }
 
 /**
@@ -203,24 +289,42 @@ function getActiveForCompany(companyId) {
   const now = Date.now();
   const list = [];
   let currentlyChatting = 0;
+  let typingCount = 0;
   let lastMessageAt = null;
   for (const [sessionId, data] of sessions.entries()) {
     const hasOpenSocket = data.socket && data.socket.readyState === OPEN;
     const withinTtl = !data.socket && (now - data.lastSeen <= ACTIVE_TTL_MS);
     if (!hasOpenSocket && !withinTtl) continue;
+
+    const startedAt = data.firstSeen || data.lastSeen || now;
+    const sessionLastMessageAt = data.lastMessageAt || null;
+    const isTyping = Boolean(data.typingUntil && data.typingUntil > now);
+
     list.push({
       sessionId,
       pageUrl: data.pageUrl || '—',
       lastSeen: data.lastSeen,
       messageCount: data.messageCount || 0,
       isOpen: Boolean(hasOpenSocket),
+      startedAt,
+      durationSeconds: Math.max(0, Math.floor((now - startedAt) / 1000)),
+      isTyping,
+      lastMessageAt: sessionLastMessageAt,
+      lastMessageRole: data.lastMessageRole || null,
+      lastMessagePreview: data.lastMessagePreview || null,
     });
     if ((data.messageCount || 0) > 0) currentlyChatting += 1;
-    if (data.lastSeen && (!lastMessageAt || data.lastSeen > lastMessageAt)) lastMessageAt = data.lastSeen;
+    if (isTyping) typingCount += 1;
+    if (sessionLastMessageAt && (!lastMessageAt || sessionLastMessageAt > lastMessageAt)) {
+      lastMessageAt = sessionLastMessageAt;
+    } else if (data.lastSeen && (!lastMessageAt || data.lastSeen > lastMessageAt)) {
+      lastMessageAt = data.lastSeen;
+    }
   }
   return {
     activeCount: list.length,
     currentlyChatting,
+    typingCount,
     lastMessageAt,
     sessions: list.sort((a, b) => b.lastSeen - a.lastSeen),
   };
@@ -228,6 +332,9 @@ function getActiveForCompany(companyId) {
 
 module.exports = {
   record,
+  recordMessage,
+  setTyping,
+  setTypingForSocket,
   getActiveForCompany,
   getSocketForSession,
   pushMessageToSession,

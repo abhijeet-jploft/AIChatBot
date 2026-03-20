@@ -9,6 +9,7 @@ const {
   registerSocket,
   unregisterSocket,
   updatePageSocket,
+  setTypingForSocket,
   subscribe,
   unsubscribe,
 } = require('../services/activeVisitorsService');
@@ -31,6 +32,10 @@ function handleVisitorWs(ws) {
       }
       if (msg.type === 'page' && registered) {
         updatePageSocket(ws, msg.pageUrl || '');
+        return;
+      }
+      if (msg.type === 'typing' && registered) {
+        setTypingForSocket(ws, Boolean(msg.isTyping));
       }
     } catch (e) {
       // ignore invalid JSON

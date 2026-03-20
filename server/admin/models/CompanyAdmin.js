@@ -19,6 +19,13 @@ async function findByCompanyId(companyId) {
     `SELECT c.id, c.company_id, c.name, c.password_hash,
             ch.display_name, ch.icon_url, ch.greeting_message,
             ch.widget_position,
+            ch.auto_trigger_enabled,
+            ch.auto_trigger_delay_seconds,
+            ch.auto_trigger_scroll_percent,
+            ch.auto_trigger_only_selected_pages,
+            ch.auto_trigger_pricing_page,
+            ch.auto_trigger_portfolio_page,
+            ch.auto_trigger_selected_pages,
             ch.ai_mode,
             ch.ai_provider, ch.ai_model, ch.anthropic_api_key, ch.gemini_api_key,
             th.theme_primary_color, th.theme_primary_dark_color,
@@ -96,6 +103,13 @@ async function updateSettings(companyId, {
   icon_url,
   greeting_message,
   widget_position,
+  auto_trigger_enabled,
+  auto_trigger_delay_seconds,
+  auto_trigger_scroll_percent,
+  auto_trigger_only_selected_pages,
+  auto_trigger_pricing_page,
+  auto_trigger_portfolio_page,
+  auto_trigger_selected_pages,
   ai_mode,
   ai_provider,
   ai_model,
@@ -164,6 +178,34 @@ async function updateSettings(companyId, {
   if (widget_position !== undefined) {
     chatU.push(`widget_position = $${i++}`);
     chatV.push(widget_position === 'left' ? 'left' : 'right');
+  }
+  if (auto_trigger_enabled !== undefined) {
+    chatU.push(`auto_trigger_enabled = $${i++}`);
+    chatV.push(Boolean(auto_trigger_enabled));
+  }
+  if (auto_trigger_delay_seconds !== undefined) {
+    chatU.push(`auto_trigger_delay_seconds = $${i++}`);
+    chatV.push(Number(auto_trigger_delay_seconds));
+  }
+  if (auto_trigger_scroll_percent !== undefined) {
+    chatU.push(`auto_trigger_scroll_percent = $${i++}`);
+    chatV.push(Number(auto_trigger_scroll_percent));
+  }
+  if (auto_trigger_only_selected_pages !== undefined) {
+    chatU.push(`auto_trigger_only_selected_pages = $${i++}`);
+    chatV.push(Boolean(auto_trigger_only_selected_pages));
+  }
+  if (auto_trigger_pricing_page !== undefined) {
+    chatU.push(`auto_trigger_pricing_page = $${i++}`);
+    chatV.push(Boolean(auto_trigger_pricing_page));
+  }
+  if (auto_trigger_portfolio_page !== undefined) {
+    chatU.push(`auto_trigger_portfolio_page = $${i++}`);
+    chatV.push(Boolean(auto_trigger_portfolio_page));
+  }
+  if (auto_trigger_selected_pages !== undefined) {
+    chatU.push(`auto_trigger_selected_pages = $${i++}`);
+    chatV.push(String(auto_trigger_selected_pages || '').trim() || null);
   }
   if (ai_mode !== undefined) {
     chatU.push(`ai_mode = $${i++}`);

@@ -280,6 +280,13 @@ async function tableExists(client, tableName) {
 async function ensureModuleSettingsTables(client) {
   await client.query(MODULE_SETTINGS_SCHEMA_SQL);
   await client.query(`ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS widget_position VARCHAR(10) NOT NULL DEFAULT 'right'`);
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS auto_trigger_enabled BOOLEAN NOT NULL DEFAULT TRUE');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS auto_trigger_delay_seconds INTEGER NOT NULL DEFAULT 8');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS auto_trigger_scroll_percent INTEGER NOT NULL DEFAULT 40');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS auto_trigger_only_selected_pages BOOLEAN NOT NULL DEFAULT FALSE');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS auto_trigger_pricing_page BOOLEAN NOT NULL DEFAULT FALSE');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS auto_trigger_portfolio_page BOOLEAN NOT NULL DEFAULT FALSE');
+  await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS auto_trigger_selected_pages TEXT');
   await client.query(`ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS ai_provider VARCHAR(32) NOT NULL DEFAULT 'anthropic'`);
   await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS ai_model VARCHAR(128)');
   await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS anthropic_api_key TEXT');

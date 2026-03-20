@@ -64,6 +64,18 @@ function defaultEscalation() {
   };
 }
 
+function defaultAutoTrigger() {
+  return {
+    enabled: true,
+    afterSeconds: 8,
+    afterScrollPercent: 40,
+    onlySelectedPages: false,
+    onPricingPage: false,
+    onPortfolioPage: false,
+    selectedPages: '',
+  };
+}
+
 function defaultSafety() {
   return {
     blockTopicsEnabled: false,
@@ -87,12 +99,19 @@ export default function Settings() {
   const [leadEmailNotificationsEnabled, setLeadEmailNotificationsEnabled] = useState(false);
   const [leadNotificationEmail, setLeadNotificationEmail] = useState('');
   const [saving, setSaving] = useState(false);
+  const [autoTrigger, setAutoTrigger] = useState(defaultAutoTrigger);
   const [escalation, setEscalation] = useState(defaultEscalation);
   const [safety, setSafety] = useState(defaultSafety);
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [logoutAllPending, setLogoutAllPending] = useState(false);
   const [embed, setEmbed] = useState(null);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     if (location.hash === '#chatbot-name' || location.hash === '#company-name') {
@@ -117,6 +136,9 @@ export default function Settings() {
         setWidgetPosition(d.widget?.position === 'left' ? 'left' : 'right');
         setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
         setLeadNotificationEmail(d.leadNotifications?.email || '');
+        if (d.autoTrigger) {
+          setAutoTrigger((prev) => ({ ...prev, ...d.autoTrigger }));
+        }
         if (d.escalation) {
           setEscalation((prev) => ({
             triggers: { ...prev.triggers, ...d.escalation.triggers },
@@ -172,6 +194,15 @@ export default function Settings() {
             emailEnabled: leadEmailNotificationsEnabled,
             email: leadNotificationEmail.trim() || null,
           },
+          autoTrigger: {
+            enabled: autoTrigger.enabled,
+            afterSeconds: autoTrigger.afterSeconds,
+            afterScrollPercent: autoTrigger.afterScrollPercent,
+            onlySelectedPages: autoTrigger.onlySelectedPages,
+            onPricingPage: autoTrigger.onPricingPage,
+            onPortfolioPage: autoTrigger.onPortfolioPage,
+            selectedPages: autoTrigger.selectedPages,
+          },
           escalation: {
             triggers: escalation.triggers,
             actions: escalation.actions,
@@ -194,6 +225,36 @@ export default function Settings() {
       showToast('Failed to save settings', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      showToast('Please fill all password fields', 'error');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      showToast('New password and confirmation do not match', 'error');
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const res = await authFetch('/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      showToast('Password updated successfully', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to update password', 'error');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -444,6 +505,104 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Auto-Trigger */}
+        <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
+          <div className="mb-3" style={headingStyle}>Auto-Trigger Settings</div>
+          <p className="small mb-3" style={mutedStyle}>Define when the chatbot proactively opens for visitors.</p>
+
+          <div className="row g-3">
+            <div className="col-12">
+              <div className="form-check">
+                <input
+                  id="auto_trigger_enabled"
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={autoTrigger.enabled}
+                  onChange={(e) => setAutoTrigger((prev) => ({ ...prev, enabled: e.target.checked }))}
+                />
+                <label className="form-check-label" htmlFor="auto_trigger_enabled" style={labelStyle}>Enable proactive greeting</label>
+              </div>
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label small" style={labelStyle}>After X seconds on page</label>
+              <input
+                type="number"
+                min={0}
+                max={120}
+                className="form-control form-control-sm"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                value={autoTrigger.afterSeconds}
+                onChange={(e) => setAutoTrigger((prev) => ({ ...prev, afterSeconds: Number(e.target.value) || 0 }))}
+              />
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label small" style={labelStyle}>After X% scroll</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                className="form-control form-control-sm"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                value={autoTrigger.afterScrollPercent}
+                onChange={(e) => setAutoTrigger((prev) => ({ ...prev, afterScrollPercent: Number(e.target.value) || 0 }))}
+              />
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label small" style={labelStyle}>Page targeting</label>
+              <div className="d-flex flex-column gap-2">
+                <div className="form-check">
+                  <input
+                    id="auto_selected_pages"
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={autoTrigger.onlySelectedPages}
+                    onChange={(e) => setAutoTrigger((prev) => ({ ...prev, onlySelectedPages: e.target.checked }))}
+                  />
+                  <label className="form-check-label" htmlFor="auto_selected_pages" style={labelStyle}>On specific pages only</label>
+                </div>
+                <div className="form-check">
+                  <input
+                    id="auto_pricing_page"
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={autoTrigger.onPricingPage}
+                    onChange={(e) => setAutoTrigger((prev) => ({ ...prev, onPricingPage: e.target.checked }))}
+                  />
+                  <label className="form-check-label" htmlFor="auto_pricing_page" style={labelStyle}>On pricing page</label>
+                </div>
+                <div className="form-check">
+                  <input
+                    id="auto_portfolio_page"
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={autoTrigger.onPortfolioPage}
+                    onChange={(e) => setAutoTrigger((prev) => ({ ...prev, onPortfolioPage: e.target.checked }))}
+                  />
+                  <label className="form-check-label" htmlFor="auto_portfolio_page" style={labelStyle}>On portfolio page</label>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-12">
+              <label className="form-label small" style={labelStyle}>Specific page rules</label>
+              <textarea
+                rows={3}
+                className="form-control form-control-sm"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                placeholder="/services\n/pricing\n/portfolio"
+                value={autoTrigger.selectedPages}
+                onChange={(e) => setAutoTrigger((prev) => ({ ...prev, selectedPages: e.target.value }))}
+              />
+              <div className="form-text" style={mutedStyle}>
+                Add one path per line. Example: /services, /pricing, /portfolio.
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Escalation */}
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <div className="mb-3" style={headingStyle}>Escalation</div>
@@ -593,6 +752,53 @@ export default function Settings() {
             disabled={logoutAllPending}>
             {logoutAllPending ? 'Logging out...' : 'Log out all sessions'}
           </button>
+        </div>
+
+        {/* Password management */}
+        <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
+          <div className="mb-3" style={headingStyle}>Password Management</div>
+          <p className="small mb-3" style={mutedStyle}>Change admin password with current password verification and strength validation.</p>
+          <div>
+            <div className="row g-2">
+              <div className="col-12 col-md-4">
+                <label className="form-label small" style={labelStyle}>Current password</label>
+                <input
+                  type="password"
+                  className="form-control form-control-sm"
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                  autoComplete="current-password"
+                />
+              </div>
+              <div className="col-12 col-md-4">
+                <label className="form-label small" style={labelStyle}>New password</label>
+                <input
+                  type="password"
+                  className="form-control form-control-sm"
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="col-12 col-md-4">
+                <label className="form-label small" style={labelStyle}>Confirm new password</label>
+                <input
+                  type="password"
+                  className="form-control form-control-sm"
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+            <div className="form-text mt-2" style={mutedStyle}>Use at least 8 characters with uppercase, lowercase and a number.</div>
+            <button type="button" className="btn btn-outline-primary btn-sm mt-3" disabled={changingPassword} onClick={handleChangePassword}>
+              {changingPassword ? 'Updating password...' : 'Update password'}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4">

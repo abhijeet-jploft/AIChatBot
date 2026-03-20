@@ -2,7 +2,11 @@ const { sendMessage: sendAnthropicMessage } = require('../services/anthropicServ
 const { sendMessage: sendGeminiMessage } = require('../services/geminiService');
 const { captureLeadFromConversation } = require('../services/leadCaptureService');
 const { sendNewLeadNotification } = require('../services/leadNotificationService');
-const { record: recordActiveVisitor, broadcastAlert } = require('../services/activeVisitorsService');
+const {
+  record: recordActiveVisitor,
+  recordMessage: recordLiveMessage,
+  broadcastAlert,
+} = require('../services/activeVisitorsService');
 const { evaluateEscalation } = require('../services/escalationService');
 const { appendChatLog } = require('../services/adminLogStore');
 const { add: addSupportRequest, isSupportRequest } = require('../services/supportRequestsStore');
@@ -137,7 +141,13 @@ async function postMessage(req, res) {
         return res.json({ content: pausedMessage, sessionId: sid, voice: pausedVoice });
       }
 
-      recordActiveVisitor(companyId, sid, req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl, true);
+      recordLiveMessage(
+        companyId,
+        sid,
+        'user',
+        userMsg?.content,
+        req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl
+      );
 
       if (isSupportRequest(userMsg.content)) {
         addSupportRequest(companyId, { sessionId: sid, message: userMsg.content });
@@ -196,6 +206,7 @@ async function postMessage(req, res) {
     if (sid) {
       try {
         await ChatMessage.create(sid, 'assistant', response);
+        recordLiveMessage(companyId, sid, 'assistant', response, req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl);
       } catch (dbErr) {
         console.error('[chat] DB post-write (non-fatal):', dbErr.message);
         appendChatLog('error', `Chat DB post-write: ${dbErr.message}`, { sessionId: sid, companyId });

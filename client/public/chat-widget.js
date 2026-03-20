@@ -4,7 +4,7 @@
  * Or set window.JPLoftChatConfig = { apiUrl: '...', companyId: '...', companyName: 'JP Loft', apiKey: 'optional-embed-key' } before loading.
  * Optional apiKey is sent as header X-Embed-Api-Key on API requests (per-company key from your dashboard).
  *
- * Activation (per doc): 6-10s on page OR 40% scroll OR 8s idle.
+ * Activation is configurable from admin auto-trigger settings.
  * Opening message uses company settings (greeting message if configured, otherwise company + chatbot names).
  */
 (function () {
@@ -25,10 +25,8 @@
 
   var DEFAULT_OPENING_QUESTION = 'Are you looking to build something or just exploring ideas?';
   var CHAT_STATE_KEY = 'ai-chat-state';
-  var ACTIVATION_MIN = 6000;
-  var ACTIVATION_MAX = 10000;
-  var IDLE_MS = 8000;
-  var SCROLL_THRESHOLD = 0.4;
+  var AUTO_TRIGGER_DEFAULT_SECONDS = 8;
+  var AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT = 40;
   var TABLET_BREAKPOINT = 1024;
   var MOBILE_BREAKPOINT = 768;
   var WIDGET_BUTTON_SIZE = 56;
@@ -63,10 +61,20 @@
   var sessions = [];
   var loading = false;
   var persistedWidgetOpen = false;
+  var autoTrigger = {
+    enabled: true,
+    afterSeconds: AUTO_TRIGGER_DEFAULT_SECONDS,
+    afterScrollPercent: AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT,
+    onlySelectedPages: false,
+    onPricingPage: false,
+    onPortfolioPage: false,
+    selectedPages: '',
+  };
 
   var presenceWs = null;
   var wsReconnectTimer = null;
   var WS_RECONNECT_MS = 5000;
+  var typingTimer = null;
 
   var root = null;
   var launcher = null;
@@ -227,6 +235,47 @@
       viewportWidth,
       viewportHeight
     );
+  }
+
+  function parseAutoTriggerRules(value) {
+    return String(value || '')
+      .split(/[\n,]/)
+      .map(function (entry) { return entry.trim().toLowerCase(); })
+      .filter(Boolean)
+      .slice(0, 30);
+  }
+
+  function matchPathRule(pathname, rule) {
+    var path = String(pathname || '').trim().toLowerCase();
+    var normalizedRule = String(rule || '').trim().toLowerCase();
+    if (!path || !normalizedRule) return false;
+
+    if (normalizedRule.charAt(normalizedRule.length - 1) === '*') {
+      var prefix = normalizedRule.slice(0, -1);
+      return path.indexOf(prefix) === 0;
+    }
+
+    return path === normalizedRule || path.indexOf(normalizedRule + '/') === 0;
+  }
+
+  function shouldEnableAutoTrigger(pathname) {
+    if (!autoTrigger.enabled) return false;
+
+    var rules = parseAutoTriggerRules(autoTrigger.selectedPages);
+    var hasTargeting = Boolean(
+      autoTrigger.onlySelectedPages ||
+      autoTrigger.onPricingPage ||
+      autoTrigger.onPortfolioPage ||
+      rules.length
+    );
+    if (!hasTargeting) return true;
+
+    var path = String(pathname || '/').toLowerCase();
+    var matched = false;
+    if (autoTrigger.onPricingPage && /(^|\/)pricing(\/|$)/i.test(path)) matched = true;
+    if (autoTrigger.onPortfolioPage && /(^|\/)portfolio(\/|$)/i.test(path)) matched = true;
+    if (rules.some(function (rule) { return matchPathRule(path, rule); })) matched = true;
+    return matched;
   }
 
   function isSmallScreen() {
@@ -674,6 +723,11 @@
     if (!panel || !launcher) return;
     opened = false;
     isFullscreen = false;
+    if (typingTimer) {
+      clearTimeout(typingTimer);
+      typingTimer = null;
+    }
+    sendPresenceTyping(false);
     updateMaxButtonState();
     panel.style.display = 'none';
     if (closeFab) closeFab.style.display = 'none';
@@ -728,6 +782,12 @@
     var text = (inputEl.value || '').trim();
     if (!text) return;
 
+    if (typingTimer) {
+      clearTimeout(typingTimer);
+      typingTimer = null;
+    }
+    sendPresenceTyping(false);
+
     inputEl.value = '';
     resizeInput();
     setSendButtonState();
@@ -744,6 +804,14 @@
   function onInputChange() {
     resizeInput();
     setSendButtonState();
+
+    if (!inputEl) return;
+    var hasText = Boolean((inputEl.value || '').trim());
+    sendPresenceTyping(hasText);
+    if (typingTimer) clearTimeout(typingTimer);
+    typingTimer = setTimeout(function () {
+      sendPresenceTyping(false);
+    }, 1300);
   }
 
   function createWidget() {
@@ -883,6 +951,18 @@
     } catch (e) {}
   }
 
+  function sendPresenceTyping(isTyping) {
+    if (!presenceWs || presenceWs.readyState !== 1 || !sessionId) return;
+    try {
+      presenceWs.send(JSON.stringify({
+        type: 'typing',
+        companyId: companyId,
+        sessionId: sessionId,
+        isTyping: Boolean(isTyping),
+      }));
+    } catch (e) {}
+  }
+
   function connectPresenceWs() {
     if (!apiUrl || !companyId) return;
     var wsUrl = getWsUrl();
@@ -922,6 +1002,23 @@
           if (company.displayName) companyName = company.displayName;
           companyIconUrl = company.iconUrl || null;
           companyGreetingMessage = company.greetingMessage || null;
+          if (company.autoTrigger && typeof company.autoTrigger === 'object') {
+            autoTrigger.enabled = company.autoTrigger.enabled !== false;
+            autoTrigger.afterSeconds = Math.max(0, Math.min(120, Number(company.autoTrigger.afterSeconds != null ? company.autoTrigger.afterSeconds : AUTO_TRIGGER_DEFAULT_SECONDS)));
+            autoTrigger.afterScrollPercent = Math.max(0, Math.min(100, Number(company.autoTrigger.afterScrollPercent != null ? company.autoTrigger.afterScrollPercent : AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT)));
+            autoTrigger.onlySelectedPages = Boolean(company.autoTrigger.onlySelectedPages);
+            autoTrigger.onPricingPage = Boolean(company.autoTrigger.onPricingPage);
+            autoTrigger.onPortfolioPage = Boolean(company.autoTrigger.onPortfolioPage);
+            autoTrigger.selectedPages = String(company.autoTrigger.selectedPages || '');
+
+            if (!activated) {
+              if (typeof stopActivationWatchers === 'function') {
+                stopActivationWatchers();
+                stopActivationWatchers = null;
+              }
+              runActivation();
+            }
+          }
           widgetSide = company.widgetPosition === 'left' ? 'left' : 'right';
           var vp = getViewport();
           widgetButtonPos = clampWidgetButtonPosition(widgetButtonPos, vp.width, vp.height);
@@ -970,35 +1067,31 @@
   function runActivation() {
     if (activated) return;
 
-    var delay = ACTIVATION_MIN + Math.random() * (ACTIVATION_MAX - ACTIVATION_MIN);
-    var delayTimer = setTimeout(activate, delay);
+    var currentPath = (typeof window !== 'undefined' && window.location) ? window.location.pathname : '/';
+    if (!shouldEnableAutoTrigger(currentPath)) return;
+
+    var delayMs = Math.max(0, Number(autoTrigger.afterSeconds || 0) * 1000);
+    var scrollThreshold = Math.max(0, Math.min(1, Number(autoTrigger.afterScrollPercent || 0) / 100));
+    var delayTimer = null;
+
+    if (delayMs <= 0) {
+      activate();
+    } else {
+      delayTimer = setTimeout(activate, delayMs);
+    }
 
     function onScroll() {
+      if (scrollThreshold <= 0) return;
       var h = document.documentElement.scrollHeight - window.innerHeight;
       if (h <= 0) return;
-      if (window.scrollY / h >= SCROLL_THRESHOLD) activate();
+      if (window.scrollY / h >= scrollThreshold) activate();
     }
 
     window.addEventListener('scroll', onScroll, { passive: true });
 
-    var idleTimer = null;
-    function resetIdle() {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(activate, IDLE_MS);
-    }
-
-    resetIdle();
-    window.addEventListener('mousemove', resetIdle);
-    window.addEventListener('keydown', resetIdle);
-    window.addEventListener('scroll', resetIdle);
-
     stopActivationWatchers = function () {
       clearTimeout(delayTimer);
-      clearTimeout(idleTimer);
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('mousemove', resetIdle);
-      window.removeEventListener('keydown', resetIdle);
-      window.removeEventListener('scroll', resetIdle);
     };
   }
 

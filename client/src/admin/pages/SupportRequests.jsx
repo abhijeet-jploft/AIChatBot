@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const PAGE_SIZE = 20;
@@ -88,13 +89,19 @@ export default function SupportRequests() {
                           {formatDateTime(row.requestedAt)}
                         </td>
                         <td className="align-middle text-end">
+                          <Link
+                            to={`/admin/chat/${row.sessionId}`}
+                            className="btn btn-sm btn-primary me-1"
+                          >
+                            Operator chat
+                          </Link>
                           <a
                             href={`/?sessionId=${encodeURIComponent(row.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="btn btn-sm btn-outline-primary"
+                            className="btn btn-sm btn-outline-secondary"
                           >
-                            Open chat
+                            Visitor preview
                           </a>
                         </td>
                       </tr>

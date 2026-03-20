@@ -1,17 +1,23 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-export default function ChatInput({ onSend, disabled, showMic = true }) {
+export default function ChatInput({ onSend, disabled, showMic = true, onTypingChange }) {
   const [value, setValue] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const textareaRef = useRef(null);
   const recognitionRef = useRef(null);
   const shouldBeRecordingRef = useRef(false);
+  const typingTimeoutRef = useRef(null);
 
   const handleSubmit = (e) => {
     e?.preventDefault();
     if (!value.trim() || disabled) return;
     onSend(value.trim());
     setValue('');
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    if (typeof onTypingChange === 'function') onTypingChange(false);
   };
 
   const handleKeyDown = (e) => {
@@ -100,6 +106,15 @@ export default function ChatInput({ onSend, disabled, showMic = true }) {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (typeof onTypingChange === 'function') onTypingChange(false);
+    };
+  }, [onTypingChange]);
+
   return (
     <div
       className="chat-input-shell px-3 px-md-4 py-3"
@@ -116,7 +131,16 @@ export default function ChatInput({ onSend, disabled, showMic = true }) {
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setValue(next);
+              if (typeof onTypingChange === 'function') {
+                const typing = Boolean(next.trim());
+                onTypingChange(typing);
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                typingTimeoutRef.current = setTimeout(() => onTypingChange(false), 1300);
+              }
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Type your message or use the mic…"
             disabled={disabled}

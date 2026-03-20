@@ -3,12 +3,43 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const PAGE_SIZE = 20;
+const INTENT_OPTIONS = [
+  { value: 'all', label: 'All intents' },
+  { value: 'website', label: 'Website' },
+  { value: 'app', label: 'App' },
+  { value: 'pricing_request', label: 'Pricing' },
+  { value: 'support_request', label: 'Support' },
+  { value: 'consultation_request', label: 'Consultation' },
+  { value: 'general_inquiry', label: 'General' },
+];
+
+const OUTCOME_OPTIONS = [
+  { value: 'all', label: 'All outcomes' },
+  { value: 'lead_captured', label: 'Lead captured' },
+  { value: 'converted', label: 'Converted' },
+  { value: 'escalated', label: 'Escalated' },
+  { value: 'no_lead', label: 'No lead' },
+];
 
 function formatDateTime(value) {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleString();
+}
+
+function humanize(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function formatConversationStatus(status) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'active') return 'Active';
+  if (normalized === 'closed') return 'Closed';
+  if (normalized === 'escalated' || normalized === 'converted_to_lead') return 'Escalated';
+  return humanize(status || 'closed');
 }
 
 function formatTimeAgo(dateStr) {
@@ -31,9 +62,14 @@ export default function Conversations() {
   const [dateTo, setDateTo] = useState('');
   const [leadStatus, setLeadStatus] = useState('all');
   const [status, setStatus] = useState('all');
+  const [intent, setIntent] = useState('all');
+  const [outcome, setOutcome] = useState('all');
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [loading, setLoading] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detail, setDetail] = useState(null);
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
@@ -46,6 +82,8 @@ export default function Conversations() {
       if (dateTo) params.set('dateTo', dateTo);
       if (leadStatus && leadStatus !== 'all') params.set('leadStatus', leadStatus);
       if (status && status !== 'all') params.set('status', status);
+      if (intent && intent !== 'all') params.set('intent', intent);
+      if (outcome && outcome !== 'all') params.set('outcome', outcome);
       const res = await authFetch(`/conversations?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load conversations');
       const json = await res.json();
@@ -60,7 +98,24 @@ export default function Conversations() {
     } finally {
       setLoading(false);
     }
-  }, [authFetch, page, appliedSearch, dateFrom, dateTo, leadStatus, status]);
+  }, [authFetch, page, appliedSearch, dateFrom, dateTo, leadStatus, status, intent, outcome]);
+
+  const openDetail = useCallback(async (sessionId) => {
+    if (!sessionId) return;
+    setDetailId(sessionId);
+    setDetailLoading(true);
+    setDetail(null);
+    try {
+      const res = await authFetch(`/conversations/${sessionId}`);
+      if (!res.ok) throw new Error('Failed to load conversation details');
+      const payload = await res.json();
+      setDetail(payload);
+    } catch {
+      setDetail({ error: 'Failed to load conversation details' });
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [authFetch]);
 
   useEffect(() => {
     loadConversations();
@@ -72,7 +127,15 @@ export default function Conversations() {
     setPage(1);
   };
 
-  const hasFilters = appliedSearch || dateFrom || dateTo || (leadStatus && leadStatus !== 'all') || (status && status !== 'all');
+  const hasFilters =
+    appliedSearch ||
+    dateFrom ||
+    dateTo ||
+    (leadStatus && leadStatus !== 'all') ||
+    (status && status !== 'all') ||
+    (intent && intent !== 'all') ||
+    (outcome && outcome !== 'all');
+
   const clearFilters = () => {
     setSearch('');
     setAppliedSearch('');
@@ -80,6 +143,8 @@ export default function Conversations() {
     setDateTo('');
     setLeadStatus('all');
     setStatus('all');
+    setIntent('all');
+    setOutcome('all');
     setPage(1);
   };
 
@@ -149,6 +214,22 @@ export default function Conversations() {
                 <option value="closed">Closed</option>
               </select>
             </div>
+            <div className="col-6 col-md-2 col-lg-2">
+              <label className="form-label small">Intent</label>
+              <select className="form-select form-select-sm" value={intent} onChange={(e) => setIntent(e.target.value)}>
+                {INTENT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-6 col-md-2 col-lg-2">
+              <label className="form-label small">Outcome</label>
+              <select className="form-select form-select-sm" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+                {OUTCOME_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
             <div className="col-12 col-md-auto d-flex gap-1 flex-wrap">
               <button type="submit" className="btn btn-primary btn-sm">Search</button>
               {hasFilters && (
@@ -175,11 +256,14 @@ export default function Conversations() {
                 <table className="table table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
                   <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
                     <tr>
-                      <th className="border-0 py-2">First message / Title</th>
-                      <th className="border-0 py-2">Messages</th>
-                      <th className="border-0 py-2">Lead</th>
-                      <th className="border-0 py-2">Status</th>
-                      <th className="border-0 py-2">Updated</th>
+                      <th className="border-0 py-2">Visitor ID</th>
+                      <th className="border-0 py-2">Visitor name</th>
+                      <th className="border-0 py-2">Date and time</th>
+                      <th className="border-0 py-2">Conversation status</th>
+                      <th className="border-0 py-2">Lead captured</th>
+                      <th className="border-0 py-2">Source page</th>
+                      <th className="border-0 py-2">Conversation duration</th>
+                      <th className="border-0 py-2">Intent tag</th>
                       <th className="border-0 py-2 text-end">Actions</th>
                     </tr>
                   </thead>
@@ -187,35 +271,64 @@ export default function Conversations() {
                     {data.rows.map((conv) => (
                       <tr key={conv.id}>
                         <td className="align-middle">
-                          <span
-                            className="d-inline-block text-truncate"
-                            style={{ maxWidth: 320 }}
-                            title={conv.firstMessage || conv.title}
-                          >
-                            {conv.firstMessage || conv.title || '—'}
-                          </span>
+                          <code className="small">{conv.visitorId || conv.id}</code>
                         </td>
-                        <td className="align-middle">{conv.messageCount}</td>
-                        <td className="align-middle">{conv.leadCaptured ? 'Yes' : 'No'}</td>
                         <td className="align-middle">
-                          <span className={`badge ${conv.status === 'active' ? 'text-bg-success' : 'text-bg-secondary'}`}>
-                            {conv.status}
-                          </span>
+                          {conv.visitorName || 'Anonymous visitor'}
                         </td>
                         <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
-                          {formatTimeAgo(conv.updatedAt)}
+                          {formatDateTime(conv.createdAt)}
+                        </td>
+                        <td className="align-middle">
+                          <span className={`badge ${
+                            conv.status === 'active'
+                              ? 'text-bg-success'
+                              : conv.status === 'escalated' || conv.status === 'converted_to_lead'
+                                ? 'text-bg-warning'
+                                : 'text-bg-secondary'
+                          }`}>
+                            {formatConversationStatus(conv.status)}
+                          </span>
+                        </td>
+                        <td className="align-middle">{conv.leadCaptured ? 'Yes' : 'No'}</td>
+                        <td className="align-middle">
+                          {conv.sourcePage ? (
+                            <a
+                              href={conv.sourcePage}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="small"
+                              title={conv.sourcePage}
+                            >
+                              {String(conv.sourcePage).slice(0, 64)}
+                            </a>
+                          ) : (
+                            <span className="small">—</span>
+                          )}
+                        </td>
+                        <td className="align-middle">
+                          {conv.durationLabel || '—'}
+                        </td>
+                        <td className="align-middle">
+                          {humanize(conv.intentTag)}
                         </td>
                         <td className="align-middle text-end">
                           {conv.leadCaptured ? (
                             <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-primary me-1">View lead</Link>
                           ) : null}
+                          <button type="button" className="btn btn-sm btn-outline-primary me-1" onClick={() => openDetail(conv.id)}>
+                            Details
+                          </button>
+                          <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary me-1">
+                            Operator chat
+                          </Link>
                           <a
                             href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn btn-sm btn-outline-secondary"
                           >
-                            Open chat
+                            Visitor preview
                           </a>
                         </td>
                       </tr>
@@ -255,6 +368,92 @@ export default function Conversations() {
           )}
         </div>
       </div>
+
+      {detailId ? (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100"
+          style={{ background: 'rgba(0,0,0,0.55)', zIndex: 2050 }}
+          onClick={() => { setDetailId(null); setDetail(null); }}
+        >
+          <div
+            className="position-absolute top-50 start-50 translate-middle"
+            style={{ width: 'min(1100px, 96vw)', maxHeight: '90vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="card" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
+              <div className="card-header d-flex justify-content-between align-items-center" style={{ borderColor: 'var(--chat-border)' }}>
+                <div>
+                  <strong>Conversation details</strong>
+                  {detail?.session?.visitorName ? (
+                    <span className="small ms-2" style={{ color: 'var(--chat-muted)' }}>{detail.session.visitorName}</span>
+                  ) : null}
+                </div>
+                <button className="btn btn-sm btn-outline-secondary" onClick={() => { setDetailId(null); setDetail(null); }}>
+                  Close
+                </button>
+              </div>
+              <div className="card-body" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+                {detailLoading ? (
+                  <div className="small text-muted">Loading conversation details...</div>
+                ) : detail?.error ? (
+                  <div className="small text-danger">{detail.error}</div>
+                ) : detail ? (
+                  <>
+                    <div className="row g-3 mb-3 small">
+                      <div className="col-md-4"><strong>Status:</strong> {humanize(detail.session?.status)}</div>
+                      <div className="col-md-4"><strong>Intent:</strong> {humanize(detail.session?.intentTag)}</div>
+                      <div className="col-md-4"><strong>Duration:</strong> {detail.session?.durationLabel || '—'}</div>
+                      <div className="col-md-6"><strong>Source page:</strong> {detail.session?.sourcePage || '—'}</div>
+                      <div className="col-md-6"><strong>Captured at:</strong> {formatDateTime(detail.session?.createdAt)}</div>
+                    </div>
+
+                    <div className="mb-3 p-3 rounded" style={{ background: 'var(--chat-bg)', border: '1px solid var(--chat-border)' }}>
+                      <div className="small fw-semibold mb-2">AI conversation summary</div>
+                      <div className="small mb-1"><strong>Visitor intent:</strong> {detail.summary?.visitorIntent || '—'}</div>
+                      <div className="small mb-1"><strong>Business type:</strong> {detail.summary?.businessType || '—'}</div>
+                      <div className="small mb-1"><strong>Requirements:</strong> {detail.summary?.requirementsDiscussed || '—'}</div>
+                      <div className="small mb-1"><strong>Qualification:</strong> {detail.summary?.qualificationLevel || '—'}</div>
+                      <div className="small"><strong>Suggested action:</strong> {detail.summary?.suggestedNextAction || '—'}</div>
+                    </div>
+
+                    {detail.lead ? (
+                      <div className="mb-3 p-3 rounded" style={{ background: 'var(--chat-bg)', border: '1px solid var(--chat-border)' }}>
+                        <div className="small fw-semibold mb-2">Lead information</div>
+                        <div className="row g-2 small">
+                          <div className="col-md-6"><strong>Name:</strong> {detail.lead.name || '—'}</div>
+                          <div className="col-md-6"><strong>Phone:</strong> {detail.lead.phone || '—'}</div>
+                          <div className="col-md-6"><strong>Email:</strong> {detail.lead.email || '—'}</div>
+                          <div className="col-md-6"><strong>Service:</strong> {detail.lead.serviceRequested || '—'}</div>
+                          <div className="col-md-6"><strong>Budget:</strong> {detail.lead.budgetRange || '—'}</div>
+                          <div className="col-md-6"><strong>Timeline:</strong> {detail.lead.timeline || '—'}</div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <div className="small fw-semibold mb-2">Full transcript</div>
+                      <div style={{ maxHeight: 360, overflowY: 'auto', background: '#11131a', border: '1px solid #2e3545', borderRadius: 8, padding: 12 }}>
+                        {(detail.messages || []).length ? (
+                          detail.messages.map((message, index) => (
+                            <div key={`${message.createdAt}-${index}`} className="mb-2" style={{ color: '#d1d5db' }}>
+                              <div style={{ fontSize: 11, opacity: 0.75 }}>
+                                {String(message.role || '').toUpperCase()} • {formatDateTime(message.createdAt)} • {humanize(message.messageType || 'text')}
+                              </div>
+                              <div style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{message.content}</div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="small" style={{ color: '#9ca3af' }}>No transcript available.</div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -15,6 +15,9 @@ async function getCompaniesList(req, res) {
     const companyIds = companies.map((c) => c.id);
     const { rows } = await pool.query(
       `SELECT c.company_id, c.name AS db_company_name, ch.display_name, ch.icon_url, ch.greeting_message, ch.widget_position,
+              ch.auto_trigger_enabled, ch.auto_trigger_delay_seconds, ch.auto_trigger_scroll_percent,
+              ch.auto_trigger_only_selected_pages, ch.auto_trigger_pricing_page, ch.auto_trigger_portfolio_page,
+              ch.auto_trigger_selected_pages,
               th.theme_primary_color, th.theme_primary_dark_color,
               th.theme_secondary_color, th.theme_secondary_light_color,
               th.theme_header_background, th.theme_header_shadow, th.theme_header_text_color,
@@ -54,6 +57,15 @@ async function getCompaniesList(req, res) {
         iconUrl: dbRow.icon_url || null,
         greetingMessage: dbRow.greeting_message || null,
         widgetPosition: String(dbRow.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
+        autoTrigger: {
+          enabled: Boolean(dbRow.auto_trigger_enabled !== false),
+          afterSeconds: Math.max(0, Math.min(120, Number(dbRow.auto_trigger_delay_seconds ?? 8))),
+          afterScrollPercent: Math.max(0, Math.min(100, Number(dbRow.auto_trigger_scroll_percent ?? 40))),
+          onlySelectedPages: Boolean(dbRow.auto_trigger_only_selected_pages),
+          onPricingPage: Boolean(dbRow.auto_trigger_pricing_page),
+          onPortfolioPage: Boolean(dbRow.auto_trigger_portfolio_page),
+          selectedPages: String(dbRow.auto_trigger_selected_pages || ''),
+        },
         voice: {
           enabled: Boolean(dbRow.voice_mode_enabled),
           responseEnabled: Boolean(dbRow.voice_response_enabled !== false),

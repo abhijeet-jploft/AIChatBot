@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import ChatSidebar from './components/ChatSidebar';
 import ChatMain from './components/ChatMain';
@@ -37,10 +37,8 @@ function normalizeAssistantNameInText(text, chatbotName) {
   return output;
 }
 
-const ACTIVATION_DELAY_MS_MIN = 6000;
-const ACTIVATION_DELAY_MS_MAX = 10000;
-const IDLE_MS = 8000;
-const SCROLL_THRESHOLD = 0.4;
+const AUTO_TRIGGER_DEFAULT_SECONDS = 8;
+const AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT = 40;
 const THEME_KEY = 'ai-chat-theme';
 const CHAT_VIEW_MODE_KEY = 'ai-chat-view-mode';
 const WIDGET_BUTTON_POS_KEY = 'ai-chat-widget-button-position';
@@ -277,6 +275,49 @@ function readInitialChatState() {
   return readPersistedChatState();
 }
 
+function parseAutoTriggerRules(value) {
+  return String(value || '')
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
+function matchPathRule(pathname, rule) {
+  const path = String(pathname || '').trim().toLowerCase();
+  const normalizedRule = String(rule || '').trim().toLowerCase();
+  if (!path || !normalizedRule) return false;
+
+  if (normalizedRule.endsWith('*')) {
+    const prefix = normalizedRule.slice(0, -1);
+    return path.startsWith(prefix);
+  }
+
+  return path === normalizedRule || path.startsWith(`${normalizedRule}/`);
+}
+
+function shouldEnableAutoTrigger(autoTrigger, pathname) {
+  if (!autoTrigger?.enabled) return false;
+
+  const path = String(pathname || '/').toLowerCase();
+  const selectedRules = parseAutoTriggerRules(autoTrigger.selectedPages);
+  const hasPageTargeting = Boolean(
+    autoTrigger.onlySelectedPages ||
+    autoTrigger.onPricingPage ||
+    autoTrigger.onPortfolioPage ||
+    selectedRules.length
+  );
+
+  if (!hasPageTargeting) return true;
+
+  let matched = false;
+  if (autoTrigger.onPricingPage && /(^|\/)pricing(\/|$)/i.test(path)) matched = true;
+  if (autoTrigger.onPortfolioPage && /(^|\/)portfolio(\/|$)/i.test(path)) matched = true;
+  if (selectedRules.some((rule) => matchPathRule(path, rule))) matched = true;
+
+  return matched;
+}
+
 export default function App() {
   const location = useLocation();
   const isWebsiteView = location.pathname === '/' || location.pathname === '';
@@ -376,6 +417,23 @@ export default function App() {
   const companyNameForOpening = currentCompany?.companyName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const chatbotNameForOpening = String(currentCompany?.chatbotName || '').trim();
   const openingMessageText = String(currentCompany?.greetingMessage || '').trim() || buildDefaultOpeningMessage(companyNameForOpening, chatbotNameForOpening);
+  const autoTriggerConfig = useMemo(() => ({
+    enabled: Boolean(currentCompany?.autoTrigger?.enabled !== false),
+    afterSeconds: Math.max(0, Math.min(120, Number(currentCompany?.autoTrigger?.afterSeconds ?? AUTO_TRIGGER_DEFAULT_SECONDS))),
+    afterScrollPercent: Math.max(0, Math.min(100, Number(currentCompany?.autoTrigger?.afterScrollPercent ?? AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT))),
+    onlySelectedPages: Boolean(currentCompany?.autoTrigger?.onlySelectedPages),
+    onPricingPage: Boolean(currentCompany?.autoTrigger?.onPricingPage),
+    onPortfolioPage: Boolean(currentCompany?.autoTrigger?.onPortfolioPage),
+    selectedPages: String(currentCompany?.autoTrigger?.selectedPages || ''),
+  }), [
+    currentCompany?.autoTrigger?.enabled,
+    currentCompany?.autoTrigger?.afterSeconds,
+    currentCompany?.autoTrigger?.afterScrollPercent,
+    currentCompany?.autoTrigger?.onlySelectedPages,
+    currentCompany?.autoTrigger?.onPricingPage,
+    currentCompany?.autoTrigger?.onPortfolioPage,
+    currentCompany?.autoTrigger?.selectedPages,
+  ]);
 
   const dragStateRef = useRef({
     pointerId: null,
@@ -387,6 +445,7 @@ export default function App() {
   });
   const ignoreButtonClickRef = useRef(false);
   const presenceWsRef = useRef(null);
+  const typingPresenceRef = useRef({ isTyping: false, lastSentAt: 0 });
   const responseAudioRef = useRef(null);
   const speechUtteranceRef = useRef(null);
   const sessionIdRef = useRef(sessionId);
@@ -669,45 +728,41 @@ export default function App() {
     }
   }, [isWebsiteView, chatViewMode]);
 
-  // â”€â”€ Widget activation (doc: 6â€“10s OR 40% scroll OR 8s idle) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Widget activation (admin-configurable auto trigger)
   useEffect(() => {
     if (!isWebsiteView || widgetActivated) return;
+    if (!currentCompany) return;
 
-    const delay = ACTIVATION_DELAY_MS_MIN + Math.random() * (ACTIVATION_DELAY_MS_MAX - ACTIVATION_DELAY_MS_MIN);
-    const t1 = setTimeout(() => setWidgetActivated(true), delay);
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : location.pathname;
+    if (!shouldEnableAutoTrigger(autoTriggerConfig, currentPath)) return;
 
-    const getScrollRatio = () => {
+    const delayMs = Math.max(0, Number(autoTriggerConfig.afterSeconds || 0) * 1000);
+    const scrollThreshold = Math.max(0, Math.min(1, Number(autoTriggerConfig.afterScrollPercent || 0) / 100));
+
+    let delayTimer = null;
+    if (delayMs <= 0) {
+      setWidgetActivated(true);
+    } else {
+      delayTimer = setTimeout(() => setWidgetActivated(true), delayMs);
+    }
+
+    const onScroll = () => {
+      if (scrollThreshold <= 0) return;
       const doc = document.documentElement;
       const scrollHeight = Math.max(doc.scrollHeight, doc.clientHeight, window.innerHeight);
       const maxScroll = scrollHeight - window.innerHeight;
-      if (maxScroll <= 0) return 0;
-      return Math.min(1, window.scrollY / maxScroll);
+      if (maxScroll <= 0) return;
+      const ratio = Math.min(1, window.scrollY / maxScroll);
+      if (ratio >= scrollThreshold) setWidgetActivated(true);
     };
 
-    const onScroll = () => {
-      if (getScrollRatio() >= SCROLL_THRESHOLD) setWidgetActivated(true);
-    };
     window.addEventListener('scroll', onScroll, { passive: true });
 
-    let idleTimer;
-    const resetIdle = () => {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => setWidgetActivated(true), IDLE_MS);
-    };
-    resetIdle();
-    window.addEventListener('mousemove', resetIdle);
-    window.addEventListener('keydown', resetIdle);
-    window.addEventListener('scroll', resetIdle);
-
     return () => {
-      clearTimeout(t1);
-      clearTimeout(idleTimer);
+      if (delayTimer) clearTimeout(delayTimer);
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('mousemove', resetIdle);
-      window.removeEventListener('keydown', resetIdle);
-      window.removeEventListener('scroll', resetIdle);
     };
-  }, [isWebsiteView, widgetActivated]);
+  }, [isWebsiteView, widgetActivated, location.pathname, autoTriggerConfig, currentCompany]);
 
   // â”€â”€ Activation checks open popup once (icon is always visible/clickable) â”€â”€â”€
   useEffect(() => {
@@ -920,9 +975,33 @@ export default function App() {
     setOpeningMessageShown(false);
   };
 
+  const sendTypingPresence = useCallback((isTyping) => {
+    const sock = presenceWsRef.current;
+    const sid = sessionIdRef.current;
+    if (!sock || sock.readyState !== WebSocket.OPEN || !sid) return;
+
+    const nextTyping = Boolean(isTyping);
+    const now = Date.now();
+    const last = typingPresenceRef.current;
+    if (last.isTyping === nextTyping && now - last.lastSentAt < 600) return;
+
+    try {
+      sock.send(JSON.stringify({
+        type: 'typing',
+        companyId,
+        sessionId: sid,
+        isTyping: nextTyping,
+      }));
+      typingPresenceRef.current = { isTyping: nextTyping, lastSentAt: now };
+    } catch {
+      // ignore socket send failures
+    }
+  }, [companyId]);
+
   // â”€â”€ Send message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sendMessage = async (content) => {
     if (!content.trim() || loading) return;
+    sendTypingPresence(false);
 
     const userMsg = { role: 'user', content: content.trim() };
     setMessages((prev) => [...prev, userMsg]);
@@ -1049,6 +1128,7 @@ export default function App() {
   };
 
   const handleCloseWidget = () => {
+    sendTypingPresence(false);
     if (isWebsiteView) {
       setWidgetActivated(true);
       setAutoPopupHandled(true);
@@ -1224,6 +1304,7 @@ export default function App() {
           messages={messages}
           loading={loading}
           onSend={sendMessage}
+          onTypingChange={sendTypingPresence}
           companyName={companyName}
           companyIconUrl={companyIconUrl}
           greetingMessage={greetingMessage}
@@ -1304,7 +1385,6 @@ export default function App() {
                 </button>
 
                 <span className="chat-widget-avatar" style={{ width: 36, height: 36, borderRadius: 8, overflow: 'hidden', position: 'relative', flexShrink: 0 }} aria-hidden="true">
-                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{companyName.charAt(0).toUpperCase()}</span>
                   {companyIconUrl && <img src={companyIconUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />}
                 </span>
               </div>
@@ -1315,6 +1395,7 @@ export default function App() {
                 messages={messages}
                 loading={loading}
                 onSend={sendMessage}
+                onTypingChange={sendTypingPresence}
                 companyName={companyName}
                 companyIconUrl={companyIconUrl}
                 greetingMessage={greetingMessage}

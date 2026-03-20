@@ -185,6 +185,7 @@ async function getLive(req, res) {
     res.json({
       activeCount: active.activeCount,
       currentlyChatting: active.currentlyChatting,
+      typingCount: active.typingCount,
       lastMessageAt: active.lastMessageAt,
       sessions: active.sessions.map((s) => ({
         sessionId: s.sessionId,
@@ -192,6 +193,12 @@ async function getLive(req, res) {
         lastSeen: s.lastSeen,
         messageCount: s.messageCount,
         isOpen: Boolean(s.isOpen),
+        startedAt: s.startedAt,
+        durationSeconds: s.durationSeconds,
+        isTyping: Boolean(s.isTyping),
+        lastMessageAt: s.lastMessageAt,
+        lastMessageRole: s.lastMessageRole,
+        lastMessagePreview: s.lastMessagePreview,
       })),
     });
   } catch (err) {

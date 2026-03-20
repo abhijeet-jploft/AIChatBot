@@ -41,6 +41,41 @@ function normalizeAiProvider(value) {
   return null;
 }
 
+function clampInt(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function normalizeSelectedPages(value) {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => String(v || '').trim())
+      .filter(Boolean)
+      .slice(0, 30)
+      .join('\n');
+  }
+  return String(value || '')
+    .split(/[\n,]/)
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .slice(0, 30)
+    .join('\n');
+}
+
+function buildAutoTriggerPayload(company) {
+  return {
+    enabled: Boolean(company?.auto_trigger_enabled !== false),
+    afterSeconds: clampInt(company?.auto_trigger_delay_seconds, 0, 120, 8),
+    afterScrollPercent: clampInt(company?.auto_trigger_scroll_percent, 0, 100, 40),
+    onlySelectedPages: Boolean(company?.auto_trigger_only_selected_pages),
+    onPricingPage: Boolean(company?.auto_trigger_pricing_page),
+    onPortfolioPage: Boolean(company?.auto_trigger_portfolio_page),
+    selectedPages: String(company?.auto_trigger_selected_pages || ''),
+  };
+}
+
 function getCompanyCustomVoice(company) {
   const voiceId = String(company?.voice_custom_id || '').trim();
   if (!voiceId) return null;
@@ -152,6 +187,7 @@ async function getSettings(req, res) {
       widget: {
         position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
       },
+      autoTrigger: buildAutoTriggerPayload(company),
       aiMode: modeCatalog.active,
       ai: buildAiPayload(company),
       leadNotifications: {
@@ -219,6 +255,7 @@ async function updateSettings(req, res) {
       theme,
       leadNotifications,
       voice,
+      autoTrigger,
       escalation,
       safety,
       language,
@@ -253,6 +290,14 @@ async function updateSettings(req, res) {
     if (emailEnabled === true && !email) {
       return res.status(400).json({ error: 'Lead notification email is required when email notifications are enabled' });
     }
+
+    const normalizedAutoTriggerDelay = autoTrigger?.afterSeconds !== undefined
+      ? clampInt(autoTrigger.afterSeconds, 0, 120, 8)
+      : undefined;
+    const normalizedAutoTriggerScroll = autoTrigger?.afterScrollPercent !== undefined
+      ? clampInt(autoTrigger.afterScrollPercent, 0, 100, 40)
+      : undefined;
+    const normalizedAutoTriggerPages = normalizeSelectedPages(autoTrigger?.selectedPages);
 
     const companyBeforeUpdate = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
     if (!companyBeforeUpdate) {
@@ -300,6 +345,19 @@ async function updateSettings(req, res) {
       widget_position: widget?.position !== undefined
         ? (String(widget.position).toLowerCase() === 'left' ? 'left' : 'right')
         : undefined,
+      auto_trigger_enabled: autoTrigger?.enabled !== undefined ? Boolean(autoTrigger.enabled) : undefined,
+      auto_trigger_delay_seconds: normalizedAutoTriggerDelay,
+      auto_trigger_scroll_percent: normalizedAutoTriggerScroll,
+      auto_trigger_only_selected_pages: autoTrigger?.onlySelectedPages !== undefined
+        ? Boolean(autoTrigger.onlySelectedPages)
+        : undefined,
+      auto_trigger_pricing_page: autoTrigger?.onPricingPage !== undefined
+        ? Boolean(autoTrigger.onPricingPage)
+        : undefined,
+      auto_trigger_portfolio_page: autoTrigger?.onPortfolioPage !== undefined
+        ? Boolean(autoTrigger.onPortfolioPage)
+        : undefined,
+      auto_trigger_selected_pages: normalizedAutoTriggerPages,
       ai_mode: aiMode !== undefined ? normalizeConversationModeId(aiMode) : undefined,
       ai_provider: normalizedAiProvider !== undefined ? normalizedAiProvider : undefined,
       ai_model: ai?.model !== undefined ? String(ai.model || '').trim() || null : undefined,
@@ -382,6 +440,7 @@ async function updateSettings(req, res) {
       widget: {
         position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
       },
+      autoTrigger: buildAutoTriggerPayload(company),
       aiMode: modeCatalog.active,
       ai: buildAiPayload(company),
       leadNotifications: {

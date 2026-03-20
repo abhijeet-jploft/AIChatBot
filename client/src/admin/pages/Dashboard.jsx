@@ -476,14 +476,22 @@ export default function Dashboard() {
                           </button>
                         )}
                         {lead.sessionId && (
-                          <a
-                            href={`/?sessionId=${encodeURIComponent(lead.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}&scrollTo=lead`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-sm btn-outline-primary"
-                          >
-                            Open chat
-                          </a>
+                          <>
+                            <Link
+                              to={`/admin/chat/${lead.sessionId}`}
+                              className="btn btn-sm btn-primary"
+                            >
+                              Operator chat
+                            </Link>
+                            <a
+                              href={`/?sessionId=${encodeURIComponent(lead.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}&scrollTo=lead`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-sm btn-outline-secondary"
+                            >
+                              Visitor preview
+                            </a>
+                          </>
                         )}
                         <Link to={`/admin/leads/${lead.id}`} className="btn btn-sm btn-outline-secondary">View lead</Link>
                       </div>
@@ -516,16 +524,18 @@ export default function Dashboard() {
                       </div>
                       {conv.leadCaptured ? (
                         <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-secondary ms-2">View lead</Link>
-                      ) : (
-                        <a
-                          href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-outline-secondary ms-2"
-                        >
-                          Open chat
-                        </a>
-                      )}
+                      ) : null}
+                      <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary ms-2">
+                        Operator chat
+                      </Link>
+                      <a
+                        href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm btn-outline-secondary ms-2"
+                      >
+                        Visitor preview
+                      </a>
                     </li>
                   ))}
                 </ul>

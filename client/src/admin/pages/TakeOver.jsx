@@ -216,14 +216,14 @@ export default function TakeOver() {
   const fromRow = allData.total === 0 ? 0 : (allData.page - 1) * allData.limit + 1;
   const toRow = Math.min(allData.page * allData.limit, allData.total);
 
-  const chatUrl = (sessionId) =>
-    `/?sessionId=${encodeURIComponent(sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`;
+  const visitorPreviewUrl = (sid) =>
+    `/?sessionId=${encodeURIComponent(sid)}&companyId=${encodeURIComponent(company?.companyId || '')}`;
 
   return (
     <div className="p-4">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Take over conversation</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
-        Live: visitors with the chatbot open — send a message in real time. All: every conversation with search and pagination — open chat to view or continue.
+        <strong>Operator chat</strong> opens the full visitor-style chat (theme, mic, voice playback) so you can read the thread and reply; messages are sent to the visitor in real time. Use <strong>Visitor preview</strong> to open the public site in a new tab. Quick <strong>Send</strong> below still works for one-line replies.
       </p>
 
       {/* Tabs */}
@@ -311,13 +311,19 @@ export default function TakeOver() {
                             <div className="d-flex flex-wrap gap-1 justify-content-end align-items-center">
                               {canSend ? (
                                 <>
+                                  <Link
+                                    to={`/admin/chat/${s.sessionId}`}
+                                    className="btn btn-sm btn-primary"
+                                  >
+                                    Operator chat
+                                  </Link>
                                   <a
-                                    href={chatUrl(s.sessionId)}
+                                    href={visitorPreviewUrl(s.sessionId)}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="btn btn-sm btn-outline-primary"
+                                    className="btn btn-sm btn-outline-secondary"
                                   >
-                                    Open chat
+                                    Visitor preview
                                   </a>
                                   <div className="d-flex gap-1 align-items-center mt-1 mt-md-0">
                                     <input
@@ -450,13 +456,19 @@ export default function TakeOver() {
                               >
                                 Send message
                               </button>
+                              <Link
+                                to={`/admin/chat/${conv.id}`}
+                                className="btn btn-sm btn-primary"
+                              >
+                                Operator chat
+                              </Link>
                               <a
-                                href={chatUrl(conv.id)}
+                                href={visitorPreviewUrl(conv.id)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="btn btn-sm btn-outline-primary"
+                                className="btn btn-sm btn-outline-secondary"
                               >
-                                Open chat
+                                Visitor preview
                               </a>
                             </td>
                           </tr>

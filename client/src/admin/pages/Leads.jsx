@@ -127,6 +127,7 @@ export default function Leads() {
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
 
   const selectedLead = detail?.lead || null;
+  const isDetailRoute = Boolean(leadIdFromUrl);
 
   const isAllSelected = useMemo(
     () => leads.length > 0 && leads.every((lead) => selectedIds.includes(lead.id)),
@@ -537,17 +538,28 @@ export default function Leads() {
     <div className="p-4">
       <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
         <div>
-          <h5 className="mb-1" style={{ color: 'var(--chat-text-heading)' }}>Leads</h5>
+          <h5 className="mb-1" style={{ color: 'var(--chat-text-heading)' }}>{isDetailRoute ? 'Lead detail' : 'Leads'}</h5>
           <div className="small" style={{ color: 'var(--chat-muted)' }}>
-            {total} lead{total === 1 ? '' : 's'} captured from chatbot conversations.
+            {isDetailRoute
+              ? 'Complete lead view with transcript, status timeline and notes.'
+              : `${total} lead${total === 1 ? '' : 's'} captured from chatbot conversations.`}
           </div>
         </div>
         <div className="d-flex gap-2 flex-wrap">
-          <button className="btn btn-outline-primary btn-sm" onClick={exportAll}>Export CSV</button>
-          <button className="btn btn-outline-primary btn-sm" onClick={exportSelected}>Export Selected</button>
+          {isDetailRoute ? (
+            <button className="btn btn-outline-secondary btn-sm" onClick={() => navigate('/admin/leads')}>
+              Back to leads
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-outline-primary btn-sm" onClick={exportAll}>Export CSV</button>
+              <button className="btn btn-outline-primary btn-sm" onClick={exportSelected}>Export Selected</button>
+            </>
+          )}
         </div>
       </div>
 
+      {!isDetailRoute && (
       <form onSubmit={applyFilters} className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
         <div className="card-body">
           <div className="row g-2 align-items-end">
@@ -635,9 +647,11 @@ export default function Leads() {
           </div>
         </div>
       </form>
+      )}
 
       <div className="row g-3">
-        <div className="col-lg-5">
+        {!isDetailRoute && (
+        <div className="col-12">
           <div className="card" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
@@ -654,77 +668,117 @@ export default function Leads() {
                 <div className="small text-muted">No leads found for current filters.</div>
               ) : (
                 <>
-                <div style={{ maxHeight: 680, overflowY: 'auto' }}>
-                  {leads.map((lead) => {
-                    const selected = selectedLeadId === lead.id;
-                    const overdue = Boolean(lead.reminder_overdue);
-                    const dueToday = Boolean(lead.reminder_due_today);
-                    const isContacted = (lead.status || '').toLowerCase() === 'contacted';
-                    return (
-                      <button
-                        key={lead.id}
-                        type="button"
-                        className="w-100 text-start mb-2 p-2 rounded border-0"
-                        style={{
-                          background: selected ? 'var(--chat-sidebar)' : isContacted ? 'rgba(25, 135, 84, 0.08)' : 'var(--chat-bg)',
-                          border: overdue
-                            ? '1px solid #dc3545'
-                            : dueToday
-                              ? '1px solid #fd7e14'
-                              : isContacted
-                                ? '1px solid var(--bs-success)'
-                                : '1px solid var(--chat-border)',
-                          borderLeft: isContacted ? '3px solid var(--bs-success)' : undefined,
-                          color: 'var(--chat-text)',
-                        }}
-                        onClick={() => {
-                          setSelectedLeadId(lead.id);
-                          navigate(`/admin/leads/${lead.id}`, { replace: true });
-                        }}
-                      >
-                        <div className="d-flex justify-content-between align-items-start gap-2">
-                          <label className="m-0" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.includes(lead.id)}
-                              onChange={() => toggleSelectLead(lead.id)}
-                            />
-                          </label>
-                          <div className="flex-grow-1">
-                            <div className="fw-semibold" style={{ fontSize: 14 }}>
-                              {lead.name || lead.email || lead.phone || 'Unnamed lead'}
-                            </div>
-                            <div className="small" style={{ color: 'var(--chat-muted)' }}>
-                              {(lead.project_summary || lead.service_requested || 'No requirement summary').slice(0, 120)}
-                            </div>
-                            <div className="d-flex gap-2 mt-1 flex-wrap">
-                              {isContacted ? (
-                                <button
-                                  type="button"
-                                  className="badge bg-success border-0"
-                                  style={{ cursor: 'pointer', fontSize: 'inherit' }}
-                                  title="Click to unmark as contacted"
-                                  disabled={unmarkingLeadId === lead.id}
-                                  onClick={(e) => { e.stopPropagation(); unmarkLeadContacted(lead.id); }}
-                                >
-                                  {unmarkingLeadId === lead.id ? '…' : humanize(lead.status)}
-                                </button>
-                              ) : (
-                                <span className="badge text-bg-light border">{humanize(lead.status)}</span>
-                              )}
-                              <span className="badge text-bg-light border">{humanize(lead.lead_score_category)} ({lead.lead_score})</span>
-                              {dueToday ? <span className="badge text-bg-warning">Reminder today</span> : null}
-                              {overdue ? <span className="badge text-bg-danger">Overdue</span> : null}
-                            </div>
-                            <div className="small mt-1" style={{ color: 'var(--chat-muted)' }}>
-                              Reminder: {lead.reminder_at ? formatDateTime(lead.reminder_at) : '-'}
-                            </div>
-                          </div>
-                          <small style={{ color: 'var(--chat-muted)' }}>{new Date(lead.created_at).toLocaleDateString()}</small>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="table-responsive" style={{ maxHeight: 680 }}>
+                  <table className="table table-sm table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
+                    <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <tr>
+                        <th className="py-2" style={{ width: 34 }} />
+                        <th className="py-2">Lead</th>
+                        <th className="py-2">Requirement summary</th>
+                        <th className="py-2">Status</th>
+                        <th className="py-2">Lead score</th>
+                        <th className="py-2">Date received</th>
+                        <th className="py-2">Contact method</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                        {leads.map((lead) => {
+                        const selected = selectedLeadId === lead.id;
+                        const overdue = Boolean(lead.reminder_overdue);
+                        const dueToday = Boolean(lead.reminder_due_today);
+                        const isContacted = (lead.status || '').toLowerCase() === 'contacted';
+                        return (
+                          <tr
+                            key={lead.id}
+                            style={{
+                              background: selected ? 'var(--chat-sidebar)' : 'transparent',
+                              borderLeft: selected ? '3px solid var(--chat-accent)' : (isContacted ? '3px solid var(--bs-success)' : undefined),
+                            }}
+                          >
+                            <td className="align-middle" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(lead.id)}
+                                onChange={() => toggleSelectLead(lead.id)}
+                              />
+                            </td>
+                            <td className="align-middle">
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 fw-semibold text-start"
+                                style={{ fontSize: 13, textDecoration: 'none' }}
+                                onClick={() => {
+                                  setSelectedLeadId(lead.id);
+                                  navigate(`/admin/leads/${lead.id}`, { replace: true });
+                                }}
+                                title="Open lead details"
+                              >
+                                {lead.name || lead.email || lead.phone || 'Unnamed lead'}
+                              </button>
+                            </td>
+                            <td className="align-middle small">
+                              <div className="text-truncate" style={{ maxWidth: 260 }} title={lead.project_summary || lead.service_requested || ''}>
+                                {lead.project_summary || lead.service_requested || '-'}
+                              </div>
+                            </td>
+                            <td className="align-middle">
+                              <div className="d-flex flex-wrap gap-1">
+                                {isContacted ? (
+                                  <button
+                                    type="button"
+                                    className="badge bg-success border-0"
+                                    style={{ cursor: 'pointer', fontSize: 'inherit' }}
+                                    title="Click to unmark as contacted"
+                                    disabled={unmarkingLeadId === lead.id}
+                                    onClick={(e) => { e.stopPropagation(); unmarkLeadContacted(lead.id); }}
+                                  >
+                                    {unmarkingLeadId === lead.id ? '…' : humanize(lead.status)}
+                                  </button>
+                                ) : (
+                                  <span className="badge text-bg-light border">{humanize(lead.status)}</span>
+                                )}
+                                {dueToday ? <span className="badge text-bg-warning">Today</span> : null}
+                                {overdue ? <span className="badge text-bg-danger">Overdue</span> : null}
+                              </div>
+                            </td>
+                            <td className="align-middle small">
+                              <span className="badge text-bg-light border">
+                                {humanize(lead.lead_score_category)} ({lead.lead_score})
+                              </span>
+                            </td>
+                            <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
+                              {new Date(lead.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
+                              <div>{humanize(lead.contact_method || 'unknown')}</div>
+                              <div className="d-flex gap-1 mt-1 flex-wrap">
+                                {lead.phone ? (
+                                  <a
+                                    href={`tel:${String(lead.phone).replace(/\s+/g, '')}`}
+                                    className="btn btn-sm btn-outline-success py-0 px-2"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={`Call ${lead.phone}`}
+                                  >
+                                    Call
+                                  </a>
+                                ) : null}
+                                {lead.email ? (
+                                  <a
+                                    href={`mailto:${lead.email}`}
+                                    className="btn btn-sm btn-outline-primary py-0 px-2"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={`Email ${lead.email}`}
+                                  >
+                                    Email
+                                  </a>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
                 {total > 0 && (
                   <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-2 border-top" style={{ borderColor: 'var(--chat-border)' }}>
@@ -759,8 +813,10 @@ export default function Leads() {
             </div>
           </div>
         </div>
+        )}
 
-        <div className="col-lg-7">
+        {isDetailRoute && (
+        <div className="col-12">
           <div className="card" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
             <div className="card-body">
               {loadingDetail ? (
@@ -780,6 +836,14 @@ export default function Leads() {
                     </div>
                     <div className="d-flex gap-2 flex-wrap">
                       <button className="btn btn-outline-primary btn-sm" onClick={() => setShowTranscriptModal(true)}>Open Full Conversation</button>
+                      {selectedLead.session_id ? (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => navigate(`/admin/chat/${selectedLead.session_id}`)}
+                        >
+                          Operator chat
+                        </button>
+                      ) : null}
                       <button className="btn btn-outline-primary btn-sm" onClick={exportCurrentLead}>Export Lead</button>
                       <button className="btn btn-outline-primary btn-sm" onClick={downloadTranscript}>Download Transcript</button>
                       <button className="btn btn-success btn-sm" onClick={markConverted}>Mark Converted</button>
@@ -788,6 +852,8 @@ export default function Leads() {
                   </div>
 
                   <div className="row g-2 mb-3 small">
+                    <div className="col-md-6"><strong>Lead Score:</strong> {humanize(selectedLead.lead_score_category)} ({selectedLead.lead_score})</div>
+                    <div className="col-md-6"><strong>Status:</strong> {humanize(selectedLead.status)}</div>
                     <div className="col-md-6">
                       <div><strong>Phone:</strong> {selectedLead.phone || '-'}</div>
                       <button className="btn btn-link btn-sm p-0" onClick={() => copyToClipboard('Phone', selectedLead.phone)}>Copy phone</button>
@@ -800,6 +866,10 @@ export default function Leads() {
                     <div className="col-md-6"><strong>Service Requested:</strong> {selectedLead.service_requested || '-'}</div>
                     <div className="col-md-6"><strong>Budget:</strong> {selectedLead.budget_range || '-'}</div>
                     <div className="col-md-6"><strong>Timeline:</strong> {selectedLead.timeline || '-'}</div>
+                    <div className="col-md-6"><strong>Location:</strong> {selectedLead.location || '-'}</div>
+                    <div className="col-md-6"><strong>Landing Page:</strong> {selectedLead.landing_page || '-'}</div>
+                    <div className="col-md-6"><strong>Device Type:</strong> {selectedLead.device_type || '-'}</div>
+                    <div className="col-md-6"><strong>Conversation ID:</strong> {selectedLead.session_id || '-'}</div>
                     <div className="col-md-6"><strong>Intent:</strong> {humanize(selectedLead.ai_detected_intent)}</div>
                     <div className="col-md-6"><strong>Contact Method:</strong> {selectedLead.contact_method || '-'}</div>
                     <div className="col-md-6"><strong>Assigned Owner:</strong> {selectedLead.assigned_owner || '-'}</div>
@@ -877,9 +947,16 @@ export default function Leads() {
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label small">Project summary</label>
+                    <label className="form-label small">AI-generated summary</label>
                     <div className="p-2 rounded" style={{ background: 'var(--chat-bg)', border: '1px solid var(--chat-border)' }}>
                       {selectedLead.project_summary || 'No project summary available.'}
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label small">Notes</label>
+                    <div className="p-2 rounded" style={{ background: 'var(--chat-bg)', border: '1px solid var(--chat-border)', whiteSpace: 'pre-wrap' }}>
+                      {selectedLead.notes || 'No notes recorded yet.'}
                     </div>
                   </div>
 
@@ -974,6 +1051,7 @@ export default function Leads() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {showTranscriptModal ? (

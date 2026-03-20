@@ -1,6 +1,23 @@
 const CompanyAdmin = require('../models/CompanyAdmin');
 const { hashPassword, verifyPassword, generateToken, getSessionExpiry } = require('../utils/auth');
 
+function validatePasswordStrength(password) {
+  const value = String(password || '');
+  if (value.length < 8) {
+    return 'Password must be at least 8 characters long.';
+  }
+  if (!/[a-z]/.test(value)) {
+    return 'Password must include at least one lowercase letter.';
+  }
+  if (!/[A-Z]/.test(value)) {
+    return 'Password must include at least one uppercase letter.';
+  }
+  if (!/\d/.test(value)) {
+    return 'Password must include at least one number.';
+  }
+  return null;
+}
+
 async function login(req, res) {
   try {
     const { companyId, password } = req.body;
@@ -114,4 +131,47 @@ async function me(req, res) {
   }
 }
 
-module.exports = { login, setup, logout, me };
+async function changePassword(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    const confirmPassword = String(req.body?.confirmPassword || '');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: 'currentPassword, newPassword and confirmPassword are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'New password and confirmation do not match' });
+    }
+
+    const strengthError = validatePasswordStrength(newPassword);
+    if (strengthError) {
+      return res.status(400).json({ error: strengthError });
+    }
+
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    if (!company.password_hash || !verifyPassword(currentPassword, company.password_hash)) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    if (verifyPassword(newPassword, company.password_hash)) {
+      return res.status(400).json({ error: 'New password must be different from current password' });
+    }
+
+    const nextHash = hashPassword(newPassword);
+    await CompanyAdmin.setPassword(companyId, nextHash);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin auth] change password:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+module.exports = { login, setup, logout, me, changePassword };

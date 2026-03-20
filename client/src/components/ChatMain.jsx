@@ -14,6 +14,7 @@ export default function ChatMain({
   scrollToLead = false,
   onScrolledToLead,
   showMic = true,
+  onTypingChange,
   onPlayVoice,
   onPauseVoice,
   playingMessageIndex = null,
@@ -86,7 +87,7 @@ export default function ChatMain({
         <ChatMessages messages={messages} loading={loading} greetingMessage={greetingMessage} onPlayVoice={onPlayVoice} onPauseVoice={onPauseVoice} playingMessageIndex={playingMessageIndex} voiceEnabled={voiceEnabled} voiceResponseEnabled={voiceResponseEnabled} onPlayBrowserVoice={onPlayBrowserVoice} />
       </div>
 
-      <ChatInput onSend={onSend} disabled={loading} showMic={showMic} />
+      <ChatInput onSend={onSend} disabled={loading} showMic={showMic} onTypingChange={onTypingChange} />
     </main>
   );
 }
