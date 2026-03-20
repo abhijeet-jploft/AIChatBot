@@ -89,6 +89,8 @@
   var maxBtn = null;
 
   var isFullscreen = false;
+  var hasOpenedOnce = false;
+  var firstOpenPinned = false;
   var ignoreButtonClick = false;
   var dragState = {
     pointerId: null,
@@ -300,6 +302,21 @@
 
   function updatePanelPosition() {
     if (!panel) return;
+
+    if (firstOpenPinned && !isSmallScreen()) {
+      panel.classList.remove('is-fullscreen');
+      panel.style.left = '24px';
+      panel.style.top = '24px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.width = 'min(370px,calc(100vw - 48px))';
+      panel.style.height = 'min(610px,calc(100dvh - 128px))';
+      panel.style.maxWidth = '';
+      panel.style.maxHeight = 'calc(100dvh - 128px)';
+      updateMaxButtonState();
+      updateCloseFabVisibility();
+      return;
+    }
 
     var vp = getViewport();
     var fullscreenActive = isFullscreen || vp.width <= TABLET_BREAKPOINT;
@@ -651,7 +668,24 @@
 
     if (launcher) launcher.style.display = 'none';
     panel.style.display = 'flex';
-    updatePanelPosition();
+    if (!hasOpenedOnce && !isSmallScreen()) {
+      firstOpenPinned = true;
+      // First ever open: pin panel to top-left corner.
+      panel.classList.remove('is-fullscreen');
+      panel.style.left = '24px';
+      panel.style.top = '24px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.width = 'min(370px,calc(100vw - 48px))';
+      panel.style.height = 'min(610px,calc(100dvh - 128px))';
+      panel.style.maxWidth = '';
+      panel.style.maxHeight = 'calc(100dvh - 128px)';
+      updateMaxButtonState();
+      updateCloseFabVisibility();
+    } else {
+      updatePanelPosition();
+    }
+    hasOpenedOnce = true;
     setSendButtonState();
 
     setTimeout(function () {
@@ -662,6 +696,7 @@
   function closePanel() {
     if (!panel || !launcher) return;
     opened = false;
+    firstOpenPinned = false;
     isFullscreen = false;
     updateMaxButtonState();
     panel.style.display = 'none';
