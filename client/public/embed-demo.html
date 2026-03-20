@@ -224,10 +224,12 @@
 window.JPLoftChatConfig = {
   apiUrl: 'https://your-api.com/api',
   companyId: '_JP_Loft',
-  companyName: 'JP Loft'
+  companyName: 'JP Loft',
+  apiKey: 'your-company-embed-api-key'
 };
 &lt;/script&gt;
 &lt;script src="https://your-app.com/chat-widget.js"&gt;&lt;/script&gt;</code></pre>
+      <p class="small" style="margin-top:0.75rem;">Iframe-only widget: <a href="/embed-widget-iframe-demo.html" style="color:var(--brand);">embed-widget-iframe-demo.html</a> · frame: <code style="font-size:0.85em;">/embed-widget-frame.html?companyId=…&amp;apiKey=…</code></p>
     </div>
   </section>
 
@@ -242,7 +244,8 @@ window.JPLoftChatConfig = {
     window.JPLoftChatConfig = {
       apiUrl: window.location.origin + '/api',
       companyId: '_JP_Loft',
-      companyName: 'JP Loft'
+      companyName: 'JP Loft',
+      apiKey: ''
     };
   </script>
   <script src="/chat-widget.js"></script>

@@ -1,7 +1,8 @@
 /**
  * JP Loft / AI Chat Agent - embeddable widget (vanilla JS)
  * Usage: <script src="https://your-domain.com/chat-widget.js" data-api-url="https://your-api.com/api" data-company-id="_JP_Loft"></script>
- * Or set window.JPLoftChatConfig = { apiUrl: '...', companyId: '...', companyName: 'JP Loft' } before loading.
+ * Or set window.JPLoftChatConfig = { apiUrl: '...', companyId: '...', companyName: 'JP Loft', apiKey: 'optional-embed-key' } before loading.
+ * Optional apiKey is sent as header X-Embed-Api-Key on API requests (per-company key from your dashboard).
  *
  * Activation (per doc): 6-10s on page OR 40% scroll OR 8s idle.
  * Opening message: Hi! Welcome to JP Loft! I'm Anaya, your digital consultant. Are you looking to build something or just exploring ideas?
@@ -14,6 +15,7 @@
   var apiUrl = (script && script.getAttribute('data-api-url')) || config.apiUrl || '';
   var companyId = (script && script.getAttribute('data-company-id')) || config.companyId || '_JP_Loft';
   var companyName = (script && script.getAttribute('data-company-name')) || config.companyName || 'JP Loft';
+  var apiKey = (script && script.getAttribute('data-api-key')) || config.apiKey || '';
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
   var companyIconUrl = null;
   var companyGreetingMessage = null;
@@ -35,6 +37,18 @@
   if (!apiUrl) {
     console.warn('[JPLoft Chat] data-api-url or JPLoftChatConfig.apiUrl required');
     return;
+  }
+
+  function mergeHeaders(extra) {
+    var h = {};
+    if (extra && typeof extra === 'object') {
+      var k;
+      for (k in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, k)) h[k] = extra[k];
+      }
+    }
+    if (apiKey) h['X-Embed-Api-Key'] = apiKey;
+    return h;
   }
 
   var activated = false;
@@ -403,7 +417,7 @@
   }
 
   function loadSessions() {
-    fetch(apiUrl + '/sessions?companyId=' + encodeURIComponent(companyId))
+    fetch(apiUrl + '/sessions?companyId=' + encodeURIComponent(companyId), { headers: mergeHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         sessions = Array.isArray(data) ? data : [];
@@ -413,7 +427,7 @@
   }
 
   function deleteSession(id) {
-    fetch(apiUrl + '/sessions/' + encodeURIComponent(id), { method: 'DELETE' })
+    fetch(apiUrl + '/sessions/' + encodeURIComponent(id), { method: 'DELETE', headers: mergeHeaders() })
       .then(function () {
         if (sessionId === id) {
           sessionId = null;
@@ -475,7 +489,7 @@
     loading = true;
     setSendButtonState();
     renderMessages();
-    fetch(apiUrl + '/sessions/' + encodeURIComponent(id) + '/messages')
+    fetch(apiUrl + '/sessions/' + encodeURIComponent(id) + '/messages', { headers: mergeHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         messages = Array.isArray(data) ? data.map(function (m) { return { role: m.role, content: m.content }; }) : [];
@@ -664,7 +678,7 @@
     var pageUrl = typeof window !== 'undefined' && window.location ? window.location.href : '';
     fetch(apiUrl + '/chat/message', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         companyId: companyId,
         sessionId: sessionId || undefined,
@@ -871,7 +885,7 @@
   }
 
   function fetchThemeAndApply(widgetRoot) {
-    fetch(apiUrl + '/train/companies')
+    fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (companies) {
         if (!Array.isArray(companies) || !widgetRoot) return;

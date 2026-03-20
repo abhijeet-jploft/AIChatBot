@@ -36,7 +36,9 @@ async function findByCompanyId(companyId) {
             language_primary,
             language_multi_enabled,
             language_auto_detect_enabled,
-            language_manual_switch_enabled
+            language_manual_switch_enabled,
+            embed_slug,
+            embed_secret
      FROM chatbots WHERE company_id = $1`,
     [companyId]
   );

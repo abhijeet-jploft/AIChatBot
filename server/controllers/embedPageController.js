@@ -1,0 +1,56 @@
+const pool = require('../db/index');
+
+/**
+ * GET /embed/:slug/:token
+ * Unique public URL per company: slug (from company name) + opaque secret token.
+ * Serves minimal HTML that loads chat-widget.js with JPLoftChatConfig (apiKey = token for X-Embed-Api-Key).
+ */
+async function renderEmbedPage(req, res) {
+  const slug = String(req.params.slug || '').trim();
+  const token = String(req.params.token || '').trim();
+  if (!slug || !token || slug.length > 200 || token.length > 200) {
+    return res.status(404).type('text/plain').send('Not found');
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT company_id, COALESCE(display_name, name) AS display_name
+       FROM chatbots
+       WHERE embed_slug = $1 AND embed_secret = $2`,
+      [slug, token]
+    );
+    if (!rows.length) {
+      return res.status(404).type('text/plain').send('Not found');
+    }
+    const row = rows[0];
+    const host = req.get('host') || 'localhost';
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const apiUrl = `${proto}://${host}/api`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chat</title>
+  <style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}</style>
+</head>
+<body>
+<script>
+window.JPLoftChatConfig = {
+  apiUrl: ${JSON.stringify(apiUrl)},
+  companyId: ${JSON.stringify(row.company_id)},
+  companyName: ${JSON.stringify(row.display_name || 'Chat')},
+  apiKey: ${JSON.stringify(token)}
+};
+</script>
+<script src="/chat-widget.js"></script>
+</body>
+</html>`;
+    return res.type('html').send(html);
+  } catch (err) {
+    console.error('[embed page]', err);
+    return res.status(500).type('text/plain').send('Error');
+  }
+}
+
+module.exports = { renderEmbedPage };

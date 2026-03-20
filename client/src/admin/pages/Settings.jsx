@@ -3,6 +3,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 
+/** Origin where the chat app + /embed/* is served (API host without /api). */
+function getEmbedAppOrigin() {
+  const u = import.meta.env.VITE_API_URL || '';
+  if (u) return u.replace(/\/api\/?$/, '');
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+}
+
 const cardStyle = {
   background: 'var(--chat-surface)',
   border: '1px solid var(--chat-border)',
@@ -54,6 +62,7 @@ export default function Settings() {
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [logoutAllPending, setLogoutAllPending] = useState(false);
+  const [embed, setEmbed] = useState(null);
 
   useEffect(() => {
     authFetch('/settings')
@@ -61,6 +70,7 @@ export default function Settings() {
         if (!settingsRes.ok) throw new Error('Failed to load settings');
         const d = await settingsRes.json();
 
+        setEmbed(d.embed || null);
         setDisplayName(d.displayName || d.name || '');
         setIconUrl(d.iconUrl || '');
         setGreetingMessage(d.greetingMessage || '');
@@ -211,6 +221,56 @@ export default function Settings() {
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               />
             </div>
+
+            {embed?.embedPath && (
+              <div className="mb-3 p-3 rounded-3" style={{ ...cardStyle, background: 'var(--chat-bg)' }}>
+                <div className="fw-semibold mb-2" style={headingStyle}>Website embed (unique URL)</div>
+                <p className="small mb-2" style={mutedStyle}>
+                  Public widget URL uses a name-based slug and a unique secret token (stored server-side). Use this in an iframe or the embed demo.
+                </p>
+                <div className="small mb-1" style={labelStyle}>Slug</div>
+                <code className="small d-block mb-2" style={{ wordBreak: 'break-all' }}>{embed.slug}</code>
+                <div className="small mb-1" style={labelStyle}>Full URL</div>
+                <div className="input-group input-group-sm mb-2">
+                  <input
+                    type="text"
+                    readOnly
+                    className="form-control font-monospace"
+                    style={{ fontSize: '0.8rem' }}
+                    value={embed.embedUrl || `${getEmbedAppOrigin()}${embed.embedPath}`}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => {
+                      const v = embed.embedUrl || `${getEmbedAppOrigin()}${embed.embedPath}`;
+                      navigator.clipboard.writeText(v).then(() => showToast('URL copied', 'success')).catch(() => {});
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                {!embed.embedUrl && (
+                  <p className="small mb-2" style={mutedStyle}>
+                    Set <code>PUBLIC_APP_URL</code> on the server for a canonical URL in API responses. Otherwise the field uses <code>VITE_API_URL</code> origin (without <code>/api</code>) or this page&apos;s origin.
+                  </p>
+                )}
+                <div className="small mb-1" style={labelStyle}>Iframe demo</div>
+                <p className="small mb-1" style={mutedStyle}>
+                  Open <code>/embed-widget-iframe-demo.html?embed={encodeURIComponent(embed.embedPath)}</code> on the chat app host.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => {
+                    const q = `${getEmbedAppOrigin()}/embed-widget-iframe-demo.html?embed=${encodeURIComponent(embed.embedPath)}`;
+                    window.open(q, '_blank', 'noopener,noreferrer');
+                  }}
+                >
+                  Open iframe demo (new tab)
+                </button>
+              </div>
+            )}
 
             <div className="mb-3">
               <label className="form-label">Lead notifications</label>

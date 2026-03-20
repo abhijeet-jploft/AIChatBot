@@ -1,5 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const pool = require('./index');
 
 const TRAIN_DATA_DIR = path.join(__dirname, '../../train_data');
@@ -165,6 +166,12 @@ CREATE TABLE IF NOT EXISTS lead_activities (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_lead_activities_lead ON lead_activities(lead_id, created_at DESC);
+
+-- Unique public embed path: /embed/{embed_slug}/{embed_secret} (slug from company name, secret = opaque token)
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS embed_slug VARCHAR(255);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS embed_secret VARCHAR(128);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chatbots_embed_slug_unique ON chatbots(embed_slug) WHERE embed_slug IS NOT NULL AND embed_slug <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chatbots_embed_secret_unique ON chatbots(embed_secret) WHERE embed_secret IS NOT NULL AND embed_secret <> '';
 `;
 
 // ─── Chatbot seeder ───────────────────────────────────────────────────────────
@@ -195,6 +202,41 @@ async function syncChatbots(client) {
   }
 }
 
+function slugifyForEmbed(str) {
+  const s = String(str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return s || 'company';
+}
+
+async function backfillEmbedCredentials(client) {
+  const { rows } = await client.query(
+    `SELECT company_id, name, display_name, embed_slug, embed_secret FROM chatbots`
+  );
+  for (const r of rows) {
+    if (r.embed_slug && r.embed_secret) continue;
+    const baseSlug = slugifyForEmbed(r.display_name || r.name || r.company_id);
+    let slug = baseSlug;
+    let n = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const clash = await client.query(
+        `SELECT 1 FROM chatbots WHERE embed_slug = $1 AND company_id <> $2`,
+        [slug, r.company_id]
+      );
+      if (!clash.rows.length) break;
+      slug = `${baseSlug}-${++n}`;
+    }
+    const secret = crypto.randomBytes(32).toString('hex');
+    await client.query(
+      `UPDATE chatbots SET embed_slug = $1, embed_secret = $2 WHERE company_id = $3`,
+      [slug, secret, r.company_id]
+    );
+  }
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 async function migrate() {
   const client = await pool.connect();
@@ -203,6 +245,8 @@ async function migrate() {
     console.log('[db] Schema ready');
     await syncChatbots(client);
     console.log('[db] Chatbots synced');
+    await backfillEmbedCredentials(client);
+    console.log('[db] Embed paths ready');
   } finally {
     client.release();
   }

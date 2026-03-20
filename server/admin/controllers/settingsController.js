@@ -73,6 +73,33 @@ function buildVoicePayload(company) {
   };
 }
 
+function buildEmbedPayload(company) {
+  const slug = String(company?.embed_slug || '').trim();
+  const secret = String(company?.embed_secret || '').trim();
+  if (!slug || !secret) {
+    return {
+      slug: null,
+      embedPath: null,
+      embedUrl: null,
+      iframeSnippet: null,
+    };
+  }
+  const embedPath = `/embed/${encodeURIComponent(slug)}/${encodeURIComponent(secret)}`;
+  const publicBase = String(process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+  const embedUrl = publicBase ? `${publicBase}${embedPath}` : null;
+  const originHint = publicBase || '(your app origin)';
+  const iframeSnippet =
+    `<iframe src="${publicBase ? embedUrl : embedPath}" title="Chat" style="width:100%;height:600px;border:0;" loading="lazy"></iframe>`;
+  return {
+    slug,
+    embedPath,
+    embedUrl,
+    publicBase: publicBase || null,
+    originHint,
+    iframeSnippet,
+  };
+}
+
 async function getSettings(req, res) {
   try {
     const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
@@ -130,6 +157,7 @@ async function getSettings(req, res) {
         headerShadow: company.theme_header_shadow,
         headerTextColor: company.theme_header_text_color,
       }),
+      embed: buildEmbedPayload(company),
     });
   } catch (err) {
     console.error('[admin settings] get:', err);
