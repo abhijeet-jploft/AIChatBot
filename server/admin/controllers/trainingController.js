@@ -5,6 +5,7 @@ const { appendSystemLog } = require('../../services/adminLogStore');
 const {
   appendConversational,
   saveUploadedDoc,
+  appendDatabaseKnowledge,
   saveUploadedMedia,
   appendJsonlLinesOnlyIfNew,
   appendStructured,
@@ -13,7 +14,7 @@ const {
   listTrainingFiles,
   mergeScrapedContent,
 } = require('../../services/trainingDataService');
-const { extractFromBuffer } = require('../../services/documentExtractor');
+const { extractFromBuffer, isDatabaseKnowledgeFile } = require('../../services/documentExtractor');
 const { transcribeMediaFiles } = require('../../services/mediaTranscriptionService');
 const CompanyAdmin = require('../models/CompanyAdmin');
 const path = require('path');
@@ -150,15 +151,65 @@ async function saveDocuments(req, res) {
     const saved = [];
     for (const f of files) {
       const text = await extractFromBuffer(f.buffer, f.originalname, f.mimetype);
-      const name = saveUploadedDoc(companyId, f.originalname, text);
-      if (name) saved.push({ originalName: f.originalname, savedAs: name, appended: true });
-      else saved.push({ originalName: f.originalname, savedAs: 'scraped_website.jsonl', appended: false });
+      if (isDatabaseKnowledgeFile(f.originalname, f.mimetype)) {
+        const { appended, skipped } = appendDatabaseKnowledge(companyId, [
+          { title: f.originalname || 'SQL', content: text },
+        ]);
+        saved.push({
+          originalName: f.originalname,
+          savedAs: 'scraped_website.jsonl',
+          mode: 'database',
+          appended: appended > 0,
+          skipped,
+        });
+      } else {
+        const name = saveUploadedDoc(companyId, f.originalname, text);
+        if (name) saved.push({ originalName: f.originalname, savedAs: name, mode: 'doc', appended: true });
+        else saved.push({ originalName: f.originalname, savedAs: 'scraped_website.jsonl', mode: 'doc', appended: false });
+      }
     }
     setLastTrainingCompleted(companyId);
     res.json({ saved: true, mode: 'documents', files: saved });
   } catch (err) {
     console.error('[admin training] documents:', err);
     appendSystemLog('error', `Training documents: ${err.message}`, { companyId: req.adminCompanyId });
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// ─── Database / SQL training (schema, DDL, paste + uploads) ────────────────
+async function saveDatabase(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const files = req.files || [];
+    const title = req.body?.title != null ? String(req.body.title).trim() : '';
+    const content = req.body?.content != null ? String(req.body.content).trim() : '';
+
+    const entries = [];
+    if (content) {
+      entries.push({ title: title || 'Pasted database knowledge', content });
+    }
+    for (const f of files) {
+      const text = await extractFromBuffer(f.buffer, f.originalname, f.mimetype);
+      entries.push({ title: f.originalname || 'upload', content: text });
+    }
+
+    if (!entries.length) {
+      return res.status(400).json({ error: 'Add schema/SQL text or upload file(s)' });
+    }
+
+    const { appended, skipped } = appendDatabaseKnowledge(companyId, entries);
+    setLastTrainingCompleted(companyId);
+    res.json({
+      saved: true,
+      mode: 'database',
+      appended,
+      skipped,
+      filesProcessed: files.length,
+    });
+  } catch (err) {
+    console.error('[admin training] database:', err);
+    appendSystemLog('error', `Training database: ${err.message}`, { companyId: req.adminCompanyId });
     res.status(500).json({ error: err.message });
   }
 }
@@ -333,6 +384,7 @@ module.exports = {
   scrapeSave,
   saveConversational,
   saveDocuments,
+  saveDatabase,
   transcribeMedia,
   saveMedia,
   saveStructured,

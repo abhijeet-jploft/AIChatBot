@@ -222,6 +222,7 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
               const structuredParts = [];
               const docParts = [];
               const manualParts = [];
+              const databaseParts = [];
 
               for (const line of lines) {
                 try {
@@ -238,6 +239,9 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
                     docParts.push(`Document (${o.name || 'doc'}): ${o.content}`);
                   } else if (o.type === 'manual' && o.content != null) {
                     manualParts.push(String(o.content));
+                  } else if (o.type === 'database' && o.content != null) {
+                    const dbLabel = o.title ? String(o.title) : 'schema';
+                    databaseParts.push(`--- ${dbLabel} ---\n${String(o.content)}`);
                   } else if (o.type === 'media') {
                     const mediaText = String(o.content || '').trim();
                     if (mediaText) {
@@ -269,6 +273,11 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
               }
               if (manualParts.length > 0) {
                 buckets.regular.push(`\n--- ${label} (Manual knowledge) ---\n${manualParts.join('\n\n')}\n`);
+              }
+              if (databaseParts.length > 0) {
+                buckets.regular.push(
+                  `\n--- ${label} (Database / SQL knowledge — use for factual answers; do not expose raw credentials) ---\n${databaseParts.join('\n\n')}\n`
+                );
               }
             } else if (/conversational_instructions\.jsonl$/i.test(entry.name)) {
               const lines = data.split(/\r?\n/).filter((l) => l.trim());

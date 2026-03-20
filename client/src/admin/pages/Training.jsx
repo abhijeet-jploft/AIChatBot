@@ -13,6 +13,7 @@ const TABS = [
   { id: 'scrape', label: 'Website scraping' },
   { id: 'conversational', label: 'Conversational' },
   { id: 'documents', label: 'Documents' },
+  { id: 'database', label: 'Database / SQL' },
   { id: 'media', label: 'Media training' },
   { id: 'structured', label: 'Structured (CSV / Excel)' },
   { id: 'manual', label: 'Manual knowledge' },
@@ -38,6 +39,12 @@ export default function Training() {
   // Documents
   const [docFiles, setDocFiles] = useState(null);
   const [docSaving, setDocSaving] = useState(false);
+
+  // Database / SQL knowledge
+  const [dbTitle, setDbTitle] = useState('');
+  const [dbContent, setDbContent] = useState('');
+  const [dbFiles, setDbFiles] = useState(null);
+  const [dbSaving, setDbSaving] = useState(false);
 
   // Media
   const [mediaFiles, setMediaFiles] = useState(null);
@@ -207,7 +214,7 @@ export default function Training() {
   const handleDocumentsSubmit = async (e) => {
     e.preventDefault();
     if (!docFiles?.length) {
-      showToast('Select at least one file (PDF, DOCX, TXT).', 'error');
+      showToast('Select at least one file (PDF, DOCX, TXT, or SQL/DDL).', 'error');
       return;
     }
     setDocSaving(true);
@@ -226,6 +233,39 @@ export default function Training() {
       showToast('Network error.', 'error');
     } finally {
       setDocSaving(false);
+    }
+  };
+
+  // ─── Database / SQL ───────────────────────────────────────────────────────
+  const handleDatabaseSubmit = async (e) => {
+    e.preventDefault();
+    if (!dbContent.trim() && !dbFiles?.length) {
+      showToast('Paste schema/SQL text or choose file(s).', 'error');
+      return;
+    }
+    setDbSaving(true);
+    try {
+      const form = new FormData();
+      if (dbTitle.trim()) form.append('title', dbTitle.trim());
+      if (dbContent.trim()) form.append('content', dbContent.trim());
+      if (dbFiles?.length) {
+        Array.from(dbFiles).forEach((f) => form.append('files', f));
+      }
+      const res = await authFetch('/training/database', { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.saved) {
+        showToast(
+          `Database knowledge saved. ${data.appended ?? 0} new entr(ies), ${data.skipped ?? 0} duplicate(s) skipped.`,
+          'success'
+        );
+        setDbFiles(null);
+        document.getElementById('training-db-files')?.form?.reset();
+        loadFiles();
+      } else showToast(data.error || 'Save failed.', 'error');
+    } catch {
+      showToast('Network error.', 'error');
+    } finally {
+      setDbSaving(false);
     }
   };
 
@@ -582,12 +622,74 @@ export default function Training() {
         {/* Tab: Documents */}
         {activeTab === 'documents' && (
           <form onSubmit={handleDocumentsSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
-            <p className="small text-muted mb-3">Upload PDF, DOCX, or TXT. Content is appended to <strong>scraped_website.jsonl</strong> only if not already present.</p>
+            <p className="small text-muted mb-3">
+              Upload PDF, DOCX, TXT/Markdown, or <strong>database text</strong> dumps (
+              <code>.sql</code>, <code>.ddl</code>, Prisma, etc. — see <strong>Database / SQL</strong> tab for paste + notes). Content is appended to{' '}
+              <strong>scraped_website.jsonl</strong> only if not already present. <strong>Binary SQLite</strong> <code>.db</code> files are not supported here — export schema to <code>.sql</code> first.
+            </p>
             <div className="mb-3">
-              <input id="training-doc-input" type="file" accept=".pdf,.doc,.docx,.txt,.md" multiple className="form-control" onChange={(e) => setDocFiles(e.target.files)} style={{ background: 'var(--chat-bg)', borderColor: 'var(--chat-border)' }} />
+              <input
+                id="training-doc-input"
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.md,.sql,.ddl,.mysql,.pgsql,.prisma,.graphql,.cql,.hql,.tsql"
+                multiple
+                className="form-control"
+                onChange={(e) => setDocFiles(e.target.files)}
+                style={{ background: 'var(--chat-bg)', borderColor: 'var(--chat-border)' }}
+              />
             </div>
             <button type="submit" className="btn btn-primary" disabled={docSaving || !docFiles?.length}>
               {docSaving ? 'Saving...' : `Save ${docFiles?.length || 0} file(s)`}
+            </button>
+          </form>
+        )}
+
+        {/* Tab: Database / SQL */}
+        {activeTab === 'database' && (
+          <form onSubmit={handleDatabaseSubmit} className="rounded-3 p-3 p-md-4 mb-4" style={{ background: 'var(--chat-surface)', border: '1px solid var(--chat-border)' }}>
+            <p className="small text-muted mb-3">
+              Teach the bot your <strong>schema and data rules</strong> (DDL, <code>CREATE TABLE</code>, sample row descriptions, business terms). Stored as dedicated{' '}
+              <strong>database knowledge</strong> in <code>scraped_website.jsonl</code> (deduped). Do <strong>not</strong> paste live credentials or connection strings.
+            </p>
+            <div className="mb-3">
+              <label className="form-label small">Label (optional)</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="e.g. CRM schema v2"
+                value={dbTitle}
+                onChange={(e) => setDbTitle(e.target.value)}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+              />
+            </div>
+            <div className="mb-3">
+              <label className="form-label small">Schema / SQL / notes</label>
+              <textarea
+                className="form-control font-monospace"
+                rows={12}
+                placeholder={'-- Example:\nCREATE TABLE orders (\n  id UUID PRIMARY KEY,\n  status TEXT\n);\n-- Or describe tables and columns in plain English.'}
+                value={dbContent}
+                onChange={(e) => setDbContent(e.target.value)}
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)', fontSize: 13 }}
+              />
+            </div>
+            <div className="mb-3">
+              <label className="form-label small">Or upload file(s)</label>
+              <input
+                id="training-db-files"
+                type="file"
+                accept=".sql,.ddl,.mysql,.pgsql,.sqlite,.db,.txt,.md,.prisma,.graphql,.cql,.hql,.tsql"
+                multiple
+                className="form-control"
+                onChange={(e) => setDbFiles(e.target.files)}
+                style={{ background: 'var(--chat-bg)', borderColor: 'var(--chat-border)' }}
+              />
+              <div className="form-text" style={{ color: 'var(--chat-muted)', fontSize: 12 }}>
+                Text SQL and DDL supported. Binary SQLite (<code>.db</code>) must be exported to <code>.sql</code> first (e.g. <code>sqlite3 app.db &quot;.schema&quot; &gt; schema.sql</code>).
+              </div>
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={dbSaving || (!dbContent.trim() && !dbFiles?.length)}>
+              {dbSaving ? 'Saving...' : 'Append database knowledge'}
             </button>
           </form>
         )}

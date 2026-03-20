@@ -163,6 +163,28 @@ function saveUploadedDoc(companyId, originalName, text) {
   return appended ? SCRAPED_FILE : null;
 }
 
+/**
+ * Append database / SQL knowledge (schema dumps, DDL, ER notes). Deduped like other entries.
+ */
+function appendDatabaseKnowledge(companyId, entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return { appended: 0, skipped: 0 };
+  const lines = entries
+    .map((e) => {
+      const content = String(e?.content || '').trim();
+      if (!content) return null;
+      const titleRaw = String(e?.title || 'schema').replace(/[\r\n\x00]/g, ' ').trim().slice(0, 200);
+      return {
+        type: 'database',
+        title: titleRaw || 'schema',
+        content,
+        ts: new Date().toISOString(),
+      };
+    })
+    .filter(Boolean);
+  if (!lines.length) return { appended: 0, skipped: 0 };
+  return appendToScrapedOnlyIfNew(companyId, lines);
+}
+
 function inferMediaType(mime = '', originalName = '') {
   const m = String(mime || '').toLowerCase();
   const n = String(originalName || '').toLowerCase();
@@ -274,7 +296,7 @@ function listTrainingFiles(companyId) {
     for (const e of entries) {
       const rel = prefix ? `${prefix}/${e.name}` : e.name;
       if (e.isDirectory()) scan(path.join(d, e.name), rel);
-      else if (['.txt', '.md', '.json', '.jsonl'].includes(path.extname(e.name).toLowerCase())) {
+      else if (['.txt', '.md', '.json', '.jsonl', '.sql'].includes(path.extname(e.name).toLowerCase())) {
         const full = path.join(d, e.name);
         const stat = fs.statSync(full);
         out.push({ name: rel, size: stat.size });
@@ -289,6 +311,7 @@ module.exports = {
   getCompanyDir,
   appendConversational,
   saveUploadedDoc,
+  appendDatabaseKnowledge,
   saveUploadedMedia,
   appendJsonlLinesOnlyIfNew,
   appendStructured,
