@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat embed host</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b1220; }
+    #frame-wrap {
+      position: fixed;
+      inset: 0;
+      display: none;
+    }
+    #frame-wrap.show { display: block; }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+    #help {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: #e2e8f0;
+      padding: 1.5rem;
+      max-width: 42rem;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+    #help h1 { font-size: 1.125rem; margin: 0 0 0.75rem; color: #fff; }
+    #help p { margin: 0 0 0.75rem; font-size: 0.875rem; color: #94a3b8; }
+    #help code {
+      font-size: 0.8rem;
+      background: #1e293b;
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      color: #bae6fd;
+      word-break: break-all;
+    }
+    #help .box {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="help"></div>
+  <div id="frame-wrap" aria-hidden="true">
+    <iframe id="chat-frame" title="Chat assistant" allow="clipboard-write"></iframe>
+  </div>
+  <script>
+    (function () {
+      function escapeHtml(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      var path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+      var firstSeg = path.split('/')[0] || '';
+      var q = new URLSearchParams(window.location.search);
+      var apiKey = (q.get('apiKey') || q.get('token') || q.get('key') || '').trim();
+      var companyId = (q.get('companyId') || q.get('company_id') || '').trim();
+      var embedSlug = firstSeg;
+
+      var help = document.getElementById('help');
+      var wrap = document.getElementById('frame-wrap');
+      var frame = document.getElementById('chat-frame');
+
+      /* Static file opened directly — no slug in path */
+      if (!firstSeg || firstSeg.indexOf('.') !== -1) {
+        help.innerHTML =
+          '<h1>Third‑party chat embed</h1>' +
+          '<p>Put this URL in an <code>&lt;iframe&gt;</code> on any site. Both <strong>apiKey</strong> (embed secret) and <strong>companyId</strong> are <strong>required</strong>.</p>' +
+          '<div class="box"><code>https://your-host/&lt;embed_slug&gt;?apiKey=&lt;secret&gt;&amp;companyId=&lt;_YourCompany&gt;</code></div>' +
+          '<p>Example:</p>' +
+          '<div class="box"><code>http://localhost:7001/jp-loft?apiKey=…&amp;companyId=_JP_Loft</code></div>' +
+          '<p>Copy the exact URL from <strong>Admin → Settings</strong>. Integration playground: <code>/embed-integration-demo.html</code></p>';
+        return;
+      }
+
+      if (!apiKey || !companyId) {
+        help.innerHTML =
+          '<h1>Embed not configured</h1>' +
+          '<p>Both <code>apiKey</code> and <code>companyId</code> are required for this integration.</p>' +
+          '<div class="box"><code>http://' + escapeHtml(window.location.host) + '/' +
+          escapeHtml(embedSlug) + '?apiKey=' + escapeHtml('YOUR_EMBED_SECRET') +
+          '&amp;companyId=' + escapeHtml('_YourCompany') + '</code></div>' +
+          '<p>Embed slug from URL path: <code>' + escapeHtml(embedSlug) + '</code></p>' +
+          (!apiKey && !companyId
+            ? '<p>Missing: <strong>apiKey</strong> and <strong>companyId</strong>.</p>'
+            : !apiKey
+              ? '<p>Missing: <strong>apiKey</strong>.</p>'
+              : '<p>Missing: <strong>companyId</strong>.</p>');
+        return;
+      }
+
+      var base = window.location.origin;
+      var inner = base + '/embed/' + encodeURIComponent(embedSlug) + '/' + encodeURIComponent(apiKey) +
+        '?companyId=' + encodeURIComponent(companyId);
+      frame.src = inner;
+      help.style.display = 'none';
+      wrap.classList.add('show');
+      wrap.setAttribute('aria-hidden', 'false');
+      document.title = 'Chat · ' + embedSlug;
+    })();
+  </script>
+</body>
+</html>

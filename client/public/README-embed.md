@@ -1,5 +1,18 @@
 # Embeddable Chat Widget
 
+## Full Third-Party Demo (JP Loft Defaults)
+
+Open `/embed-integration-demo.html` for the integration lab. Slug URLs like `/jp-loft?apiKey=…&companyId=…` are served from `chat-embed-host.html`.
+
+The demo includes both integration styles in one place:
+- `script` mode (loads `chat-widget.js` with `window.JPLoftChatConfig`)
+- `iframe` mode (loads `/<embed_slug>?apiKey=...&companyId=...`)
+
+Default demo credentials are pre-filled for JP Loft:
+- `embed slug`: `jp-loft`
+- `companyId`: `_JP_Loft`
+- `apiKey`: `ba6d20d0722f560415ed0f6c1e0dcba4bb429aad3f7dff237a28029d12a30a9a`
+
 ## Host page URL (iframe-friendly)
 
 On your deployed app (same host as `/api`):
@@ -45,6 +58,7 @@ Or set config before loading:
 | `apiUrl`      | Base URL of the chat API             | required   |
 | `companyId`   | Company/bot ID (e.g. `_JP_Loft`)     | `_JP_Loft` |
 | `companyName` | Name shown in the widget header      | JP Loft    |
+| `apiKey`      | Optional embed key sent as `X-Embed-Api-Key` | empty |
 
 ## Behavior (per AI Chat Agent doc)
 
@@ -63,5 +77,5 @@ If the widget is embedded on a different domain than the API, the API must allow
 
 ## Serving the script
 
-- **Vite dev**: Script is at `http://localhost:3000/chat-widget.js`; use `data-api-url="http://localhost:3000/api"` (or your API URL) for local testing.
+- **Vite dev**: Script is at `http://localhost:7001/chat-widget.js`; use `data-api-url="http://localhost:7001/api"` (or your API URL) for local testing.
 - **Production**: Copy `chat-widget.js` to your CDN or static host and set `src` and `data-api-url` to your production URLs.

@@ -11,6 +11,31 @@ function getEmbedAppOrigin() {
   return '';
 }
 
+function buildIntegrationDemoUrl({ embed, displayName }) {
+  const originFallback = getEmbedAppOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
+  const host = embed?.slugHostUrl || `${originFallback}${embed?.slugHostPath || ''}`;
+  if (!host) return `${originFallback}/embed-integration-demo.html`;
+
+  try {
+    const parsed = new URL(host, typeof window !== 'undefined' ? window.location.origin : originFallback);
+    const srcParams = parsed.searchParams;
+    const companyId = srcParams.get('companyId') || srcParams.get('company_id') || '';
+    const apiKey = srcParams.get('apiKey') || '';
+    const demoParams = new URLSearchParams({
+      mode: 'script',
+      appOrigin: parsed.origin,
+      exactProject: parsed.origin === 'http://localhost:7001' ? '1' : '0',
+      slug: embed?.slug || '',
+      companyId,
+      companyName: displayName || '',
+      apiKey,
+    });
+    return `${parsed.origin}/embed-integration-demo.html?${demoParams.toString()}`;
+  } catch {
+    return `${originFallback}/embed-integration-demo.html`;
+  }
+}
+
 const cardStyle = {
   background: 'var(--chat-surface)',
   border: '1px solid var(--chat-border)',
@@ -291,6 +316,16 @@ export default function Settings() {
                   }}
                 >
                   Open host page (new tab)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => {
+                    const demoUrl = buildIntegrationDemoUrl({ embed, displayName });
+                    window.open(demoUrl, '_blank', 'noopener,noreferrer');
+                  }}
+                >
+                  Open integration demo
                 </button>
               </div>
             )}

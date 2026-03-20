@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Third-Party Chat Integration Demo</title>
+  <style>
+    :root {
+      color-scheme: only light;
+      --bg: #f4f4f5;
+      --bg-accent: #eef2ff;
+      --ink: #18181b;
+      --ink-muted: #52525b;
+      --surface: #ffffff;
+      --border: #d4d4d8;
+      --highlight: #4f46e5;
+      --highlight-dark: #4338ca;
+      --warning: #b45309;
+      --code-bg: #111827;
+      --code-ink: #e0e7ff;
+      --ring: rgba(79, 70, 229, 0.28);
+      --shadow-lg: 0 28px 70px rgba(30, 41, 59, 0.16);
+      --shadow-sm: 0 10px 24px rgba(30, 41, 59, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 12%, rgba(79, 70, 229, 0.14), transparent 34%),
+        radial-gradient(circle at 88% 6%, rgba(109, 40, 217, 0.13), transparent 28%),
+        linear-gradient(165deg, #ffffff 0%, var(--bg) 58%, var(--bg-accent) 100%);
+      font-family: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    .site-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1.1rem 5rem;
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.95fr);
+      align-items: start;
+    }
+
+    .story {
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(241, 247, 242, 0.95));
+      padding: 1.7rem;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .story::after {
+      content: "";
+      position: absolute;
+      width: 260px;
+      aspect-ratio: 1;
+      border-radius: 999px;
+      background: radial-gradient(circle at center, rgba(79, 70, 229, 0.2), transparent 68%);
+      top: -120px;
+      right: -80px;
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      margin: 0;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      color: var(--highlight-dark);
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0.6rem 0 0.75rem;
+      font-size: clamp(1.9rem, 3.3vw, 3.1rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      max-width: 24ch;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--ink-muted);
+      max-width: 62ch;
+      font-size: 0.98rem;
+    }
+
+    .capability-grid {
+      margin-top: 1.4rem;
+      display: grid;
+      gap: 0.8rem;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .capability {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 0.85rem;
+      box-shadow: var(--shadow-sm);
+      animation: reveal 420ms ease both;
+    }
+
+    .capability:nth-child(2) { animation-delay: 70ms; }
+    .capability:nth-child(3) { animation-delay: 140ms; }
+
+    .capability strong {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-size: 0.95rem;
+    }
+
+    .capability p {
+      margin: 0;
+      color: var(--ink-muted);
+      font-size: 0.84rem;
+    }
+
+    .snippet-grid {
+      margin-top: 1.25rem;
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .integration-playbook {
+      margin-top: 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 0.95rem;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .integration-playbook h2 {
+      margin: 0;
+      font-size: 1.02rem;
+      letter-spacing: -0.01em;
+    }
+
+    .integration-playbook .intro {
+      margin: 0.45rem 0 0;
+      color: var(--ink-muted);
+      font-size: 0.86rem;
+    }
+
+    .step-list {
+      margin: 0.75rem 0 0;
+      padding-left: 1.15rem;
+      display: grid;
+      gap: 0.48rem;
+      color: var(--ink-muted);
+      font-size: 0.84rem;
+    }
+
+    .step-list li strong {
+      color: var(--ink);
+    }
+
+    .step-list code {
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      background: #e9f3ec;
+      border: 1px solid #d2e2d6;
+      padding: 0.05rem 0.28rem;
+      border-radius: 4px;
+      color: #204332;
+      font-size: 0.76rem;
+    }
+
+    .playbook-grid {
+      margin-top: 0.9rem;
+      display: grid;
+      gap: 0.72rem;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .playbook-card {
+      border: 1px solid #cedece;
+      border-radius: 12px;
+      background: #fff;
+      padding: 0.72rem;
+    }
+
+    .playbook-card h3 {
+      margin: 0;
+      font-size: 0.9rem;
+      letter-spacing: -0.01em;
+    }
+
+    .playbook-card p {
+      margin: 0.35rem 0 0;
+      font-size: 0.8rem;
+      color: var(--ink-muted);
+    }
+
+    .playbook-card pre {
+      margin-top: 0.55rem;
+      border: 1px solid #22382b;
+      border-radius: 10px;
+      background: #0d1b12;
+      color: #d6ffe6;
+      padding: 0.62rem;
+      min-height: 170px;
+      font-size: 0.72rem;
+    }
+
+    .platform-grid {
+      margin-top: 0.82rem;
+      display: grid;
+      gap: 0.62rem;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .platform-tip {
+      border: 1px solid #cfe1cf;
+      border-radius: 10px;
+      background: #f8fbf8;
+      padding: 0.58rem;
+    }
+
+    .platform-tip strong {
+      display: block;
+      font-size: 0.8rem;
+      color: #21402f;
+    }
+
+    .platform-tip p {
+      margin: 0.26rem 0 0;
+      font-size: 0.75rem;
+      color: #506256;
+    }
+
+    .snippet-card {
+      border: 1px solid #25294a;
+      border-radius: 16px;
+      background: linear-gradient(160deg, #1b1f39, #1d223f 64%, #171b32);
+      padding: 0.85rem;
+      color: #e7ebff;
+    }
+
+    .snippet-card h2 {
+      margin: 0 0 0.45rem;
+      font-size: 0.82rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #b6beff;
+      font-weight: 700;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: 0.75rem;
+      line-height: 1.4;
+    }
+
+    .button-row {
+      margin-top: 0.65rem;
+      display: flex;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 0;
+      border-radius: 11px;
+      padding: 0.58rem 0.86rem;
+      font: inherit;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+      will-change: transform;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--highlight);
+      color: #fff;
+      box-shadow: 0 8px 18px rgba(79, 70, 229, 0.25);
+    }
+
+    .btn-primary:hover {
+      background: var(--highlight-dark);
+    }
+
+    .btn-ghost {
+      border: 1px solid #5b55c9;
+      background: #eef2ff;
+      color: #35327c;
+    }
+
+    .btn-soft {
+      border: 1px solid #49518f;
+      background: rgba(255, 255, 255, 0.08);
+      color: #d9ddff;
+    }
+
+    .control {
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.93);
+      backdrop-filter: blur(8px);
+      box-shadow: var(--shadow-lg);
+      padding: 1.1rem;
+      position: sticky;
+      top: 1rem;
+    }
+
+    .control h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: -0.01em;
+    }
+
+    .control .tip {
+      margin: 0.45rem 0 0.9rem;
+      color: var(--ink-muted);
+      font-size: 0.84rem;
+    }
+
+    .field {
+      display: grid;
+      gap: 0.35rem;
+      margin-bottom: 0.68rem;
+    }
+
+    .field.inline-check {
+      display: flex;
+      align-items: center;
+      gap: 0.48rem;
+      padding: 0.5rem 0.56rem;
+      border: 1px solid #d6d8ea;
+      border-radius: 11px;
+      background: #f6f7ff;
+      margin-top: -0.1rem;
+    }
+
+    .field.inline-check input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--highlight);
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .field.inline-check label {
+      margin: 0;
+      font-size: 0.78rem;
+      cursor: pointer;
+      color: #2f2b74;
+    }
+
+    .hint-line {
+      margin: 0.35rem 0 0;
+      font-size: 0.75rem;
+      color: #6a6f89;
+    }
+
+    .field label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #1d3a2a;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      border: 1px solid #bdd1c1;
+      border-radius: 11px;
+      padding: 0.58rem 0.62rem;
+      font: inherit;
+      background: #fff;
+      outline: none;
+      transition: box-shadow 120ms ease, border-color 120ms ease;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: #248656;
+      box-shadow: 0 0 0 4px var(--ring);
+    }
+
+    .host-url {
+      margin: 0.8rem 0 0;
+      border: 1px dashed #9abb9f;
+      border-radius: 11px;
+      background: #f4faf5;
+      padding: 0.52rem 0.65rem;
+      color: #264935;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: 0.72rem;
+      word-break: break-all;
+    }
+
+    .status {
+      margin: 0.75rem 0 0;
+      border-radius: 10px;
+      border: 1px solid #afd8bd;
+      background: #f1fcf5;
+      color: #155937;
+      font-size: 0.8rem;
+      padding: 0.5rem 0.62rem;
+    }
+
+    .status.warn {
+      border-color: #efcf9f;
+      background: #fff8ed;
+      color: #8b5a0f;
+    }
+
+    .iframe-preview {
+      display: none;
+      margin-top: 0.9rem;
+      border: 1px solid #bfd3c2;
+      border-radius: 13px;
+      background: #f8fcf8;
+      overflow: hidden;
+    }
+
+    .iframe-preview.show {
+      display: block;
+    }
+
+    .iframe-preview iframe {
+      width: 100%;
+      height: 270px;
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+
+    .iframe-preview .actions {
+      padding: 0.52rem;
+      display: flex;
+      justify-content: flex-end;
+      border-top: 1px solid #d5e2d8;
+      background: #eef6ef;
+    }
+
+    .frame-wrap {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483646;
+      display: none;
+      background: rgba(5, 20, 13, 0.86);
+      backdrop-filter: blur(6px);
+    }
+
+    .frame-wrap.show {
+      display: block;
+      animation: fade-in 180ms ease;
+    }
+
+    .frame-topbar {
+      height: 46px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 0.85rem;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid #cddccd;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #23412f;
+    }
+
+    .frame-wrap iframe {
+      width: 100%;
+      height: calc(100% - 46px);
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      background: #113320;
+      color: #d6ffe6;
+      border: 1px solid #2f5f44;
+      border-radius: 999px;
+      padding: 0.48rem 0.86rem;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+      font-size: 0.78rem;
+      opacity: 0;
+      transition: opacity 180ms ease, transform 180ms ease;
+      pointer-events: none;
+      z-index: 2147483647;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-3px);
+    }
+
+    @keyframes reveal {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @media (max-width: 980px) {
+      .site-wrap {
+        grid-template-columns: 1fr;
+      }
+
+      .control {
+        position: static;
+      }
+
+      .capability-grid,
+      .snippet-grid,
+      .playbook-grid,
+      .platform-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="site-wrap">
+    <section class="story" aria-label="Demo website content">
+      <p class="eyebrow">Third-party website simulation</p>
+      <h1>JP Loft chat integrated exactly like an external client site.</h1>
+      <p class="lead">
+        This page demonstrates both integration paths your clients can use: script embed and slug-host iframe embed.
+        It ships with JP Loft credentials as defaults, so this works out of the box for live verification.
+      </p>
+
+      <div class="capability-grid">
+        <article class="capability">
+          <strong>Mode 1: Script embed</strong>
+          <p>Loads chat-widget.js directly into a third-party page with company context and API key headers.</p>
+        </article>
+        <article class="capability">
+          <strong>Mode 2: Iframe host URL</strong>
+          <p>Uses /jp-loft?apiKey=...&companyId=_JP_Loft for strict credential-based embedding.</p>
+        </article>
+        <article class="capability">
+          <strong>Copy-ready snippets</strong>
+          <p>Produces the exact snippet your client can paste into CMS, static HTML, or low-code builders.</p>
+        </article>
+      </div>
+
+      <div class="snippet-grid" aria-label="Code snippets">
+        <article class="snippet-card">
+          <h2>Script Snippet</h2>
+          <pre id="script-snippet"></pre>
+          <div class="button-row">
+            <button type="button" class="btn-soft" data-copy-target="script-snippet">Copy script snippet</button>
+          </div>
+        </article>
+
+        <article class="snippet-card">
+          <h2>Iframe Snippet</h2>
+          <pre id="iframe-snippet"></pre>
+          <div class="button-row">
+            <button type="button" class="btn-soft" data-copy-target="iframe-snippet">Copy iframe snippet</button>
+          </div>
+        </article>
+      </div>
+
+      <section class="integration-playbook" aria-label="Whole website integration steps">
+        <h2>How To Integrate Across Your Whole Website</h2>
+        <p class="intro">
+          Follow these steps once in your shared template/layout so chat is available on every page.
+        </p>
+
+        <ol class="step-list">
+          <li><strong>Open your admin embed settings and confirm:</strong> <code>slug</code>, <code>companyId</code>, and <code>apiKey</code>.</li>
+          <li><strong>Set your app origin correctly</strong> in this lab (production origin in production, dev origin in local testing).</li>
+          <li><strong>Choose one install path:</strong> Script mode (recommended for launcher widget) or Iframe host mode (strict credential URL).</li>
+          <li><strong>Paste the chosen snippet once</strong> into your global website template, just before <code>&lt;/body&gt;</code>.</li>
+          <li><strong>For SPA sites</strong> (React/Vue/Next): place it in the root layout so it does not reload on every route change.</li>
+          <li><strong>For CMS sites</strong> (WordPress/Shopify/Webflow): paste into site-wide footer or global custom-code settings.</li>
+          <li><strong>Validate CORS and domain access:</strong> your API must allow requests from the website where the widget runs.</li>
+          <li><strong>QA before go-live:</strong> test homepage, inner pages, mobile, and one lead capture flow end-to-end.</li>
+        </ol>
+
+        <div class="playbook-grid" aria-label="Global install snippets">
+          <article class="playbook-card">
+            <h3>Global Script Install (Recommended)</h3>
+            <p>Best for a floating launcher across all pages with one global include.</p>
+            <pre id="global-script-example"></pre>
+            <div class="button-row">
+              <button type="button" class="btn-ghost" data-copy-target="global-script-example">Copy global script install</button>
+            </div>
+          </article>
+
+          <article class="playbook-card">
+            <h3>Global Iframe Host Install</h3>
+            <p>Use when you prefer the slug + apiKey + companyId host URL model.</p>
+            <pre id="global-iframe-example"></pre>
+            <div class="button-row">
+              <button type="button" class="btn-ghost" data-copy-target="global-iframe-example">Copy global iframe install</button>
+            </div>
+          </article>
+        </div>
+
+        <div class="platform-grid" aria-label="Platform notes">
+          <article class="platform-tip">
+            <strong>WordPress</strong>
+            <p>Use a site-wide header/footer script plugin or add snippet in theme footer.</p>
+          </article>
+          <article class="platform-tip">
+            <strong>Shopify</strong>
+            <p>Add snippet in <code>theme.liquid</code> before <code>&lt;/body&gt;</code> for all storefront pages.</p>
+          </article>
+          <article class="platform-tip">
+            <strong>React / Next / Vue</strong>
+            <p>Inject once in the root layout or app shell, not inside each page component.</p>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <aside class="control" aria-label="Integration controls">
+      <h2>Integration Lab</h2>
+      <p class="tip">Default credentials are JP Loft values. Update fields, then relaunch a mode.</p>
+
+      <div class="field">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="script">Script embed</option>
+          <option value="iframe">Iframe host</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="app-origin">App origin</label>
+        <input id="app-origin" type="text" spellcheck="false" />
+        <p class="hint-line">Use <strong>http://localhost:7001</strong> for exact parity with your running project.</p>
+      </div>
+
+      <div class="field inline-check">
+        <input id="exact-project" type="checkbox" />
+        <label for="exact-project">Exact localhost profile: fix script/API origin to http://localhost:7001 (iframe always uses /slug?apiKey=&amp;companyId=)</label>
+      </div>
+
+      <div class="field">
+        <label for="slug">Embed slug</label>
+        <input id="slug" type="text" spellcheck="false" />
+      </div>
+
+      <div class="field">
+        <label for="company-id">Company ID</label>
+        <input id="company-id" type="text" spellcheck="false" />
+      </div>
+
+      <div class="field">
+        <label for="company-name">Company name</label>
+        <input id="company-name" type="text" spellcheck="false" />
+      </div>
+
+      <div class="field">
+        <label for="api-key">Embed API key</label>
+        <input id="api-key" type="text" spellcheck="false" />
+      </div>
+
+      <div class="button-row">
+        <button id="launch-mode" type="button" class="btn-primary">Launch selected mode</button>
+        <button id="reset-defaults" type="button" class="btn-ghost">Reset JP Loft defaults</button>
+      </div>
+
+      <p id="mode-status" class="status">Ready</p>
+      <div id="host-url" class="host-url"></div>
+
+      <section id="iframe-preview" class="iframe-preview" aria-label="Iframe preview">
+        <iframe id="iframe-preview-frame" title="Iframe host preview" loading="lazy" allow="clipboard-write"></iframe>
+        <div class="actions">
+          <button id="open-frame-modal" type="button" class="btn-primary">Open full-screen host preview</button>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="frame-wrap" class="frame-wrap" aria-hidden="true">
+    <div class="frame-topbar">
+      <span>JP Loft Iframe Host Preview</span>
+      <button id="close-frame-modal" type="button" class="btn-ghost">Close preview</button>
+    </div>
+    <iframe id="full-frame" title="Third-party iframe host" loading="lazy" allow="clipboard-write"></iframe>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var PROJECT_ORIGIN = 'http://localhost:7001';
+
+      var DEFAULTS = {
+        mode: 'script',
+        appOrigin: PROJECT_ORIGIN,
+        exactProject: true,
+        slug: 'jp-loft',
+        companyId: '_JP_Loft',
+        companyName: 'JP Loft',
+        apiKey: 'ba6d20d0722f560415ed0f6c1e0dcba4bb429aad3f7dff237a28029d12a30a9a'
+      };
+
+      var state = readStateFromUrl();
+      var elements = {
+        mode: document.getElementById('mode'),
+        appOrigin: document.getElementById('app-origin'),
+        exactProject: document.getElementById('exact-project'),
+        slug: document.getElementById('slug'),
+        companyId: document.getElementById('company-id'),
+        companyName: document.getElementById('company-name'),
+        apiKey: document.getElementById('api-key'),
+        launchMode: document.getElementById('launch-mode'),
+        resetDefaults: document.getElementById('reset-defaults'),
+        scriptSnippet: document.getElementById('script-snippet'),
+        iframeSnippet: document.getElementById('iframe-snippet'),
+        globalScriptExample: document.getElementById('global-script-example'),
+        globalIframeExample: document.getElementById('global-iframe-example'),
+        modeStatus: document.getElementById('mode-status'),
+        hostUrl: document.getElementById('host-url'),
+        iframePreview: document.getElementById('iframe-preview'),
+        iframePreviewFrame: document.getElementById('iframe-preview-frame'),
+        openFrameModal: document.getElementById('open-frame-modal'),
+        closeFrameModal: document.getElementById('close-frame-modal'),
+        frameWrap: document.getElementById('frame-wrap'),
+        fullFrame: document.getElementById('full-frame'),
+        toast: document.getElementById('toast')
+      };
+
+      bindEvents();
+      syncFormWithState();
+      renderFromCurrentInputs();
+      launchActiveMode();
+
+      function readStateFromUrl() {
+        var params = new URLSearchParams(window.location.search);
+        return {
+          mode: readParam(params, 'mode', DEFAULTS.mode),
+          appOrigin: readParam(params, 'appOrigin', DEFAULTS.appOrigin),
+          exactProject: readBooleanParam(params, 'exactProject', DEFAULTS.exactProject),
+          slug: readParam(params, 'slug', DEFAULTS.slug),
+          companyId: readParam(params, 'companyId', DEFAULTS.companyId),
+          companyName: readParam(params, 'companyName', DEFAULTS.companyName),
+          apiKey: readParam(params, 'apiKey', DEFAULTS.apiKey)
+        };
+      }
+
+      function readBooleanParam(params, key, fallback) {
+        var value = params.get(key);
+        if (value == null || value === '') return Boolean(fallback);
+        var normalized = String(value).trim().toLowerCase();
+        if (normalized === '1' || normalized === 'true' || normalized === 'yes') return true;
+        if (normalized === '0' || normalized === 'false' || normalized === 'no') return false;
+        return Boolean(fallback);
+      }
+
+      function readParam(params, key, fallback) {
+        var value = params.get(key);
+        if (!value) return fallback;
+        var trimmed = String(value).trim();
+        return trimmed || fallback;
+      }
+
+      function normalizeOrigin(value) {
+        try {
+          return new URL(String(value || '').trim()).origin;
+        } catch (e) {
+          return PROJECT_ORIGIN;
+        }
+      }
+
+      function bindEvents() {
+        elements.launchMode.addEventListener('click', relaunchFromInputs);
+        elements.resetDefaults.addEventListener('click', function () {
+          state = {
+            mode: DEFAULTS.mode,
+            appOrigin: DEFAULTS.appOrigin,
+            exactProject: DEFAULTS.exactProject,
+            slug: DEFAULTS.slug,
+            companyId: DEFAULTS.companyId,
+            companyName: DEFAULTS.companyName,
+            apiKey: DEFAULTS.apiKey
+          };
+          syncFormWithState();
+          renderFromCurrentInputs();
+          showToast('JP Loft defaults restored.');
+        });
+
+        [
+          elements.mode,
+          elements.appOrigin,
+          elements.exactProject,
+          elements.slug,
+          elements.companyId,
+          elements.companyName,
+          elements.apiKey
+        ].forEach(function (el) {
+          el.addEventListener('input', renderFromCurrentInputs);
+        });
+
+        document.querySelectorAll('[data-copy-target]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var targetId = btn.getAttribute('data-copy-target');
+            var target = document.getElementById(targetId);
+            if (!target) return;
+            copyText(target.textContent || '').then(function () {
+              showToast('Snippet copied.');
+            }).catch(function () {
+              showToast('Copy failed. Please copy manually.');
+            });
+          });
+        });
+
+        elements.openFrameModal.addEventListener('click', function () {
+          elements.frameWrap.classList.add('show');
+          elements.frameWrap.setAttribute('aria-hidden', 'false');
+        });
+
+        elements.closeFrameModal.addEventListener('click', closeFrameModal);
+        elements.frameWrap.addEventListener('click', function (event) {
+          if (event.target === elements.frameWrap) {
+            closeFrameModal();
+          }
+        });
+      }
+
+      function closeFrameModal() {
+        elements.frameWrap.classList.remove('show');
+        elements.frameWrap.setAttribute('aria-hidden', 'true');
+      }
+
+      function syncFormWithState() {
+        elements.mode.value = state.mode;
+        elements.appOrigin.value = state.appOrigin;
+        elements.exactProject.checked = Boolean(state.exactProject);
+        elements.slug.value = state.slug;
+        elements.companyId.value = state.companyId;
+        elements.companyName.value = state.companyName;
+        elements.apiKey.value = state.apiKey;
+      }
+
+      function readFormState() {
+        return {
+          mode: elements.mode.value === 'iframe' ? 'iframe' : 'script',
+          appOrigin: String(elements.appOrigin.value || '').trim() || DEFAULTS.appOrigin,
+          exactProject: Boolean(elements.exactProject.checked),
+          slug: String(elements.slug.value || '').trim() || DEFAULTS.slug,
+          companyId: String(elements.companyId.value || '').trim() || DEFAULTS.companyId,
+          companyName: String(elements.companyName.value || '').trim() || DEFAULTS.companyName,
+          apiKey: String(elements.apiKey.value || '').trim() || DEFAULTS.apiKey
+        };
+      }
+
+      function buildUrls(formState) {
+        var origin = formState.exactProject
+          ? PROJECT_ORIGIN
+          : normalizeOrigin(formState.appOrigin);
+        var slugPath = '/' + encodeURIComponent(formState.slug);
+        var query = 'apiKey=' + encodeURIComponent(formState.apiKey) + '&companyId=' + encodeURIComponent(formState.companyId);
+        var apiUrl = origin + '/api';
+        var scriptSrc = origin + '/chat-widget.js';
+        var slugHostUrl = origin + slugPath + '?' + query;
+        /** Iframe mode always uses /&lt;slug&gt;?apiKey=&amp;companyId= (same as production third-party embed). */
+        var iframeModeUrl = slugHostUrl;
+        return {
+          origin: origin,
+          apiUrl: apiUrl,
+          scriptSrc: scriptSrc,
+          slugHostUrl: slugHostUrl,
+          iframeModeUrl: iframeModeUrl,
+          hostUrl: iframeModeUrl
+        };
+      }
+
+      function buildScriptSnippet(formState, urls) {
+        var closeScriptTag = '</' + 'script>';
+        return [
+          '<script>',
+          '  window.JPLoftChatConfig = {',
+          "    apiUrl: '" + escapeForSingleQuotedJs(urls.apiUrl) + "',",
+          "    companyId: '" + escapeForSingleQuotedJs(formState.companyId) + "',",
+          "    companyName: '" + escapeForSingleQuotedJs(formState.companyName) + "',",
+          "    apiKey: '" + escapeForSingleQuotedJs(formState.apiKey) + "'",
+          '  };',
+          closeScriptTag,
+          '<script src="' + urls.scriptSrc + '">' + closeScriptTag
+        ].join('\n');
+      }
+
+      function escapeForSingleQuotedJs(value) {
+        return String(value || '')
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'");
+      }
+
+      function buildIframeSnippet(urls) {
+        return [
+          '<iframe',
+          '  src="' + urls.iframeModeUrl + '"',
+          '  title="JP Loft Chat"',
+          '  style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483646;"',
+          '  allow="clipboard-write"',
+          '  loading="lazy">',
+          '</iframe>'
+        ].join('\n');
+      }
+
+      function buildGlobalScriptInstallSnippet(formState, urls) {
+        var closeScriptTag = '</' + 'script>';
+        return [
+          '<!-- Add once in your global layout before </body> -->',
+          '<script>',
+          '  window.JPLoftChatConfig = {',
+          "    apiUrl: '" + escapeForSingleQuotedJs(urls.apiUrl) + "',",
+          "    companyId: '" + escapeForSingleQuotedJs(formState.companyId) + "',",
+          "    companyName: '" + escapeForSingleQuotedJs(formState.companyName) + "',",
+          "    apiKey: '" + escapeForSingleQuotedJs(formState.apiKey) + "'",
+          '  };',
+          closeScriptTag,
+          '<script src="' + urls.scriptSrc + '">' + closeScriptTag
+        ].join('\n');
+      }
+
+      function buildGlobalIframeInstallSnippet(urls) {
+        var closeScriptTag = '</' + 'script>';
+        return [
+          '<!-- Add once in your global layout -->',
+          '<div id="jp-loft-embed" style="position:fixed;inset:0;display:none;z-index:2147483646;">',
+          '  <iframe src="' + urls.iframeModeUrl + '" title="JP Loft Chat" style="width:100%;height:100%;border:0;" allow="clipboard-write" loading="lazy"></iframe>',
+          '</div>',
+          '<script>',
+          "  // Open chat: document.getElementById('jp-loft-embed').style.display = 'block';",
+          "  // Close chat: document.getElementById('jp-loft-embed').style.display = 'none';",
+          closeScriptTag
+        ].join('\n');
+      }
+
+      function renderFromCurrentInputs() {
+        var formState = readFormState();
+        var urls = buildUrls(formState);
+
+        if (formState.exactProject) {
+          elements.appOrigin.value = PROJECT_ORIGIN;
+          elements.appOrigin.setAttribute('readonly', 'readonly');
+          elements.appOrigin.setAttribute('aria-readonly', 'true');
+        } else {
+          elements.appOrigin.removeAttribute('readonly');
+          elements.appOrigin.removeAttribute('aria-readonly');
+        }
+
+        elements.scriptSnippet.textContent = buildScriptSnippet(formState, urls);
+        elements.iframeSnippet.textContent = buildIframeSnippet(urls);
+        elements.globalScriptExample.textContent = buildGlobalScriptInstallSnippet(formState, urls);
+        elements.globalIframeExample.textContent = buildGlobalIframeInstallSnippet(urls);
+        elements.hostUrl.textContent = urls.slugHostUrl;
+
+        elements.iframePreviewFrame.src = urls.iframeModeUrl;
+        elements.fullFrame.src = urls.iframeModeUrl;
+
+        var iframeActive = formState.mode === 'iframe';
+        elements.iframePreview.classList.toggle('show', iframeActive);
+      }
+
+      function launchActiveMode() {
+        var formState = readFormState();
+        var urls = buildUrls(formState);
+
+        if (formState.mode === 'iframe') {
+          elements.modeStatus.classList.add('warn');
+          elements.modeStatus.textContent =
+            'Iframe mode: preview loads ' + urls.slugHostUrl + ' (slug host with apiKey + companyId).';
+          return;
+        }
+
+        elements.modeStatus.classList.remove('warn');
+        elements.modeStatus.textContent = formState.exactProject
+          ? 'Script mode active with exact localhost profile (http://localhost:7001). Theme and behavior come from your running project assets.'
+          : 'Script mode active. JP Loft launcher should appear in the lower-right corner.';
+
+        window.JPLoftChatConfig = {
+          apiUrl: urls.apiUrl,
+          companyId: formState.companyId,
+          companyName: formState.companyName,
+          apiKey: formState.apiKey
+        };
+
+        var existingScript = document.getElementById('jploft-widget-loader');
+        if (existingScript) return;
+
+        var script = document.createElement('script');
+        script.id = 'jploft-widget-loader';
+        script.src = urls.scriptSrc;
+        script.async = true;
+        script.onload = function () {
+          showToast('chat-widget.js loaded successfully.');
+        };
+        script.onerror = function () {
+          elements.modeStatus.classList.add('warn');
+          elements.modeStatus.textContent = 'Failed to load chat-widget.js. Verify app origin and server availability.';
+        };
+        document.head.appendChild(script);
+      }
+
+      function relaunchFromInputs() {
+        var next = readFormState();
+        var params = new URLSearchParams();
+        params.set('mode', next.mode);
+        params.set('appOrigin', next.exactProject ? PROJECT_ORIGIN : normalizeOrigin(next.appOrigin));
+        params.set('exactProject', next.exactProject ? '1' : '0');
+        params.set('slug', next.slug);
+        params.set('companyId', next.companyId);
+        params.set('companyName', next.companyName);
+        params.set('apiKey', next.apiKey);
+        window.location.search = params.toString();
+      }
+
+      function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(text);
+        }
+
+        return new Promise(function (resolve, reject) {
+          try {
+            var helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'absolute';
+            helper.style.left = '-9999px';
+            document.body.appendChild(helper);
+            helper.select();
+            var ok = document.execCommand('copy');
+            document.body.removeChild(helper);
+            if (ok) resolve();
+            else reject(new Error('copy-failed'));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }
+
+      var toastTimer = null;
+      function showToast(message) {
+        elements.toast.textContent = message;
+        elements.toast.classList.add('show');
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(function () {
+          elements.toast.classList.remove('show');
+        }, 1700);
+      }
+    })();
+  </script>
+</body>
+</html>

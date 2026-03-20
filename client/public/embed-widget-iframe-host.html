@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JP Loft Iframe Host</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: Outfit, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    (function () {
+      'use strict';
+
+      var params = new URLSearchParams(window.location.search);
+      var origin = window.location.origin;
+      var apiUrl = params.get('apiUrl') || (origin + '/api');
+      var companyId = params.get('companyId') || '_JP_Loft';
+      var companyName = params.get('companyName') || 'JP Loft';
+      var apiKey = params.get('apiKey') || '';
+
+      window.JPLoftChatConfig = {
+        apiUrl: apiUrl,
+        companyId: companyId,
+        companyName: companyName,
+        apiKey: apiKey
+      };
+
+      var script = document.createElement('script');
+      script.src = '/chat-widget.js';
+      script.async = true;
+      script.onerror = function () {
+        console.error('[iframe-host] Unable to load /chat-widget.js');
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+</body>
+</html>
