@@ -275,6 +275,29 @@ function readInitialChatState() {
   return readPersistedChatState();
 }
 
+/** Same rules as initial chatViewMode state — single source for mount-time panel mode. */
+function resolveInitialChatViewMode(isWebsiteView, initialChatState) {
+  const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
+  try {
+    const stored = localStorage.getItem(CHAT_VIEW_MODE_KEY);
+    if (Object.values(CHAT_VIEW_MODES).includes(stored)) {
+      return stored === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : stored;
+    }
+  } catch {
+    // ignore
+  }
+
+  if (Object.values(CHAT_VIEW_MODES).includes(initialChatState?.chatViewMode)) {
+    return initialChatState.chatViewMode === CHAT_VIEW_MODES.FULL_PAGE
+      ? CHAT_VIEW_MODES.WIDGET_OPEN
+      : initialChatState.chatViewMode;
+  }
+
+  if (isWebsiteView && initialChatState?.sessionId) return CHAT_VIEW_MODES.WIDGET_OPEN;
+
+  return fallback;
+}
+
 function parseAutoTriggerRules(value) {
   return String(value || '')
     .split(/[\n,]/)
@@ -339,20 +362,23 @@ export default function App() {
   const location = useLocation();
   const isWebsiteView = location.pathname === '/' || location.pathname === '';
   const initialChatState = readInitialChatState();
+  const initialViewMode = resolveInitialChatViewMode(isWebsiteView, initialChatState);
   const hasPersistedWidgetButtonPosRef = useRef(false);
 
-  // Website: activation timers only if panel was closed; restore open panel from persistence
+  // Website: activation timers only if panel was closed; restore open panel from persistence.
+  // Closing the widget persisted widgetActivated:true (skip auto for rest of session). After a full
+  // reload with the panel closed, reset flags so auto-trigger can run again.
   const [widgetActivated, setWidgetActivated] = useState(() => {
     if (!isWebsiteView) return initialChatState?.widgetActivated ?? true;
     if (initialChatState?.sessionId) return initialChatState?.widgetActivated ?? true;
-    if (initialChatState?.chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN) return true;
-    return initialChatState?.widgetActivated ?? false;
+    if (initialViewMode === CHAT_VIEW_MODES.WIDGET_OPEN) return true;
+    return false;
   });
   const [autoPopupHandled, setAutoPopupHandled] = useState(() => {
     if (!isWebsiteView) return initialChatState?.autoPopupHandled ?? true;
     if (initialChatState?.sessionId) return initialChatState?.autoPopupHandled ?? true;
-    if (initialChatState?.chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN) return true;
-    return initialChatState?.autoPopupHandled ?? false;
+    if (initialViewMode === CHAT_VIEW_MODES.WIDGET_OPEN) return true;
+    return false;
   });
   const [openingMessageShown, setOpeningMessageShown] = useState(() => initialChatState?.openingMessageShown ?? false);
 
@@ -366,26 +392,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem(THEME_KEY) || 'light'; } catch { return 'light'; }
   });
-  const [chatViewMode, setChatViewMode] = useState(() => {
-    const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
-    try {
-      const stored = localStorage.getItem(CHAT_VIEW_MODE_KEY);
-      if (Object.values(CHAT_VIEW_MODES).includes(stored)) {
-        return stored === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : stored;
-      }
-    } catch {
-      // Ignore localStorage failures and fallback to other persisted sources.
-    }
-
-    if (Object.values(CHAT_VIEW_MODES).includes(initialChatState?.chatViewMode)) {
-      return initialChatState.chatViewMode === CHAT_VIEW_MODES.FULL_PAGE ? CHAT_VIEW_MODES.WIDGET_OPEN : initialChatState.chatViewMode;
-    }
-
-    // By user request: "never open in full screen mode"
-    if (isWebsiteView && initialChatState?.sessionId) return CHAT_VIEW_MODES.WIDGET_OPEN;
-
-    return fallback;
-  });
+  const [chatViewMode, setChatViewMode] = useState(initialViewMode);
   const [widgetButtonPos, setWidgetButtonPos] = useState(() => {
     const { width, height } = getViewport();
     let wasDragged = initialChatState?.widgetButtonDragged === true;
@@ -1374,22 +1381,24 @@ export default function App() {
           >
             <header className="chat-widget-header">
               <div className="chat-widget-title-wrap">
-                <span className="chat-widget-title">{companyName}</span>
+                <div className="d-flex align-items-center gap-2">
+                  <button
+                    type="button"
+                    className="chat-widget-icon-btn"
+                    onClick={clearChat}
+                    aria-label="Start new chat"
+                    title="New chat"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 5v14" />
+                      <path d="M5 12h14" />
+                    </svg>
+                  </button>
+                  <span className="chat-widget-title">{companyName}</span>
+                </div>
               </div>
 
               <div className="d-flex align-items-center gap-2">
-                <button
-                  type="button"
-                  className="chat-widget-icon-btn"
-                  onClick={handleCloseWidget}
-                  aria-label="Close widget"
-                  title="Close"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
                 <button
                   type="button"
                   className="chat-widget-icon-btn d-none"
@@ -1402,6 +1411,19 @@ export default function App() {
                     <polyline points="9 21 3 21 3 15" />
                     <line x1="21" y1="3" x2="14" y2="10" />
                     <line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  className="chat-widget-icon-btn"
+                  onClick={handleCloseWidget}
+                  aria-label="Close widget"
+                  title="Close"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
 
