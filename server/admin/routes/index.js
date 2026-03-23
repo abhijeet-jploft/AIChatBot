@@ -20,7 +20,6 @@ const router = express.Router();
 // ─── Public ─────────────────────────────────────────────────────────────────
 router.post('/auth/login', authController.login);
 router.post('/auth/setup', authController.setup);
-router.get('/companies', settingsController.listCompanies);
 
 // ─── Protected ──────────────────────────────────────────────────────────────
 router.post('/auth/logout', requireAuth, authController.logout);

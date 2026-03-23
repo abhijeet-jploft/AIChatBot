@@ -20,28 +20,21 @@ function validatePasswordStrength(password) {
 
 async function login(req, res) {
   try {
-    const { companyId, password } = req.body;
-    if (!companyId || !password) {
-      return res.status(400).json({ error: 'companyId and password are required' });
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'email and password are required' });
     }
 
-    const cid = String(companyId).trim();
-    const company = await CompanyAdmin.findByCompanyId(cid);
-    if (!company) {
-      return res.status(401).json({ error: 'Invalid company ID' });
-    }
-
-    if (!company.password_hash) {
-      return res.status(400).json({
-        error: 'Password not set. Use /admin/auth/setup to set initial password.',
-        companyId: cid,
-      });
+    const company = await CompanyAdmin.findByAdminEmail(email);
+    if (!company || !company.password_hash) {
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     if (!verifyPassword(password, company.password_hash)) {
-      return res.status(401).json({ error: 'Invalid password' });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    const cid = company.company_id;
     const token = generateToken();
     const expiresAt = getSessionExpiry();
     await CompanyAdmin.createSession(cid, token, expiresAt);
@@ -51,6 +44,7 @@ async function login(req, res) {
       expiresAt: expiresAt.toISOString(),
       companyId: cid,
       companyName: company.name,
+      adminEmail: company.admin_email || null,
     });
   } catch (err) {
     console.error('[admin auth] login:', err);
@@ -59,41 +53,9 @@ async function login(req, res) {
 }
 
 async function setup(req, res) {
-  try {
-    const { companyId, password } = req.body;
-    if (!companyId || !password) {
-      return res.status(400).json({ error: 'companyId and password are required' });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-
-    const cid = String(companyId).trim();
-    const company = await CompanyAdmin.findByCompanyId(cid);
-    if (!company) {
-      return res.status(404).json({ error: 'Company not found' });
-    }
-    if (company.password_hash) {
-      return res.status(400).json({ error: 'Password already set. Use login instead.' });
-    }
-
-    const passwordHash = hashPassword(password);
-    await CompanyAdmin.setPassword(cid, passwordHash);
-
-    const token = generateToken();
-    const expiresAt = getSessionExpiry();
-    await CompanyAdmin.createSession(cid, token, expiresAt);
-
-    res.json({
-      token,
-      expiresAt: expiresAt.toISOString(),
-      companyId: cid,
-      companyName: company.name,
-    });
-  } catch (err) {
-    console.error('[admin auth] setup:', err);
-    res.status(500).json({ error: err.message });
-  }
+  return res.status(403).json({
+    error: 'Self-service admin setup is disabled. Your platform administrator must assign login email and password.',
+  });
 }
 
 async function logout(req, res) {
@@ -122,6 +84,7 @@ async function me(req, res) {
       companyName: company.name,
       chatbotName: company.display_name || '',
       displayName: company.name,
+      adminEmail: company.admin_email || null,
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
     });

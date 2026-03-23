@@ -1,5 +1,14 @@
 const pool = require('../db/index');
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * GET /embed/:slug/:token?companyId=...
  * Requires query companyId to match the chatbot row (with slug + token). Otherwise 404.
@@ -38,7 +47,7 @@ async function renderEmbedPage(req, res) {
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat</title>
+  <title>${escapeHtml((row.widget_title || 'Chat').trim() || 'Chat')} Chatbot</title>
   <style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}</style>
 </head>
 <body>

@@ -1285,6 +1285,11 @@ export default function App() {
   const companyThemeStyle = buildCompanyThemeStyle(currentCompany?.theme, theme);
   const isFullPage = chatViewMode === CHAT_VIEW_MODES.FULL_PAGE;
   const isWidgetOpen = chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.title = `${companyName} Chatbot`;
+  }, [companyName]);
   /** Draggable launcher / minimize control â€” position persisted in localStorage + CHAT_STATE_KEY */
   const widgetButtonStyle = {
     left: `${widgetButtonPos.x}px`,

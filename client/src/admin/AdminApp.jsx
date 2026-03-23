@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AdminToastProvider } from './context/AdminToastContext';
@@ -66,6 +67,11 @@ function AdminLayout({ children }) {
       )?.label ||
     hiddenPageTitles[location.pathname] ||
     'Dashboard';
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.title = `${companyName} Admin · ${currentPageLabel}`;
+  }, [companyName, currentPageLabel]);
 
   if (loading) {
     return (

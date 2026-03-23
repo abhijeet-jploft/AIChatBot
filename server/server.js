@@ -10,6 +10,7 @@ const trainRoutes = require('./routes/training');
 const scraperRoutes = require('./routes/scraper');
 const sessionRoutes = require('./routes/sessions');
 const adminRoutes = require('./admin/routes');
+const superAdminRoutes = require('./super_admin/routes');
 const { renderEmbedPage } = require('./controllers/embedPageController');
 const { migrate } = require('./db/migrate');
 const { attachPresenceWs } = require('./ws/presence');
@@ -26,6 +27,7 @@ app.use('/api/train', trainRoutes);
 app.use('/api/scrape', scraperRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/super-admin', superAdminRoutes);
 
 // Validate embed secret for a given companyId — used by the integration demo before launching
 app.get('/api/embed/validate', async (req, res) => {

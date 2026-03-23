@@ -188,72 +188,82 @@ function buildAiPayload(company) {
   };
 }
 
+function serializeCompanySettings(company) {
+  const modeCatalog = getModeCatalog(company.ai_mode);
+  return {
+    companyId: company.company_id,
+    name: company.name,
+    companyName: company.name,
+    chatbotName: company.display_name || '',
+    displayName: company.display_name || '',
+    iconUrl: company.icon_url || null,
+    greetingMessage: company.greeting_message || null,
+    widget: {
+      position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
+    },
+    autoTrigger: buildAutoTriggerPayload(company),
+    aiMode: modeCatalog.active,
+    ai: buildAiPayload(company),
+    leadNotifications: {
+      emailEnabled: Boolean(company.lead_email_notifications_enabled),
+      email: company.lead_notification_email || null,
+    },
+    voice: buildVoicePayload(company),
+    escalation: {
+      triggers: {
+        userRequestsHuman: Boolean(company.escalation_trigger_user_requests_human),
+        aiConfidenceLow: Boolean(company.escalation_trigger_ai_confidence_low),
+        urgentKeywords: Boolean(company.escalation_trigger_urgent_keywords),
+        angrySentiment: Boolean(company.escalation_trigger_angry_sentiment),
+        highValueLead: Boolean(company.escalation_trigger_high_value_lead),
+      },
+      actions: {
+        instantNotification: Boolean(company.escalation_action_instant_notification),
+        autoScheduleMeeting: Boolean(company.escalation_action_auto_schedule_meeting),
+        chatTakeoverAlert: Boolean(company.escalation_action_chat_takeover_alert),
+      },
+      highValueLeadScoreThreshold: Number(company.escalation_high_value_lead_score_threshold || 75),
+    },
+    safety: {
+      blockTopicsEnabled: Boolean(company.safety_block_topics_enabled),
+      blockTopics: company.safety_block_topics || '',
+      preventInternalData: Boolean(company.safety_prevent_internal_data),
+      restrictDatabasePriceExposure: Boolean(company.safety_restrict_database_price_exposure),
+      disableCompetitorComparisons: Boolean(company.safety_disable_competitor_comparisons),
+      restrictFileSharing: Boolean(company.safety_restrict_file_sharing),
+    },
+    language: {
+      primary: company.language_primary || 'English',
+      multiEnabled: Boolean(company.language_multi_enabled),
+      autoDetectEnabled: Boolean(company.language_auto_detect_enabled),
+      manualSwitchEnabled: Boolean(company.language_manual_switch_enabled),
+    },
+    theme: mergeCompanyTheme(company.company_id, {
+      primaryColor: company.theme_primary_color,
+      primaryDarkColor: company.theme_primary_dark_color,
+      secondaryColor: company.theme_secondary_color,
+      secondaryLightColor: company.theme_secondary_light_color,
+      headerBackground: company.theme_header_background,
+      headerShadow: company.theme_header_shadow,
+      headerTextColor: company.theme_header_text_color,
+    }),
+    embed: buildEmbedPayload(company),
+  };
+}
+
+async function getSettingsJsonForCompany(companyId) {
+  const company = await CompanyAdmin.findByCompanyId(companyId);
+  if (!company) return null;
+  return serializeCompanySettings(company);
+}
+
 async function getSettings(req, res) {
   try {
-    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
-    if (!company) {
+    const data = await getSettingsJsonForCompany(req.adminCompanyId);
+    if (!data) {
       return res.status(404).json({ error: 'Company not found' });
     }
-    const modeCatalog = getModeCatalog(company.ai_mode);
-    res.json({
-      companyId: company.company_id,
-      name: company.name,
-      companyName: company.name,
-      chatbotName: company.display_name || '',
-      displayName: company.display_name || '',
-      iconUrl: company.icon_url || null,
-      greetingMessage: company.greeting_message || null,
-      widget: {
-        position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
-      },
-      autoTrigger: buildAutoTriggerPayload(company),
-      aiMode: modeCatalog.active,
-      ai: buildAiPayload(company),
-      leadNotifications: {
-        emailEnabled: Boolean(company.lead_email_notifications_enabled),
-        email: company.lead_notification_email || null,
-      },
-      voice: buildVoicePayload(company),
-      escalation: {
-        triggers: {
-          userRequestsHuman: Boolean(company.escalation_trigger_user_requests_human),
-          aiConfidenceLow: Boolean(company.escalation_trigger_ai_confidence_low),
-          urgentKeywords: Boolean(company.escalation_trigger_urgent_keywords),
-          angrySentiment: Boolean(company.escalation_trigger_angry_sentiment),
-          highValueLead: Boolean(company.escalation_trigger_high_value_lead),
-        },
-        actions: {
-          instantNotification: Boolean(company.escalation_action_instant_notification),
-          autoScheduleMeeting: Boolean(company.escalation_action_auto_schedule_meeting),
-          chatTakeoverAlert: Boolean(company.escalation_action_chat_takeover_alert),
-        },
-        highValueLeadScoreThreshold: Number(company.escalation_high_value_lead_score_threshold || 75),
-      },
-      safety: {
-        blockTopicsEnabled: Boolean(company.safety_block_topics_enabled),
-        blockTopics: company.safety_block_topics || '',
-        preventInternalData: Boolean(company.safety_prevent_internal_data),
-        restrictDatabasePriceExposure: Boolean(company.safety_restrict_database_price_exposure),
-        disableCompetitorComparisons: Boolean(company.safety_disable_competitor_comparisons),
-        restrictFileSharing: Boolean(company.safety_restrict_file_sharing),
-      },
-      language: {
-        primary: company.language_primary || 'English',
-        multiEnabled: Boolean(company.language_multi_enabled),
-        autoDetectEnabled: Boolean(company.language_auto_detect_enabled),
-        manualSwitchEnabled: Boolean(company.language_manual_switch_enabled),
-      },
-      theme: mergeCompanyTheme(company.company_id, {
-        primaryColor: company.theme_primary_color,
-        primaryDarkColor: company.theme_primary_dark_color,
-        secondaryColor: company.theme_secondary_color,
-        secondaryLightColor: company.theme_secondary_light_color,
-        headerBackground: company.theme_header_background,
-        headerShadow: company.theme_header_shadow,
-        headerTextColor: company.theme_header_text_color,
-      }),
-      embed: buildEmbedPayload(company),
-    });
+    res.json(data);
   } catch (err) {
     console.error('[admin settings] get:', err);
     res.status(500).json({ error: err.message });
@@ -459,88 +469,10 @@ async function updateSettings(req, res) {
       language_manual_switch_enabled: language?.manualSwitchEnabled !== undefined ? Boolean(language.manualSwitchEnabled) : undefined,
     });
 
-    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
-    const modeCatalog = getModeCatalog(company.ai_mode);
-    res.json({
-      companyId: company.company_id,
-      name: company.name,
-      companyName: company.name,
-      chatbotName: company.display_name || '',
-      displayName: company.display_name || '',
-      iconUrl: company.icon_url || null,
-      greetingMessage: company.greeting_message || null,
-      widget: {
-        position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
-      },
-      autoTrigger: buildAutoTriggerPayload(company),
-      aiMode: modeCatalog.active,
-      ai: buildAiPayload(company),
-      leadNotifications: {
-        emailEnabled: Boolean(company.lead_email_notifications_enabled),
-        email: company.lead_notification_email || null,
-      },
-      voice: buildVoicePayload(company),
-      escalation: {
-        triggers: {
-          userRequestsHuman: Boolean(company.escalation_trigger_user_requests_human),
-          aiConfidenceLow: Boolean(company.escalation_trigger_ai_confidence_low),
-          urgentKeywords: Boolean(company.escalation_trigger_urgent_keywords),
-          angrySentiment: Boolean(company.escalation_trigger_angry_sentiment),
-          highValueLead: Boolean(company.escalation_trigger_high_value_lead),
-        },
-        actions: {
-          instantNotification: Boolean(company.escalation_action_instant_notification),
-          autoScheduleMeeting: Boolean(company.escalation_action_auto_schedule_meeting),
-          chatTakeoverAlert: Boolean(company.escalation_action_chat_takeover_alert),
-        },
-        highValueLeadScoreThreshold: Number(company.escalation_high_value_lead_score_threshold || 75),
-      },
-      safety: {
-        blockTopicsEnabled: Boolean(company.safety_block_topics_enabled),
-        blockTopics: company.safety_block_topics || '',
-        preventInternalData: Boolean(company.safety_prevent_internal_data),
-        restrictDatabasePriceExposure: Boolean(company.safety_restrict_database_price_exposure),
-        disableCompetitorComparisons: Boolean(company.safety_disable_competitor_comparisons),
-        restrictFileSharing: Boolean(company.safety_restrict_file_sharing),
-      },
-      language: {
-        primary: company.language_primary || 'English',
-        multiEnabled: Boolean(company.language_multi_enabled),
-        autoDetectEnabled: Boolean(company.language_auto_detect_enabled),
-        manualSwitchEnabled: Boolean(company.language_manual_switch_enabled),
-      },
-      theme: mergeCompanyTheme(company.company_id, {
-        primaryColor: company.theme_primary_color,
-        primaryDarkColor: company.theme_primary_dark_color,
-        secondaryColor: company.theme_secondary_color,
-        secondaryLightColor: company.theme_secondary_light_color,
-        headerBackground: company.theme_header_background,
-        headerShadow: company.theme_header_shadow,
-        headerTextColor: company.theme_header_text_color,
-      }),
-    });
+    const updated = await getSettingsJsonForCompany(req.adminCompanyId);
+    res.json(updated);
   } catch (err) {
     console.error('[admin settings] update:', err);
-    res.status(500).json({ error: err.message });
-  }
-}
-
-async function listCompanies(req, res) {
-  try {
-    const { rows } = await pool.query(
-      `SELECT c.company_id, c.name, ch.display_name
-       FROM chatbots c
-       LEFT JOIN chat_settings ch ON ch.company_id = c.company_id
-       WHERE c.company_id != '_default'
-       ORDER BY c.name ASC`
-    );
-    res.json(rows.map((r) => ({
-      companyId: r.company_id,
-      name: r.name,
-      chatbotName: r.display_name || '',
-    })));
-  } catch (err) {
-    console.error('[admin] list companies:', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -736,11 +668,11 @@ async function logoutAllSessions(req, res) {
 
 module.exports = {
   getSettings,
+  getSettingsJsonForCompany,
   updateSettings,
   previewVoice,
   listVoices,
   trainCustomVoice,
-  listCompanies,
   getModeSettings,
   listActiveSessions,
   logoutAllSessions,

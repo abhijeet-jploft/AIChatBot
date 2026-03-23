@@ -48,6 +48,10 @@ CREATE INDEX IF NOT EXISTS idx_messages_session   ON chat_messages(session_id, c
 
 -- Admin: login only on chatbots; config lives in module *settings tables
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS admin_email VARCHAR(320);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chatbots_admin_email_unique
+  ON chatbots (admin_email)
+  WHERE admin_email IS NOT NULL AND admin_email <> '';
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -402,9 +406,50 @@ async function migrate() {
     console.log('[db] Module settings rows ensured');
     await backfillEmbedCredentials(client);
     console.log('[db] Embed paths ready');
+    await ensureSuperAdminTables(client);
+    console.log('[db] Super admin tables ready');
   } finally {
     client.release();
   }
+}
+
+const SUPER_ADMIN_SCHEMA = `
+CREATE TABLE IF NOT EXISTS super_admins (
+  id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  username      VARCHAR(100) UNIQUE NOT NULL,
+  email         VARCHAR(255),
+  password_hash TEXT,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS super_admin_sessions (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  super_admin_id  UUID         NOT NULL REFERENCES super_admins(id) ON DELETE CASCADE,
+  token           VARCHAR(255) NOT NULL UNIQUE,
+  expires_at      TIMESTAMPTZ  NOT NULL,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_super_admin_sessions_token ON super_admin_sessions(token);
+CREATE INDEX IF NOT EXISTS idx_super_admin_sessions_admin ON super_admin_sessions(super_admin_id);
+
+CREATE TABLE IF NOT EXISTS super_admin_alert_rules (
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        VARCHAR(255) NOT NULL,
+  description TEXT,
+  rule_type   VARCHAR(64)  NOT NULL,
+  conditions  JSONB        NOT NULL DEFAULT '{}',
+  actions     JSONB        NOT NULL DEFAULT '{}',
+  enabled     BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_by  UUID         REFERENCES super_admins(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+`;
+
+async function ensureSuperAdminTables(client) {
+  await client.query(SUPER_ADMIN_SCHEMA);
+  await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
 }
 
 module.exports = { migrate };

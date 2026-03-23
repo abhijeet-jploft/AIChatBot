@@ -13,10 +13,30 @@ async function ensureSettingsRow(companyId) {
   }
 }
 
+function normalizeAdminEmail(raw) {
+  return String(raw || '').trim().toLowerCase();
+}
+
+/** Login lookup — does not call ensureSettingsRow (no side effects). */
+async function findByAdminEmail(rawEmail) {
+  const email = normalizeAdminEmail(rawEmail);
+  if (!email) return null;
+  const { rows } = await pool.query(
+    `SELECT company_id, name, password_hash, admin_email FROM chatbots WHERE admin_email = $1`,
+    [email]
+  );
+  return rows[0] || null;
+}
+
+async function setAdminEmail(companyId, rawEmail) {
+  const email = normalizeAdminEmail(rawEmail);
+  await pool.query(`UPDATE chatbots SET admin_email = $1 WHERE company_id = $2`, [email || null, companyId]);
+}
+
 async function findByCompanyId(companyId) {
   await ensureSettingsRow(companyId);
   const { rows } = await pool.query(
-    `SELECT c.id, c.company_id, c.name, c.password_hash,
+    `SELECT c.id, c.company_id, c.name, c.password_hash, c.admin_email,
             ch.display_name, ch.icon_url, ch.greeting_message,
             ch.widget_position,
             ch.auto_trigger_enabled,
@@ -519,6 +539,9 @@ async function setAgentPaused(companyId, paused) {
 
 module.exports = {
   findByCompanyId,
+  findByAdminEmail,
+  normalizeAdminEmail,
+  setAdminEmail,
   ensureSettingsRow,
   setPassword,
   updateSettings,
