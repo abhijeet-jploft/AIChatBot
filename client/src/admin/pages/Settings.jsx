@@ -64,9 +64,14 @@ function defaultEscalation() {
   };
 }
 
+function normalizeAutoTriggerMode(value) {
+  return String(value || '').trim().toLowerCase() === 'click' ? 'click' : 'auto';
+}
+
 function defaultAutoTrigger() {
   return {
     enabled: true,
+    openMode: 'auto',
     afterSeconds: 8,
     afterScrollPercent: 40,
     onlySelectedPages: false,
@@ -137,7 +142,12 @@ export default function Settings() {
         setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
         setLeadNotificationEmail(d.leadNotifications?.email || '');
         if (d.autoTrigger) {
-          setAutoTrigger((prev) => ({ ...prev, ...d.autoTrigger }));
+          setAutoTrigger((prev) => {
+            const next = { ...prev, ...d.autoTrigger };
+            next.openMode = normalizeAutoTriggerMode(next.openMode);
+            next.enabled = next.openMode === 'auto';
+            return next;
+          });
         }
         if (d.escalation) {
           setEscalation((prev) => ({
@@ -195,7 +205,8 @@ export default function Settings() {
             email: leadNotificationEmail.trim() || null,
           },
           autoTrigger: {
-            enabled: autoTrigger.enabled,
+            enabled: autoTrigger.openMode === 'auto',
+            openMode: normalizeAutoTriggerMode(autoTrigger.openMode),
             afterSeconds: autoTrigger.afterSeconds,
             afterScrollPercent: autoTrigger.afterScrollPercent,
             onlySelectedPages: autoTrigger.onlySelectedPages,
@@ -281,6 +292,7 @@ export default function Settings() {
   const updateSafety = (key, value) => {
     setSafety((s) => ({ ...s, [key]: value }));
   };
+  const isAutoOpenMode = autoTrigger.openMode === 'auto';
 
   return (
     <div className="p-4">
@@ -512,16 +524,32 @@ export default function Settings() {
 
           <div className="row g-3">
             <div className="col-12">
-              <div className="form-check">
-                <input
-                  id="auto_trigger_enabled"
-                  className="form-check-input"
-                  type="checkbox"
-                  checked={autoTrigger.enabled}
-                  onChange={(e) => setAutoTrigger((prev) => ({ ...prev, enabled: e.target.checked }))}
-                />
-                <label className="form-check-label" htmlFor="auto_trigger_enabled" style={labelStyle}>Enable proactive greeting</label>
+              <label className="form-label small" style={labelStyle}>How should the chat panel open?</label>
+              <div className="d-flex flex-column gap-2">
+                <div className="form-check">
+                  <input
+                    id="auto_open_mode_click"
+                    className="form-check-input"
+                    type="radio"
+                    name="auto_open_mode"
+                    checked={autoTrigger.openMode === 'click'}
+                    onChange={() => setAutoTrigger((prev) => ({ ...prev, openMode: 'click', enabled: false }))}
+                  />
+                  <label className="form-check-label" htmlFor="auto_open_mode_click" style={labelStyle}>Open only when visitor clicks widget</label>
+                </div>
+                <div className="form-check">
+                  <input
+                    id="auto_open_mode_auto"
+                    className="form-check-input"
+                    type="radio"
+                    name="auto_open_mode"
+                    checked={autoTrigger.openMode === 'auto'}
+                    onChange={() => setAutoTrigger((prev) => ({ ...prev, openMode: 'auto', enabled: true }))}
+                  />
+                  <label className="form-check-label" htmlFor="auto_open_mode_auto" style={labelStyle}>Auto-trigger panel from timing, scroll, and page rules</label>
+                </div>
               </div>
+              <div className="form-text" style={mutedStyle}>Widget launcher stays visible in both modes.</div>
             </div>
 
             <div className="col-12 col-md-4">
@@ -534,6 +562,7 @@ export default function Settings() {
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
                 value={autoTrigger.afterSeconds}
                 onChange={(e) => setAutoTrigger((prev) => ({ ...prev, afterSeconds: Number(e.target.value) || 0 }))}
+                disabled={!isAutoOpenMode}
               />
             </div>
 
@@ -547,6 +576,7 @@ export default function Settings() {
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
                 value={autoTrigger.afterScrollPercent}
                 onChange={(e) => setAutoTrigger((prev) => ({ ...prev, afterScrollPercent: Number(e.target.value) || 0 }))}
+                disabled={!isAutoOpenMode}
               />
             </div>
 
@@ -560,6 +590,7 @@ export default function Settings() {
                     type="checkbox"
                     checked={autoTrigger.onlySelectedPages}
                     onChange={(e) => setAutoTrigger((prev) => ({ ...prev, onlySelectedPages: e.target.checked }))}
+                    disabled={!isAutoOpenMode}
                   />
                   <label className="form-check-label" htmlFor="auto_selected_pages" style={labelStyle}>On specific pages only</label>
                 </div>
@@ -570,6 +601,7 @@ export default function Settings() {
                     type="checkbox"
                     checked={autoTrigger.onPricingPage}
                     onChange={(e) => setAutoTrigger((prev) => ({ ...prev, onPricingPage: e.target.checked }))}
+                    disabled={!isAutoOpenMode}
                   />
                   <label className="form-check-label" htmlFor="auto_pricing_page" style={labelStyle}>On pricing page</label>
                 </div>
@@ -580,6 +612,7 @@ export default function Settings() {
                     type="checkbox"
                     checked={autoTrigger.onPortfolioPage}
                     onChange={(e) => setAutoTrigger((prev) => ({ ...prev, onPortfolioPage: e.target.checked }))}
+                    disabled={!isAutoOpenMode}
                   />
                   <label className="form-check-label" htmlFor="auto_portfolio_page" style={labelStyle}>On portfolio page</label>
                 </div>
@@ -595,6 +628,7 @@ export default function Settings() {
                 placeholder="/services\n/pricing\n/portfolio"
                 value={autoTrigger.selectedPages}
                 onChange={(e) => setAutoTrigger((prev) => ({ ...prev, selectedPages: e.target.value }))}
+                disabled={!isAutoOpenMode}
               />
               <div className="form-text" style={mutedStyle}>
                 Add one path per line. Example: /services, /pricing, /portfolio.

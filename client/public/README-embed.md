@@ -62,9 +62,12 @@ Or set config before loading:
 
 ## Behavior (per AI Chat Agent doc)
 
-- **Launcher icon**: always visible; clicking it opens chat immediately.
+- **Launcher icon**: always visible; clicking it opens chat immediately in all modes.
+- **Panel open mode (admin controlled)**:
+  - `click`: panel opens only when the visitor clicks the launcher.
+  - `auto`: panel opens proactively based on trigger rules below.
 - **Drag support**: launcher and floating close button are draggable and clamped to viewport bounds.
-- **Activation checks** (apply to auto-popup behavior only):
+- **Activation checks** (apply only when open mode is `auto`):
   - 6–10 seconds on landing page, OR
   - 40% scroll, OR
   - 8 seconds user idle (no mouse/keyboard/scroll)

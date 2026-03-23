@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
   greeting_message TEXT,
   widget_position VARCHAR(10) NOT NULL DEFAULT 'right',
   auto_trigger_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  auto_trigger_open_mode VARCHAR(16) NOT NULL DEFAULT 'auto',
   auto_trigger_delay_seconds INTEGER NOT NULL DEFAULT 8,
   auto_trigger_scroll_percent INTEGER NOT NULL DEFAULT 40,
   auto_trigger_only_selected_pages BOOLEAN NOT NULL DEFAULT FALSE,

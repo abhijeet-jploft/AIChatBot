@@ -41,6 +41,13 @@ function normalizeAiProvider(value) {
   return null;
 }
 
+function normalizeAutoTriggerOpenMode(value) {
+  if (value === undefined) return undefined;
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'auto' || normalized === 'click') return normalized;
+  return null;
+}
+
 function clampInt(value, min, max, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -64,9 +71,20 @@ function normalizeSelectedPages(value) {
     .join('\n');
 }
 
+function resolveAutoTriggerOpenMode(company) {
+  const enabled = company?.auto_trigger_enabled !== false;
+  const stored = String(company?.auto_trigger_open_mode || '').trim().toLowerCase();
+
+  if (stored === 'click') return 'click';
+  if (stored === 'auto') return enabled ? 'auto' : 'click';
+  return enabled ? 'auto' : 'click';
+}
+
 function buildAutoTriggerPayload(company) {
+  const openMode = resolveAutoTriggerOpenMode(company);
   return {
-    enabled: Boolean(company?.auto_trigger_enabled !== false),
+    enabled: openMode === 'auto',
+    openMode,
     afterSeconds: clampInt(company?.auto_trigger_delay_seconds, 0, 120, 8),
     afterScrollPercent: clampInt(company?.auto_trigger_scroll_percent, 0, 100, 40),
     onlySelectedPages: Boolean(company?.auto_trigger_only_selected_pages),
@@ -298,6 +316,18 @@ async function updateSettings(req, res) {
       ? clampInt(autoTrigger.afterScrollPercent, 0, 100, 40)
       : undefined;
     const normalizedAutoTriggerPages = normalizeSelectedPages(autoTrigger?.selectedPages);
+    const normalizedAutoTriggerOpenModeInput = normalizeAutoTriggerOpenMode(autoTrigger?.openMode);
+    if (autoTrigger?.openMode !== undefined && !normalizedAutoTriggerOpenModeInput) {
+      return res.status(400).json({ error: 'Invalid autoTrigger openMode. Allowed values: auto, click' });
+    }
+    const normalizedAutoTriggerOpenMode = normalizedAutoTriggerOpenModeInput !== undefined
+      ? normalizedAutoTriggerOpenModeInput
+      : autoTrigger?.enabled !== undefined
+        ? (Boolean(autoTrigger.enabled) ? 'auto' : 'click')
+        : undefined;
+    const normalizedAutoTriggerEnabled = normalizedAutoTriggerOpenMode !== undefined
+      ? normalizedAutoTriggerOpenMode === 'auto'
+      : undefined;
 
     const companyBeforeUpdate = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
     if (!companyBeforeUpdate) {
@@ -345,7 +375,8 @@ async function updateSettings(req, res) {
       widget_position: widget?.position !== undefined
         ? (String(widget.position).toLowerCase() === 'left' ? 'left' : 'right')
         : undefined,
-      auto_trigger_enabled: autoTrigger?.enabled !== undefined ? Boolean(autoTrigger.enabled) : undefined,
+      auto_trigger_enabled: normalizedAutoTriggerEnabled,
+      auto_trigger_open_mode: normalizedAutoTriggerOpenMode,
       auto_trigger_delay_seconds: normalizedAutoTriggerDelay,
       auto_trigger_scroll_percent: normalizedAutoTriggerScroll,
       auto_trigger_only_selected_pages: autoTrigger?.onlySelectedPages !== undefined

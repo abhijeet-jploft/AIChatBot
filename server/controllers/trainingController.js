@@ -2,6 +2,15 @@ const { getCompanies, loadCompanyContext } = require('../services/trainingLoader
 const pool = require('../db/index');
 const { mergeCompanyTheme } = require('../services/companyTheme');
 
+function resolveAutoTriggerOpenMode(dbRow) {
+  const enabled = dbRow?.auto_trigger_enabled !== false;
+  const stored = String(dbRow?.auto_trigger_open_mode || '').trim().toLowerCase();
+
+  if (stored === 'click') return 'click';
+  if (stored === 'auto') return enabled ? 'auto' : 'click';
+  return enabled ? 'auto' : 'click';
+}
+
 /**
  * GET /api/train/companies
  * Returns companies from train_data, enriched with display_name, icon_url, greeting_message, theme from DB
@@ -15,7 +24,7 @@ async function getCompaniesList(req, res) {
     const companyIds = companies.map((c) => c.id);
     const { rows } = await pool.query(
       `SELECT c.company_id, c.name AS db_company_name, ch.display_name, ch.icon_url, ch.greeting_message, ch.widget_position,
-              ch.auto_trigger_enabled, ch.auto_trigger_delay_seconds, ch.auto_trigger_scroll_percent,
+              ch.auto_trigger_enabled, ch.auto_trigger_open_mode, ch.auto_trigger_delay_seconds, ch.auto_trigger_scroll_percent,
               ch.auto_trigger_only_selected_pages, ch.auto_trigger_pricing_page, ch.auto_trigger_portfolio_page,
               ch.auto_trigger_selected_pages,
               th.theme_primary_color, th.theme_primary_dark_color,
@@ -47,6 +56,7 @@ async function getCompaniesList(req, res) {
       const resolvedGender = customAvailable
         ? (dbRow.voice_custom_gender === 'male' ? 'male' : 'female')
         : (dbRow.voice_gender === 'male' ? 'male' : 'female');
+      const openMode = resolveAutoTriggerOpenMode(dbRow);
 
       return {
         id: c.id,
@@ -58,7 +68,8 @@ async function getCompaniesList(req, res) {
         greetingMessage: dbRow.greeting_message || null,
         widgetPosition: String(dbRow.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
         autoTrigger: {
-          enabled: Boolean(dbRow.auto_trigger_enabled !== false),
+          enabled: openMode === 'auto',
+          openMode,
           afterSeconds: Math.max(0, Math.min(120, Number(dbRow.auto_trigger_delay_seconds ?? 8))),
           afterScrollPercent: Math.max(0, Math.min(100, Number(dbRow.auto_trigger_scroll_percent ?? 40))),
           onlySelectedPages: Boolean(dbRow.auto_trigger_only_selected_pages),

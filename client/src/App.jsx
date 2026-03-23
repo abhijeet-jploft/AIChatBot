@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import ChatSidebar from './components/ChatSidebar';
 import ChatMain from './components/ChatMain';
@@ -283,21 +283,38 @@ function parseAutoTriggerRules(value) {
     .slice(0, 30);
 }
 
-function matchPathRule(pathname, rule) {
-  const path = String(pathname || '').trim().toLowerCase();
-  const normalizedRule = String(rule || '').trim().toLowerCase();
-  if (!path || !normalizedRule) return false;
+function stripPathSlashes(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '');
+}
 
-  if (normalizedRule.endsWith('*')) {
-    const prefix = normalizedRule.slice(0, -1);
-    return path.startsWith(prefix);
+function matchPathRule(pathname, rule) {
+  const path = stripPathSlashes(pathname);
+  const r = stripPathSlashes(rule);
+  if (!r) return path === '';
+
+  if (r.endsWith('*')) {
+    const prefix = r.slice(0, -1);
+    if (!prefix) return true;
+    return path === prefix || path.startsWith(`${prefix}/`);
   }
 
-  return path === normalizedRule || path.startsWith(`${normalizedRule}/`);
+  return path === r || path.startsWith(`${r}/`);
+}
+
+function resolveAutoTriggerOpenMode(autoTrigger) {
+  const configuredMode = String(autoTrigger?.openMode || '').trim().toLowerCase();
+
+  if (configuredMode === 'click') return 'click';
+  if (configuredMode === 'auto') return autoTrigger?.enabled === false ? 'click' : 'auto';
+  return autoTrigger?.enabled === false ? 'click' : 'auto';
 }
 
 function shouldEnableAutoTrigger(autoTrigger, pathname) {
-  if (!autoTrigger?.enabled) return false;
+  if (resolveAutoTriggerOpenMode(autoTrigger) !== 'auto') return false;
 
   const path = String(pathname || '/').toLowerCase();
   const selectedRules = parseAutoTriggerRules(autoTrigger.selectedPages);
@@ -417,8 +434,10 @@ export default function App() {
   const companyNameForOpening = currentCompany?.companyName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const chatbotNameForOpening = String(currentCompany?.chatbotName || '').trim();
   const openingMessageText = String(currentCompany?.greetingMessage || '').trim() || buildDefaultOpeningMessage(companyNameForOpening, chatbotNameForOpening);
+  const resolvedAutoTriggerMode = resolveAutoTriggerOpenMode(currentCompany?.autoTrigger);
   const autoTriggerConfig = useMemo(() => ({
-    enabled: Boolean(currentCompany?.autoTrigger?.enabled !== false),
+    enabled: resolvedAutoTriggerMode === 'auto',
+    openMode: resolvedAutoTriggerMode,
     afterSeconds: Math.max(0, Math.min(120, Number(currentCompany?.autoTrigger?.afterSeconds ?? AUTO_TRIGGER_DEFAULT_SECONDS))),
     afterScrollPercent: Math.max(0, Math.min(100, Number(currentCompany?.autoTrigger?.afterScrollPercent ?? AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT))),
     onlySelectedPages: Boolean(currentCompany?.autoTrigger?.onlySelectedPages),
@@ -426,7 +445,9 @@ export default function App() {
     onPortfolioPage: Boolean(currentCompany?.autoTrigger?.onPortfolioPage),
     selectedPages: String(currentCompany?.autoTrigger?.selectedPages || ''),
   }), [
+    resolvedAutoTriggerMode,
     currentCompany?.autoTrigger?.enabled,
+    currentCompany?.autoTrigger?.openMode,
     currentCompany?.autoTrigger?.afterSeconds,
     currentCompany?.autoTrigger?.afterScrollPercent,
     currentCompany?.autoTrigger?.onlySelectedPages,

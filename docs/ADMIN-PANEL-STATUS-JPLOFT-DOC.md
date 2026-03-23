@@ -118,8 +118,8 @@ This document maps **Section 4 (Functional Requirements of Admin)** to the curre
 | 4.6.7 Real-time communication (instant send/receive, reconnect) | ✅ WebSocket + HTTP fallback; reconnection |
 | 4.6.8 Visitor session tracking (anonymous ID, page, session) | ✅ Presence (sessionId, pageUrl); linked to conversations |
 | 4.6.3 Domain verification | ❌ Not implemented (widget works on any origin) |
-| 4.6.5 Auto-trigger (delay, scroll, page) | ⚠️ Client-side logic (e.g. delay); not configurable in admin |
-| 4.6.6 Page targeting rules | ❌ Not implemented |
+| 4.6.5 Auto-trigger (delay, scroll, page) | ✅ Admin-configurable (open mode: click or auto-trigger; delay + scroll + page rules) |
+| 4.6.6 Page targeting rules | ✅ Implemented (pricing, portfolio, and custom path rules) |
 | 4.6.12 Offline / error handling | ⚠️ Client shows error state; no admin config |
 | 4.6.14 Test mode (sandbox, preview) | ⚠️ Same widget; “Test chat” link on dashboard |
 
@@ -173,7 +173,7 @@ These are explicitly listed in the doc under “Recent Notifications” and are 
 - **4.3 Conversations:** List, search, pagination, open chat, live panel, human takeover (Take over page) done; filters/detail/export partial; voice logs not implemented.
 - **4.4 Leads:** Done (CRM, status, notes, reminders, export, transcript).
 - **4.5 AI Configuration:** Settings + Theme + AI Mode done; proactive/lead-capture/voice/working-hours config partial or deferred.
-- **4.6 Website Integration:** Widget + theme + presence done; domain verification, page targeting, test mode partial/deferred.
+- **4.6 Website Integration:** Widget + theme + presence done; domain verification and test mode partial/deferred.
 - **4.7 Billing:** Deferred (SaaS phase).
 - **4.8 Settings:** Core done; password change / data management partial.
 

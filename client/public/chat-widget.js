@@ -63,6 +63,7 @@
   var persistedWidgetOpen = false;
   var autoTrigger = {
     enabled: true,
+    openMode: 'auto',
     afterSeconds: AUTO_TRIGGER_DEFAULT_SECONDS,
     afterScrollPercent: AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT,
     onlySelectedPages: false,
@@ -245,21 +246,38 @@
       .slice(0, 30);
   }
 
-  function matchPathRule(pathname, rule) {
-    var path = String(pathname || '').trim().toLowerCase();
-    var normalizedRule = String(rule || '').trim().toLowerCase();
-    if (!path || !normalizedRule) return false;
+  function stripPathSlashes(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '');
+  }
 
-    if (normalizedRule.charAt(normalizedRule.length - 1) === '*') {
-      var prefix = normalizedRule.slice(0, -1);
-      return path.indexOf(prefix) === 0;
+  function matchPathRule(pathname, rule) {
+    var path = stripPathSlashes(pathname);
+    var r = stripPathSlashes(rule);
+    if (!r) return path === '';
+
+    if (r.charAt(r.length - 1) === '*') {
+      var prefix = r.slice(0, -1);
+      if (!prefix) return true;
+      return path === prefix || path.indexOf(prefix + '/') === 0;
     }
 
-    return path === normalizedRule || path.indexOf(normalizedRule + '/') === 0;
+    return path === r || path.indexOf(r + '/') === 0;
+  }
+
+  function resolveAutoTriggerOpenMode(autoTriggerConfig) {
+    var configuredMode = String((autoTriggerConfig && autoTriggerConfig.openMode) || '').trim().toLowerCase();
+
+    if (configuredMode === 'click') return 'click';
+    if (configuredMode === 'auto') return autoTriggerConfig && autoTriggerConfig.enabled === false ? 'click' : 'auto';
+    return autoTriggerConfig && autoTriggerConfig.enabled === false ? 'click' : 'auto';
   }
 
   function shouldEnableAutoTrigger(pathname) {
-    if (!autoTrigger.enabled) return false;
+    if (resolveAutoTriggerOpenMode(autoTrigger) !== 'auto') return false;
 
     var rules = parseAutoTriggerRules(autoTrigger.selectedPages);
     var hasTargeting = Boolean(
@@ -920,6 +938,36 @@
       window.addEventListener('hashchange', sendPageUpdate);
     }
     fetchThemeAndApply(root);
+    bindEmbedLocationTracking();
+  }
+
+  function bindEmbedLocationTracking() {
+    if (typeof window === 'undefined') return;
+
+    function onEmbedLocationChange() {
+      sendPageUpdate();
+      if (activated) return;
+      resetActivationWatchers();
+      runActivation();
+    }
+
+    ['pushState', 'replaceState'].forEach(function (method) {
+      var orig = window.history[method];
+      if (typeof orig !== 'function' || orig.__jploftPatched) return;
+      function wrapped() {
+        var ret = orig.apply(this, arguments);
+        try {
+          window.dispatchEvent(new Event('jploftlocationchange'));
+        } catch (e) {}
+        return ret;
+      }
+      wrapped.__jploftPatched = true;
+      window.history[method] = wrapped;
+    });
+
+    window.addEventListener('jploftlocationchange', onEmbedLocationChange);
+    window.addEventListener('popstate', onEmbedLocationChange);
+    window.addEventListener('hashchange', onEmbedLocationChange);
   }
 
   function sendPageUpdate() {
@@ -990,11 +1038,23 @@
     } catch (e) {}
   }
 
+  function resetActivationWatchers() {
+    if (typeof stopActivationWatchers === 'function') {
+      stopActivationWatchers();
+      stopActivationWatchers = null;
+    }
+  }
+
   function fetchThemeAndApply(widgetRoot) {
     fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (companies) {
-        if (!Array.isArray(companies) || !widgetRoot) return;
+        if (!widgetRoot) return;
+        if (!Array.isArray(companies)) {
+          resetActivationWatchers();
+          if (!activated) runActivation();
+          return;
+        }
         var company = companies.find(function (c) { return c.id === companyId; });
         if (company) {
           if (company.companyName) companyLegalName = company.companyName;
@@ -1003,21 +1063,15 @@
           companyIconUrl = company.iconUrl || null;
           companyGreetingMessage = company.greetingMessage || null;
           if (company.autoTrigger && typeof company.autoTrigger === 'object') {
-            autoTrigger.enabled = company.autoTrigger.enabled !== false;
+            var nextAutoTriggerMode = resolveAutoTriggerOpenMode(company.autoTrigger);
+            autoTrigger.openMode = nextAutoTriggerMode;
+            autoTrigger.enabled = nextAutoTriggerMode === 'auto';
             autoTrigger.afterSeconds = Math.max(0, Math.min(120, Number(company.autoTrigger.afterSeconds != null ? company.autoTrigger.afterSeconds : AUTO_TRIGGER_DEFAULT_SECONDS)));
             autoTrigger.afterScrollPercent = Math.max(0, Math.min(100, Number(company.autoTrigger.afterScrollPercent != null ? company.autoTrigger.afterScrollPercent : AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT)));
             autoTrigger.onlySelectedPages = Boolean(company.autoTrigger.onlySelectedPages);
             autoTrigger.onPricingPage = Boolean(company.autoTrigger.onPricingPage);
             autoTrigger.onPortfolioPage = Boolean(company.autoTrigger.onPortfolioPage);
             autoTrigger.selectedPages = String(company.autoTrigger.selectedPages || '');
-
-            if (!activated) {
-              if (typeof stopActivationWatchers === 'function') {
-                stopActivationWatchers();
-                stopActivationWatchers = null;
-              }
-              runActivation();
-            }
           }
           widgetSide = company.widgetPosition === 'left' ? 'left' : 'right';
           var vp = getViewport();
@@ -1047,8 +1101,13 @@
             document.documentElement.style.setProperty('--embed-header-bg', vars['--chat-header-bg'] || '');
           }
         }
+        resetActivationWatchers();
+        if (!activated) runActivation();
       })
-      .catch(function () {});
+      .catch(function () {
+        resetActivationWatchers();
+        if (!activated) runActivation();
+      });
   }
 
   function activate() {
@@ -1082,9 +1141,12 @@
 
     function onScroll() {
       if (scrollThreshold <= 0) return;
-      var h = document.documentElement.scrollHeight - window.innerHeight;
-      if (h <= 0) return;
-      if (window.scrollY / h >= scrollThreshold) activate();
+      var doc = document.documentElement;
+      var scrollHeight = Math.max(doc.scrollHeight, doc.clientHeight, window.innerHeight);
+      var maxScroll = scrollHeight - window.innerHeight;
+      if (maxScroll <= 0) return;
+      var ratio = Math.min(1, window.scrollY / maxScroll);
+      if (ratio >= scrollThreshold) activate();
     }
 
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -1097,5 +1159,4 @@
 
   createStyles();
   createWidget();
-  runActivation();
 })();

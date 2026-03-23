@@ -20,6 +20,7 @@ async function findByCompanyId(companyId) {
             ch.display_name, ch.icon_url, ch.greeting_message,
             ch.widget_position,
             ch.auto_trigger_enabled,
+            ch.auto_trigger_open_mode,
             ch.auto_trigger_delay_seconds,
             ch.auto_trigger_scroll_percent,
             ch.auto_trigger_only_selected_pages,
@@ -104,6 +105,7 @@ async function updateSettings(companyId, {
   greeting_message,
   widget_position,
   auto_trigger_enabled,
+  auto_trigger_open_mode,
   auto_trigger_delay_seconds,
   auto_trigger_scroll_percent,
   auto_trigger_only_selected_pages,
@@ -182,6 +184,10 @@ async function updateSettings(companyId, {
   if (auto_trigger_enabled !== undefined) {
     chatU.push(`auto_trigger_enabled = $${i++}`);
     chatV.push(Boolean(auto_trigger_enabled));
+  }
+  if (auto_trigger_open_mode !== undefined) {
+    chatU.push(`auto_trigger_open_mode = $${i++}`);
+    chatV.push(String(auto_trigger_open_mode || '').toLowerCase() === 'click' ? 'click' : 'auto');
   }
   if (auto_trigger_delay_seconds !== undefined) {
     chatU.push(`auto_trigger_delay_seconds = $${i++}`);

@@ -1,7 +1,20 @@
-import { defineConfig } from 'vite';
+import { defineConfig, createLogger } from 'vite';
 import react from '@vitejs/plugin-react';
 
+/** Quiet benign noise when clients disconnect from the /api WebSocket proxy (ECONNABORTED / ECONNRESET). */
+function createFilteredViteLogger() {
+  const logger = createLogger();
+  const origWarn = logger.warn.bind(logger);
+  logger.warn = (msg, options) => {
+    const text = typeof msg === 'string' ? msg : String(msg ?? '');
+    if (text.includes('ws proxy socket error')) return;
+    origWarn(msg, options);
+  };
+  return logger;
+}
+
 export default defineConfig({
+  customLogger: createFilteredViteLogger(),
   plugins: [react()],
   server: {
     port: 7001,
