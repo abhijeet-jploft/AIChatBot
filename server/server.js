@@ -27,7 +27,42 @@ app.use('/api/scrape', scraperRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/admin', adminRoutes);
 
+// Validate embed secret for a given companyId — used by the integration demo before launching
+app.get('/api/embed/validate', async (req, res) => {
+  const companyId = String(req.query.companyId || '').trim();
+  const secret    = String(req.query.embedSecret || '').trim();
+  if (!companyId || !secret) {
+    return res.status(400).json({ valid: false, error: 'companyId and embedSecret are required' });
+  }
+  try {
+    const pool = require('./db');
+    const result = await pool.query(
+      `SELECT company_id FROM embed_settings
+       WHERE company_id = $1 AND embed_secret = $2
+       LIMIT 1`,
+      [companyId, secret]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ valid: false, error: 'Invalid embed secret for this company' });
+    }
+    return res.json({ valid: true });
+  } catch (err) {
+    return res.status(500).json({ valid: false, error: 'Validation check failed' });
+  }
+});
+
 app.get('/embed/:slug/:token', renderEmbedPage);
+app.get('/embed/:slug', (req, res) => {
+  const tokenFromQuery = String(req.query.apiKey || req.query.token || '').trim();
+  if (tokenFromQuery) {
+    req.params.token = tokenFromQuery;
+    return renderEmbedPage(req, res);
+  }
+  return res
+    .status(400)
+    .type('text/plain')
+    .send('Missing embed token. Use /embed/{slug}/{embed_secret}?companyId={company_id}');
+});
 
 const clientDist = path.join(__dirname, '../client/dist');
 app.use(express.static(clientDist));

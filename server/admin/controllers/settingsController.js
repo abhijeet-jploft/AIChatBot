@@ -146,15 +146,16 @@ function buildEmbedPayload(company) {
   }
   const cid = encodeURIComponent(company.company_id);
   const embedPath = `/embed/${encodeURIComponent(slug)}/${encodeURIComponent(secret)}?companyId=${cid}`;
-  const slugHostPath = `/${encodeURIComponent(slug)}?apiKey=${encodeURIComponent(secret)}&companyId=${cid}`;
   const publicBase = String(process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
   const embedUrl = publicBase ? `${publicBase}${embedPath}` : null;
-  const slugHostUrl = publicBase ? `${publicBase}${slugHostPath}` : slugHostPath;
+  /** @deprecated Use embedPath — kept for older clients; same value as embedPath. */
+  const slugHostPath = embedPath;
+  const slugHostUrl = publicBase ? `${publicBase}${embedPath}` : embedPath;
   const originHint = publicBase || '(your app origin)';
   const iframeSnippet =
     `<iframe src="${publicBase ? embedUrl : embedPath}" title="Chat" style="width:100%;height:600px;border:0;" loading="lazy"></iframe>`;
   const iframeHostSnippet =
-    `<iframe src="${slugHostUrl}" title="Chat" style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483646;" allow="clipboard-write" loading="lazy"></iframe>`;
+    `<iframe src="${publicBase ? slugHostUrl : embedPath}" title="Chat" style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483646;" allow="clipboard-write" loading="lazy"></iframe>`;
   return {
     slug,
     embedPath,

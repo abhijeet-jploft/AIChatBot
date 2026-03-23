@@ -18,6 +18,7 @@
   var companyLegalName = companyName;
   var chatbotDisplayName = '';
   var apiKey = (script && script.getAttribute('data-api-key')) || config.apiKey || '';
+  var forceOpen = Boolean(config.forceOpen || (script && script.getAttribute('data-force-open') === 'true'));
   var widgetSide = ((script && script.getAttribute('data-widget-side')) || config.widgetSide || 'right').toLowerCase() === 'left' ? 'left' : 'right';
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
   var companyIconUrl = null;
@@ -72,10 +73,22 @@
     selectedPages: '',
   };
 
+  var requestGeneration = 0;
+
   var presenceWs = null;
   var wsReconnectTimer = null;
   var WS_RECONNECT_MS = 5000;
   var typingTimer = null;
+  var responseAudio = null;
+  var speechUtterance = null;
+  var playingMessageIndex = null;
+  var speechRecognition = null;
+  var keepMicOpen = false;
+  var micRecording = false;
+  var voiceEnabled = false;
+  var voiceResponseEnabled = true;
+  var voiceGender = 'female';
+  var voiceIgnoreEmoji = false;
 
   var root = null;
   var launcher = null;
@@ -85,6 +98,7 @@
   var messagesEl = null;
   var inputEl = null;
   var sendBtn = null;
+  var micBtn = null;
   var maxBtn = null;
 
   var isFullscreen = false;
@@ -497,6 +511,8 @@
     fetch(apiUrl + '/sessions/' + encodeURIComponent(id), { method: 'DELETE', headers: mergeHeaders() })
       .then(function () {
         if (sessionId === id) {
+          stopMicCapture();
+          pauseAssistantVoice();
           sessionId = null;
           messages = [];
           openingMessageShown = false;
@@ -541,17 +557,24 @@
   }
 
   function newChat() {
+    stopMicCapture();
+    pauseAssistantVoice();
+    requestGeneration++;
+    loading = false;
     sessionId = null;
     messages = [];
     openingMessageShown = false;
     messages.push({ role: 'assistant', content: getOpeningMessage() });
     openingMessageShown = true;
+    setSendButtonState();
     renderMessages();
     persistState();
     if (sidebarEl && isFullscreen) renderSidebar();
   }
 
   function selectSession(id) {
+    stopMicCapture();
+    pauseAssistantVoice();
     sessionId = id;
     loading = true;
     setSendButtonState();
@@ -559,9 +582,19 @@
     fetch(apiUrl + '/sessions/' + encodeURIComponent(id) + '/messages', { headers: mergeHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        messages = Array.isArray(data) ? data.map(function (m) { return { role: m.role, content: m.content }; }) : [];
+        messages = Array.isArray(data) ? data.map(function (m) {
+          var content = m.role === 'assistant'
+            ? normalizeAssistantNameInText(m.content, chatbotDisplayName)
+            : m.content;
+          return {
+            role: m.role,
+            content: content,
+            voiceUrl: m.voice_url || m.voiceUrl || undefined,
+          };
+        }) : [];
         loading = false;
         setSendButtonState();
+        applyVoiceFeatureState();
         renderMessages();
         persistState();
         if (sidebarEl && isFullscreen) renderSidebar();
@@ -589,11 +622,21 @@
 
   function createStyles() {
     var css = [
-      '#jploft-chat-root{--chat-bg:#f4f4f5;--chat-surface:#ffffff;--chat-border:#d4d4d8;--chat-text:#18181b;--chat-muted:#71717a;--chat-accent:#E02F3A;--chat-accent-hover:#B02530;--chat-header-bg:#000000;--chat-header-shadow:0 4px 12px rgba(224,47,58,0.25);--chat-header-text:#ffffff;--chat-sidebar:#e4e4e7;--user-bubble:#E02F3A;--user-bubble-text:#ffffff;--assistant-bubble:#ffffff;--session-hover-bg:rgba(0,0,0,0.05);--session-active-bg:rgba(224,47,58,0.2);--session-active-color:#E02F3A;--chat-launcher-gradient-start:#E02F3A;--chat-launcher-gradient-end:#B02530;--chat-launcher-shadow:rgba(224,47,58,0.55);font-family:Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
+      '#jploft-chat-root{--chat-bg:#f4f4f5;--chat-surface:#ffffff;--chat-border:#d4d4d8;--chat-text:#18181b;--chat-text-heading:#09090b;--chat-muted:#71717a;--chat-accent:#E02F3A;--chat-accent-hover:#B02530;--chat-header-bg:#000000;--chat-header-shadow:0 4px 12px rgba(224,47,58,0.25);--chat-header-text:#ffffff;--chat-sidebar:#e4e4e7;--user-bubble:#E02F3A;--user-bubble-text:#ffffff;--assistant-bubble:#ffffff;--session-hover-bg:rgba(0,0,0,0.05);--session-active-bg:rgba(224,47,58,0.2);--session-active-color:#E02F3A;--chat-launcher-gradient-start:#E02F3A;--chat-launcher-gradient-end:#B02530;--chat-launcher-shadow:rgba(224,47,58,0.55);font-family:Outfit,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
       '#jploft-chat-root *{box-sizing:border-box}',
       '#jploft-chat-root button,#jploft-chat-root textarea{font:inherit}',
+      '#jploft-chat-root svg{display:inline-block;overflow:visible;flex-shrink:0}',
+      '#jploft-chat-root button{padding:0;margin:0}',
+      '#jploft-chat-root input,#jploft-chat-root select,#jploft-chat-root textarea{margin:0}',
+      '#jploft-chat-root ul,#jploft-chat-root ol{list-style:none;margin:0;padding:0}',
+      '#jploft-chat-root a{color:inherit}',
+      '#jploft-chat-root img{display:inline-block;max-width:100%;height:auto}',
+      '#jploft-chat-root *{outline:none}',
+      '#jploft-chat-root *::before,#jploft-chat-root *::after{box-sizing:border-box}',
 
-      '#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{position:fixed;right:24px;bottom:24px;width:56px;height:56px;border:0;border-radius:999px;background:var(--chat-accent,linear-gradient(135deg,#4f46e5,#6d28d9));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 18px 38px -20px rgba(79,70,229,.85);z-index:99998;transition:transform .2s,box-shadow .2s}',
+      '#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{position:fixed;right:24px;bottom:24px;width:56px;height:56px;border:0;border-radius:999px;padding:0;background:linear-gradient(135deg,var(--chat-launcher-gradient-start,#E02F3A),var(--chat-launcher-gradient-end,#B02530));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 18px 38px -20px var(--chat-launcher-shadow,rgba(224,47,58,.55));z-index:99998;transition:transform .2s,box-shadow .2s}',
+      '#jploft-chat-root .jploft-btn:hover,#jploft-chat-root .jploft-close-fab:hover{transform:translateY(-2px);box-shadow:0 24px 45px -22px var(--chat-launcher-shadow,rgba(224,47,58,.7))}',
+      '#jploft-chat-root .jploft-btn:focus,#jploft-chat-root .jploft-close-fab:focus{outline:2px solid rgba(255,255,255,.5);outline-offset:2px}',
       '#jploft-chat-root .jploft-btn:hover,#jploft-chat-root .jploft-close-fab:hover{transform:translateY(-2px);box-shadow:0 24px 45px -22px rgba(79,70,229,.9)}',
       '#jploft-chat-root .jploft-draggable{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}',
       '#jploft-chat-root .jploft-draggable.is-dragging{cursor:grabbing;transition:none;transform:none}',
@@ -619,11 +662,13 @@
       '#jploft-chat-root .jploft-sidebar-item.active .jploft-sidebar-del:hover{background:rgba(255,255,255,0.2)}',
 
       '#jploft-chat-root .jploft-header{height:52px;min-height:52px;padding:0 10px;background:var(--chat-header-bg,linear-gradient(120deg,#4f46e5,#6d28d9));color:var(--chat-header-text,#fff);box-shadow:var(--chat-header-shadow,none);display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:2;flex-shrink:0}',
-      '#jploft-chat-root .jploft-title-wrap{display:flex;flex-direction:column;align-items:center;min-width:0;flex:1}',
+      '#jploft-chat-root .jploft-title-wrap{display:flex;align-items:center;min-width:0;flex:1}',
+      '#jploft-chat-root .jploft-title-line{display:flex;align-items:center;gap:8px;min-width:0}',
       '#jploft-chat-root .jploft-title{font-size:13px;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '#jploft-chat-root .jploft-subtitle{font-size:10px;opacity:.86;letter-spacing:.03em}',
       '#jploft-chat-root .jploft-right{display:flex;align-items:center;gap:8px}',
-      '#jploft-chat-root .jploft-icon-btn{width:28px;height:28px;border:0;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:var(--chat-header-text,#fff);background:transparent;cursor:pointer;transition:background .2s ease}',
+      '#jploft-chat-root .jploft-icon-btn{width:28px;height:28px;border:0;border-radius:999px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--chat-header-text,#fff);background:transparent;cursor:pointer;transition:background .2s ease}',
+      '#jploft-chat-root .jploft-icon-btn:focus{outline:2px solid rgba(255,255,255,.5);outline-offset:2px}',
       '#jploft-chat-root .jploft-icon-btn:hover{background:rgba(255,255,255,.14)}',
       '#jploft-chat-root .jploft-avatar{width:36px;height:36px;border-radius:8px;overflow:hidden;position:relative;flex-shrink:0;background:#fff;display:inline-flex;align-items:center;justify-content:center}',
       '#jploft-chat-root .jploft-avatar-text{font-size:14px;font-weight:600;color:var(--chat-accent,#4f46e5)}',
@@ -633,19 +678,46 @@
       '#jploft-chat-root .jploft-msg{display:flex;margin-bottom:16px}',
       '#jploft-chat-root .jploft-msg.user{justify-content:flex-end}',
       '#jploft-chat-root .jploft-msg.assistant{justify-content:flex-start}',
-      '#jploft-chat-root .jploft-bubble{position:relative;max-width:min(85%,780px);padding:8px 12px;border:1px solid var(--chat-border);box-shadow:0 12px 26px -22px rgba(0,0,0,.55);font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}',
+      '#jploft-chat-root .jploft-bubble{position:relative;max-width:min(85%,780px);padding:8px 12px;border:1px solid var(--chat-border);box-shadow:0 12px 26px -22px rgba(0,0,0,.55);font-size:14px;line-height:1.45;word-break:break-word}',
       '#jploft-chat-root .jploft-bubble.user{background:var(--user-bubble,var(--chat-accent));color:var(--user-bubble-text,#fff);border-color:transparent;border-radius:16px 16px 0 16px}',
       '#jploft-chat-root .jploft-bubble.assistant{background:var(--assistant-bubble,var(--chat-surface));color:var(--chat-text);border-radius:16px 16px 16px 0}',
-      '#jploft-chat-root .jploft-typing{color:var(--chat-muted)}',
+      '#jploft-chat-root .jploft-content.user{white-space:pre-wrap}',
+      '#jploft-chat-root .jploft-content.assistant p{margin:0 0 .45em;line-height:1.55}',
+      '#jploft-chat-root .jploft-content.assistant p:last-child{margin-bottom:0}',
+      '#jploft-chat-root .jploft-content.assistant pre{margin:.5em 0;padding:.75rem 1rem;border-radius:6px;background:var(--chat-bg);overflow:auto}',
+      '#jploft-chat-root .jploft-content.assistant code{padding:.15em .35em;border-radius:4px;background:var(--chat-bg);font-size:.9em}',
+      '#jploft-chat-root .jploft-content.assistant pre code{padding:0;background:transparent}',
+      '#jploft-chat-root .jploft-content.assistant a{color:var(--chat-accent);text-decoration:underline}',
+      '#jploft-chat-root .jploft-typing-dots span{animation:jploft-blink 1.4s infinite}',
+      '#jploft-chat-root .jploft-typing-dots span:nth-child(2){animation-delay:.2s}',
+      '#jploft-chat-root .jploft-typing-dots span:nth-child(3){animation-delay:.4s}',
+      '#jploft-chat-root .jploft-voice-row{margin-top:8px;display:inline-flex;align-items:center;gap:8px}',
+      '#jploft-chat-root .jploft-voice-btn{width:28px;height:28px;border:0;border-radius:8px;padding:0;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:var(--chat-header-text,#fff);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}',
+      '#jploft-chat-root .jploft-voice-btn:focus{outline:2px solid var(--chat-accent);outline-offset:2px}',
+      '#jploft-chat-root .jploft-voice-btn:hover{opacity:.92}',
+      '#jploft-chat-root .jploft-voice-btn.is-playing{box-shadow:0 0 0 3px rgba(0,0,0,.08)}',
+      '#jploft-chat-root .jploft-mic-wave{display:inline-flex;align-items:flex-end;justify-content:center;gap:2px;width:16px;height:14px}',
+      '#jploft-chat-root .jploft-mic-wave::before,#jploft-chat-root .jploft-mic-wave::after,#jploft-chat-root .jploft-mic-wave span{content:"";display:block;width:2px;border-radius:999px;background:currentColor;animation:jploft-mic-bars .9s infinite ease-in-out}',
+      '#jploft-chat-root .jploft-mic-wave span{height:70%;animation-delay:.15s}',
+      '#jploft-chat-root .jploft-mic-wave::before{height:40%;animation-delay:0s}',
+      '#jploft-chat-root .jploft-mic-wave::after{height:55%;animation-delay:.3s}',
 
       '#jploft-chat-root .jploft-footer{flex-shrink:0;padding:12px;background:var(--chat-bg);border-top:1px solid var(--chat-border)}',
-      '#jploft-chat-root .jploft-input-wrap{display:flex;align-items:flex-end;gap:8px;border:1px solid #6b7280;border-radius:10px;overflow:hidden;background:var(--chat-surface);padding:8px 12px}',
-      '#jploft-chat-root .jploft-input{flex:1;resize:none;min-height:44px;max-height:160px;border:0;outline:0;background:transparent;color:var(--chat-text);font-size:16px;line-height:1.4;padding:8px 2px 4px}',
+      '#jploft-chat-root .jploft-input-wrap{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--chat-border);border-radius:10px;overflow:hidden;background:var(--chat-surface);padding:8px 12px}',
+      '#jploft-chat-root .jploft-input{flex:1;resize:none;min-height:100px;max-height:200px;border:0;outline:0;background:transparent;color:var(--chat-text);font-size:16px;line-height:1.4;padding:8px 2px 4px}',
       '#jploft-chat-root .jploft-input::placeholder{color:#a1a1aa}',
-      '#jploft-chat-root .jploft-send{width:44px;height:42px;border:0;border-radius:8px;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:transform .2s ease,box-shadow .2s ease,opacity .2s ease;box-shadow:0 12px 26px -18px var(--chat-launcher-shadow)}',
+      '#jploft-chat-root .jploft-mic-btn{width:40px;height:40px;border-radius:999px;border:0;background:transparent;color:var(--chat-muted);display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;cursor:pointer;transition:background .15s ease,color .15s ease,box-shadow .15s ease,transform .15s ease}',
+      '#jploft-chat-root .jploft-mic-btn:focus{outline:none}',
+      '#jploft-chat-root .jploft-mic-btn:hover:not(:disabled){background:rgba(0,0,0,.04);color:var(--chat-text-heading)}',
+      '#jploft-chat-root .jploft-mic-btn:disabled{opacity:.5;cursor:not-allowed}',
+      '#jploft-chat-root .jploft-mic-btn.is-recording{background:var(--chat-accent);color:#fff;box-shadow:0 0 0 4px rgba(0,0,0,.08)}',
+      '#jploft-chat-root .jploft-send{width:44px;height:42px;border:0;border-radius:8px;padding:0;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:transform .2s ease,box-shadow .2s ease,opacity .2s ease;box-shadow:0 12px 26px -18px var(--chat-launcher-shadow)}',
+      '#jploft-chat-root .jploft-send:focus{outline:none}',
       '#jploft-chat-root .jploft-send:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 18px 32px -20px var(--chat-launcher-shadow);opacity:0.95}',
       '#jploft-chat-root .jploft-send:disabled{opacity:.55;cursor:not-allowed}',
 
+      '@keyframes jploft-mic-bars{0%,100%{transform:scaleY(.6);opacity:.6}50%{transform:scaleY(1.2);opacity:1}}',
+      '@keyframes jploft-blink{0%,60%,100%{opacity:.3}30%{opacity:1}}',
       '@media(max-width:1024px){#jploft-chat-root .jploft-panel{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}#jploft-chat-root .jploft-close-fab{display:none !important}#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{right:14px;bottom:14px}}'
     ].join('\n');
 
@@ -659,6 +731,316 @@
     var div = document.createElement('div');
     div.textContent = s;
     return div.innerHTML;
+  }
+
+  function normalizeAssistantNameInText(text, assistantName) {
+    var safeName = String(assistantName || '').replace(/\s+/g, ' ').trim();
+    if (!safeName) return String(text || '');
+
+    var output = String(text || '');
+    output = output
+      .replace(/\b(i\s*(?:am|'m)\s+)anaya\b/gi, '$1' + safeName)
+      .replace(/\b(it\s*(?:is|'s)\s+)anaya\b/gi, '$1' + safeName)
+      .replace(/\b(this is\s+)anaya\b/gi, '$1' + safeName)
+      .replace(/\b(my name is\s+)anaya\b/gi, '$1' + safeName)
+      .replace(/\banaya(?=,\s*your digital consultant\b)/gi, safeName)
+      .replace(/\banaya(?=\s+here\b)/gi, safeName)
+      .replace(/\banaya(?=\s+from\b)/gi, safeName);
+
+    if (/\banaya\b/i.test(output) && /\b(hi|hello|hey|welcome|consultant)\b/i.test(output)) {
+      output = output.replace(/\banaya\b/gi, safeName);
+    }
+
+    return output;
+  }
+
+  function decodeHtmlEntities(str) {
+    var textarea = document.createElement('textarea');
+    textarea.innerHTML = String(str || '');
+    return textarea.value;
+  }
+
+  function toSafeHttpUrl(rawUrl) {
+    var url = decodeHtmlEntities(rawUrl || '').trim();
+    if (!url) return '';
+    try {
+      var parsed = new URL(url, window.location.href);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.href;
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function renderAssistantContent(content) {
+    var source = String(content || '');
+    var codeBlocks = [];
+    var tokenPrefix = '%%JPLOFT_CODE_';
+
+    source = source.replace(/```([\s\S]*?)```/g, function (_m, code) {
+      var idx = codeBlocks.push(String(code || '').replace(/^\n+|\n+$/g, '')) - 1;
+      return tokenPrefix + idx + '%%';
+    });
+
+    var html = escapeHtml(source)
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (_m, label, url) {
+        var safeHref = toSafeHttpUrl(url);
+        if (!safeHref) return escapeHtml(label);
+        return '<a href="' + escapeHtml(safeHref) + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+      })
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+      .replace(/\n/g, '<br>');
+
+    html = html.replace(new RegExp(tokenPrefix + '(\\d+)%%', 'g'), function (_m, indexText) {
+      var idx = Number(indexText);
+      var code = idx >= 0 && idx < codeBlocks.length ? codeBlocks[idx] : '';
+      return '<pre><code>' + escapeHtml(code) + '</code></pre>';
+    });
+
+    return html;
+  }
+
+  function stripEmoji(text) {
+    try {
+      return String(text || '').replace(/\p{Emoji}/gu, '').replace(/\s+/g, ' ').trim();
+    } catch (e) {
+      return String(text || '').trim();
+    }
+  }
+
+  function stripLeadingInvisible(str) {
+    return String(str || '').replace(/^[\s\uFEFF\u200B-\u200D\u2060\u00AD]*/, '');
+  }
+
+  function sanitizeSpeechText(text, options) {
+    var opts = options || {};
+    var out = stripLeadingInvisible(String(text || ''))
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+      .replace(/^\s{0,3}(#{1,6}|[-*+])\s+/gm, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (opts.ignoreEmoji) out = stripEmoji(out);
+    return out;
+  }
+
+  function getPreferredBrowserVoice(gender) {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+    var allVoices = window.speechSynthesis.getVoices() || [];
+    if (!allVoices.length) return null;
+
+    var englishVoices = allVoices.filter(function (v) { return /^en(-|$)/i.test(v.lang || ''); });
+    var pool = englishVoices.length ? englishVoices : allVoices;
+    var femaleHint = /(female|woman|zira|susan|samantha|aria|eva|linda|hazel|jenny|karen|emma|alloy)/i;
+    var maleHint = /(male|man|david|mark|alex|guy|daniel|george|james|tom|ryan|adam)/i;
+    var matcher = String(gender || 'female').toLowerCase() === 'male' ? maleHint : femaleHint;
+    return pool.find(function (v) { return matcher.test(v.name || ''); }) || pool[0] || null;
+  }
+
+  function speakWithBrowserVoice(text, gender, ignoreEmoji, onEnd) {
+    if (typeof window === 'undefined' || !window.speechSynthesis || typeof window.SpeechSynthesisUtterance === 'undefined') {
+      if (typeof onEnd === 'function') onEnd();
+      return;
+    }
+
+    var speechText = sanitizeSpeechText(text, { ignoreEmoji: Boolean(ignoreEmoji) });
+    if (!speechText) {
+      if (typeof onEnd === 'function') onEnd();
+      return;
+    }
+
+    try {
+      window.speechSynthesis.cancel();
+
+      var utterance = new SpeechSynthesisUtterance(speechText);
+      var selectedVoice = getPreferredBrowserVoice(gender);
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang || 'en-US';
+      } else {
+        utterance.lang = 'en-US';
+      }
+
+      utterance.pitch = String(gender || '').toLowerCase() === 'male' ? 0.9 : 1.1;
+      utterance.rate = 1;
+      utterance.onend = function () {
+        if (speechUtterance === utterance) speechUtterance = null;
+        if (typeof onEnd === 'function') onEnd();
+      };
+      utterance.onerror = function () {
+        if (speechUtterance === utterance) speechUtterance = null;
+        if (typeof onEnd === 'function') onEnd();
+      };
+
+      speechUtterance = utterance;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      if (typeof onEnd === 'function') onEnd();
+    }
+  }
+
+  function setMicButtonState(isRecording) {
+    micRecording = Boolean(isRecording);
+    if (!micBtn) return;
+
+    micBtn.classList.toggle('is-recording', micRecording);
+    micBtn.setAttribute('aria-label', micRecording ? 'Stop voice input' : 'Start voice input');
+    micBtn.innerHTML = micRecording
+      ? '<span class="jploft-mic-wave"><span></span></span>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+  }
+
+  function stopMicCapture() {
+    keepMicOpen = false;
+    if (speechRecognition) {
+      try { speechRecognition.stop(); } catch (e) {}
+    }
+    setMicButtonState(false);
+  }
+
+  function ensureSpeechRecognition() {
+    if (typeof window === 'undefined') return null;
+    if (speechRecognition) return speechRecognition;
+
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+
+    var recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    recognition.onresult = function (event) {
+      var finalTranscript = '';
+      for (var i = event.resultIndex; i < event.results.length; i += 1) {
+        var result = event.results[i];
+        if (result.isFinal && result[0] && result[0].transcript) {
+          finalTranscript += result[0].transcript;
+        }
+      }
+      if (finalTranscript.trim()) {
+        inputEl.value = inputEl.value
+          ? (inputEl.value.trim() + ' ' + finalTranscript.trim())
+          : finalTranscript.trim();
+        onInputChange();
+      }
+    };
+
+    recognition.onend = function () {
+      if (keepMicOpen) {
+        try {
+          recognition.start();
+        } catch (e) {}
+      } else {
+        setMicButtonState(false);
+      }
+    };
+
+    recognition.onerror = function () {
+      keepMicOpen = false;
+      setMicButtonState(false);
+    };
+
+    speechRecognition = recognition;
+    return speechRecognition;
+  }
+
+  function onMicButtonClick(event) {
+    event.preventDefault();
+    if (!voiceEnabled || loading) return;
+
+    if (micRecording) {
+      stopMicCapture();
+      return;
+    }
+
+    var recognition = ensureSpeechRecognition();
+    if (!recognition) return;
+
+    keepMicOpen = true;
+    try {
+      recognition.start();
+      setMicButtonState(true);
+    } catch (e) {
+      setMicButtonState(false);
+    }
+  }
+
+  function pauseAssistantVoice() {
+    try {
+      if (responseAudio) {
+        responseAudio.pause();
+        responseAudio.src = '';
+        responseAudio = null;
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      speechUtterance = null;
+    } catch (e) {}
+    playingMessageIndex = null;
+    renderMessages();
+  }
+
+  function playAssistantVoice(audioDataUrl, messageIndex) {
+    if (!audioDataUrl || typeof window === 'undefined') return;
+    pauseAssistantVoice();
+
+    playingMessageIndex = messageIndex;
+    renderMessages();
+
+    try {
+      var audio = new Audio(audioDataUrl);
+      responseAudio = audio;
+      var clearPlaying = function () {
+        if (responseAudio === audio) responseAudio = null;
+        if (playingMessageIndex === messageIndex) {
+          playingMessageIndex = null;
+          renderMessages();
+        }
+      };
+      audio.onended = clearPlaying;
+      audio.onerror = clearPlaying;
+      audio.play().catch(clearPlaying);
+    } catch (e) {
+      playingMessageIndex = null;
+      renderMessages();
+    }
+  }
+
+  function playMessageVoice(messageIndex) {
+    var msg = messages[messageIndex];
+    if (!msg || msg.role !== 'assistant' || !msg.content || !voiceResponseEnabled) return;
+
+    if (msg.voiceUrl) {
+      playAssistantVoice(msg.voiceUrl, messageIndex);
+      return;
+    }
+
+    pauseAssistantVoice();
+    playingMessageIndex = messageIndex;
+    renderMessages();
+    speakWithBrowserVoice(msg.content, voiceGender, voiceIgnoreEmoji, function () {
+      if (playingMessageIndex === messageIndex) {
+        playingMessageIndex = null;
+        renderMessages();
+      }
+    });
+  }
+
+  function applyVoiceFeatureState() {
+    if (!inputEl) return;
+    inputEl.placeholder = voiceEnabled ? 'Type your message or use the mic...' : 'Type your message...';
+    if (micBtn) {
+      micBtn.style.display = voiceEnabled ? 'inline-flex' : 'none';
+      micBtn.disabled = loading || !voiceEnabled;
+    }
+    if (!voiceEnabled) {
+      stopMicCapture();
+    }
   }
 
   function persistState() {
@@ -679,27 +1061,58 @@
     if (!sendBtn || !inputEl) return;
     var hasText = (inputEl.value || '').trim().length > 0;
     sendBtn.disabled = loading || !hasText;
+    if (micBtn) micBtn.disabled = loading || !voiceEnabled;
   }
 
   function resizeInput() {
     if (!inputEl) return;
     inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
   }
 
   function renderMessages() {
     if (!messagesEl) return;
 
-    var html = messages.map(function (m) {
+    var html = messages.map(function (m, i) {
       var cls = m.role === 'user' ? 'user' : 'assistant';
-      return '<div class="jploft-msg ' + cls + '"><div class="jploft-bubble ' + cls + '">' + escapeHtml(m.content) + '</div></div>';
+      var contentHtml = cls === 'assistant'
+        ? renderAssistantContent(m.content)
+        : escapeHtml(m.content).replace(/\n/g, '<br>');
+      var voiceHtml = '';
+      if (cls === 'assistant' && m.content && voiceResponseEnabled) {
+        var isPlaying = playingMessageIndex === i;
+        var voiceButtonIcon = isPlaying
+          ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>'
+          : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+        var waveHtml = isPlaying
+          ? '<span class="jploft-mic-wave" style="color:var(--chat-accent)" aria-hidden="true"><span></span></span>'
+          : '';
+        voiceHtml = '<div class="jploft-voice-row">' +
+          '<button type="button" class="jploft-voice-btn' + (isPlaying ? ' is-playing' : '') + '" data-index="' + i + '" aria-label="' + (isPlaying ? 'Stop' : 'Play response') + '">' +
+          voiceButtonIcon +
+          '</button>' + waveHtml + '</div>';
+      }
+      return '<div class="jploft-msg ' + cls + '"><div class="jploft-bubble ' + cls + '">' +
+        '<div class="jploft-content ' + cls + '">' + contentHtml + '</div>' + voiceHtml +
+        '</div></div>';
     }).join('');
 
     if (loading) {
-      html += '<div class="jploft-msg assistant"><div class="jploft-bubble assistant jploft-typing">Thinking...</div></div>';
+      html += '<div class="jploft-msg assistant"><div class="jploft-bubble assistant"><span class="jploft-typing-dots"><span>.</span><span>.</span><span>.</span></span></div></div>';
     }
 
     messagesEl.innerHTML = html;
+    messagesEl.querySelectorAll('.jploft-voice-btn').forEach(function (btn) {
+      btn.onclick = function () {
+        var index = Number(btn.getAttribute('data-index'));
+        if (Number.isNaN(index)) return;
+        if (playingMessageIndex === index) {
+          pauseAssistantVoice();
+          return;
+        }
+        playMessageVoice(index);
+      };
+    });
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -718,6 +1131,8 @@
   function openPanel() {
     if (!panel || !root || opened) return;
     opened = true;
+    activated = true;
+    resetActivationWatchers();
 
     if (messages.length === 0 && !openingMessageShown) {
       messages.push({ role: 'assistant', content: getOpeningMessage() });
@@ -730,6 +1145,7 @@
     panel.style.display = 'flex';
     updatePanelPosition();
     setSendButtonState();
+    applyVoiceFeatureState();
     persistState();
 
     setTimeout(function () {
@@ -740,7 +1156,11 @@
   function closePanel() {
     if (!panel || !launcher) return;
     opened = false;
+    activated = true;
+    resetActivationWatchers();
     isFullscreen = false;
+    stopMicCapture();
+    pauseAssistantVoice();
     if (typingTimer) {
       clearTimeout(typingTimer);
       typingTimer = null;
@@ -754,9 +1174,13 @@
   }
 
   function sendToApi(userContent, callback) {
-    var msgs = messages.concat([{ role: 'user', content: userContent }]);
+    var gen = requestGeneration;
+    // Optimistic: push the user message immediately so it's visible before the API responds.
+    messages.push({ role: 'user', content: userContent });
+    var msgs = messages.slice(); // snapshot for API (user msg already included)
     loading = true;
     setSendButtonState();
+    applyVoiceFeatureState();
     renderMessages();
 
     var pageUrl = typeof window !== 'undefined' && window.location ? window.location.href : '';
@@ -770,24 +1194,49 @@
         pageUrl: pageUrl,
       }),
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.json().catch(function () { return {}; }).then(function (err) {
+            throw new Error(err.error || 'Failed to get response');
+          });
+        }
+        return r.json();
+      })
       .then(function (data) {
+        if (gen !== requestGeneration) return;
         if (data.sessionId) sessionId = data.sessionId;
         sendPresenceRegister(sessionId);
-        messages.push({ role: 'user', content: userContent });
-        messages.push({ role: 'assistant', content: data.content || '' });
+        var assistantText = normalizeAssistantNameInText(String(data.content || ''), chatbotDisplayName);
+        var voiceUrl = data && data.voice && data.voice.audioDataUrl ? String(data.voice.audioDataUrl) : '';
+        // User message already pushed optimistically before fetch — only push assistant.
+        messages.push({
+          role: 'assistant',
+          content: assistantText,
+          voiceUrl: voiceUrl || undefined,
+        });
         loading = false;
         setSendButtonState();
+        applyVoiceFeatureState();
         renderMessages();
+        var assistantIndex = messages.length - 1;
+        if (voiceResponseEnabled) {
+          if (voiceUrl) {
+            playAssistantVoice(voiceUrl, assistantIndex);
+          } else if (voiceEnabled) {
+            playMessageVoice(assistantIndex);
+          }
+        }
         loadSessions();
         persistState();
         if (callback) callback();
       })
       .catch(function () {
-        messages.push({ role: 'user', content: userContent });
-        messages.push({ role: 'assistant', content: 'Sorry, something went wrong. Please try again.' });
+        if (gen !== requestGeneration) return;
+        // User message was already pushed optimistically — just add error assistant message.
+        messages.push({ role: 'assistant', content: 'We are facing some technical issue. Please try again.' });
         loading = false;
         setSendButtonState();
+        applyVoiceFeatureState();
         renderMessages();
         if (callback) callback();
       });
@@ -850,7 +1299,14 @@
     panel.style.display = 'none';
     panel.innerHTML =
       '<header class="jploft-header">' +
-        '<div class="jploft-title-wrap"><span class="jploft-title">' + escapeHtml(companyName) + '</span></div>' +
+        '<div class="jploft-title-wrap">' +
+          '<div class="jploft-title-line">' +
+            '<button type="button" class="jploft-icon-btn jploft-new-btn" aria-label="Start new chat" title="New chat">' +
+              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>' +
+            '</button>' +
+            '<span class="jploft-title">' + escapeHtml(companyName) + '</span>' +
+          '</div>' +
+        '</div>' +
         '<div class="jploft-right">' +
           '<button type="button" class="jploft-icon-btn jploft-close-btn" aria-label="Close widget" title="Close">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
@@ -865,6 +1321,7 @@
           '<form class="jploft-footer">' +
             '<div class="jploft-input-wrap">' +
               '<textarea class="jploft-input" placeholder="Type your message..." autocomplete="off" rows="1"></textarea>' +
+              '<button type="button" class="jploft-mic-btn" aria-label="Start voice input"></button>' +
               '<button type="submit" class="jploft-send" aria-label="Send message" title="Send">' +
                 '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
               '</button>' +
@@ -883,6 +1340,8 @@
 
     var closeBtn = panel.querySelector('.jploft-close-btn');
     closeBtn.onclick = closePanel;
+    var newBtn = panel.querySelector('.jploft-new-btn');
+    if (newBtn) newBtn.onclick = newChat;
 
     maxBtn = panel.querySelector('.jploft-max-btn');
     if (maxBtn) maxBtn.onclick = toggleFullscreen;
@@ -897,15 +1356,19 @@
     sidebarEl = panel.querySelector('.jploft-sidebar');
     messagesEl = panel.querySelector('.jploft-body');
     inputEl = panel.querySelector('.jploft-input');
+    micBtn = panel.querySelector('.jploft-mic-btn');
     sendBtn = panel.querySelector('.jploft-send');
 
     var form = panel.querySelector('form');
     form.onsubmit = onSubmit;
     inputEl.addEventListener('keydown', onInputKeyDown);
     inputEl.addEventListener('input', onInputChange);
+    if (micBtn) micBtn.addEventListener('click', onMicButtonClick);
+    setMicButtonState(false);
 
     resizeInput();
     setSendButtonState();
+    applyVoiceFeatureState();
     applyWidgetButtonPosition();
     updatePanelPosition();
     window.addEventListener('resize', onViewportResize);
@@ -1028,6 +1491,22 @@
         }
         sendPresenceRegister(sessionId, window.location ? window.location.href : '');
       };
+      presenceWs.onmessage = function (event) {
+        try {
+          var msg = JSON.parse(event.data || '{}');
+          if (msg.type === 'message' && msg.content != null) {
+            var assistantText = normalizeAssistantNameInText(String(msg.content || ''), chatbotDisplayName);
+            messages.push({
+              role: 'assistant',
+              content: assistantText,
+              voiceUrl: msg.voice && msg.voice.audioDataUrl ? String(msg.voice.audioDataUrl) : undefined,
+            });
+            renderMessages();
+            persistState();
+            loadSessions();
+          }
+        } catch (e) {}
+      };
       presenceWs.onclose = function () {
         presenceWs = null;
         if (!wsReconnectTimer) {
@@ -1062,6 +1541,17 @@
           if (company.displayName) companyName = company.displayName;
           companyIconUrl = company.iconUrl || null;
           companyGreetingMessage = company.greetingMessage || null;
+          if (company.voice && typeof company.voice === 'object') {
+            voiceEnabled = Boolean(company.voice.enabled);
+            voiceResponseEnabled = company.voice.responseEnabled !== false;
+            voiceGender = company.voice.gender === 'male' ? 'male' : 'female';
+            voiceIgnoreEmoji = Boolean(company.voice.ignoreEmoji);
+          } else {
+            voiceEnabled = false;
+            voiceResponseEnabled = true;
+            voiceGender = 'female';
+            voiceIgnoreEmoji = false;
+          }
           if (company.autoTrigger && typeof company.autoTrigger === 'object') {
             var nextAutoTriggerMode = resolveAutoTriggerOpenMode(company.autoTrigger);
             autoTrigger.openMode = nextAutoTriggerMode;
@@ -1090,6 +1580,17 @@
             }
           }
         }
+        messages = messages.map(function (msg) {
+          if (!msg || msg.role !== 'assistant') return msg;
+          return {
+            role: msg.role,
+            content: normalizeAssistantNameInText(msg.content, chatbotDisplayName),
+            voiceUrl: msg.voiceUrl || undefined,
+          };
+        });
+        setSendButtonState();
+        applyVoiceFeatureState();
+        renderMessages();
         var theme = company && company.theme;
         if (theme) {
           var vars = buildThemeVars(theme);
@@ -1125,6 +1626,11 @@
 
   function runActivation() {
     if (activated) return;
+
+    if (forceOpen) {
+      activate();
+      return;
+    }
 
     var currentPath = (typeof window !== 'undefined' && window.location) ? window.location.pathname : '/';
     if (!shouldEnableAutoTrigger(currentPath)) return;

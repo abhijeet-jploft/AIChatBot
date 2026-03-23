@@ -29,9 +29,9 @@ async function renderEmbedPage(req, res) {
     if (!companyIdParam || companyIdParam !== row.company_id) {
       return res.status(404).type('text/plain').send('Not found');
     }
-    const host = req.get('host') || 'localhost';
-    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-    const apiUrl = `${proto}://${host}/api`;
+    // Use a relative /api path so the widget resolves against the iframe's actual origin.
+    // This works correctly both through a dev proxy and in production.
+    const apiUrl = '/api';
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -47,7 +47,8 @@ window.JPLoftChatConfig = {
   apiUrl: ${JSON.stringify(apiUrl)},
   companyId: ${JSON.stringify(row.company_id)},
   companyName: ${JSON.stringify(row.widget_title || 'Chat')},
-  apiKey: ${JSON.stringify(token)}
+  apiKey: ${JSON.stringify(token)},
+  forceOpen: true
 };
 </script>
 <script src="/chat-widget.js"></script>

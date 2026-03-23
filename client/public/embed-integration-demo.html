@@ -563,8 +563,8 @@
           <p>Loads chat-widget.js directly into a third-party page with company context and API key headers.</p>
         </article>
         <article class="capability">
-          <strong>Mode 2: Iframe host URL</strong>
-          <p>Uses /jp-loft?apiKey=...&companyId=_JP_Loft for strict credential-based embedding.</p>
+          <strong>Mode 2: Iframe embed page</strong>
+          <p>Loads the server route <code>/embed/{slug}/{embed secret}?companyId=…</code> — secret is in the path; company id must match.</p>
         </article>
         <article class="capability">
           <strong>Copy-ready snippets</strong>
@@ -597,13 +597,13 @@
         </p>
 
         <ol class="step-list">
-          <li><strong>Open your admin embed settings and confirm:</strong> <code>slug</code>, <code>companyId</code>, and <code>apiKey</code>.</li>
+          <li><strong>Open Admin → Settings → Website embed</strong> and copy <code>slug</code>, <code>company id</code>, and <strong>embed secret</strong> (used as API key in script mode and in the iframe URL path).</li>
           <li><strong>Set your app origin correctly</strong> in this lab (production origin in production, dev origin in local testing).</li>
           <li><strong>Choose one install path:</strong> Script mode (recommended for launcher widget) or Iframe host mode (strict credential URL).</li>
           <li><strong>Paste the chosen snippet once</strong> into your global website template, just before <code>&lt;/body&gt;</code>.</li>
           <li><strong>For SPA sites</strong> (React/Vue/Next): place it in the root layout so it does not reload on every route change.</li>
           <li><strong>For CMS sites</strong> (WordPress/Shopify/Webflow): paste into site-wide footer or global custom-code settings.</li>
-          <li><strong>Validate CORS and domain access:</strong> your API must allow requests from the website where the widget runs.</li>
+          <li><strong>CORS:</strong> the API uses open CORS by default so third-party origins can call <code>/api</code>. Lock this down in production if you allowlist domains.</li>
           <li><strong>QA before go-live:</strong> test homepage, inner pages, mobile, and one lead capture flow end-to-end.</li>
         </ol>
 
@@ -618,8 +618,8 @@
           </article>
 
           <article class="playbook-card">
-            <h3>Global Iframe Host Install</h3>
-            <p>Use when you prefer the slug + apiKey + companyId host URL model.</p>
+            <h3>Global iframe (embed page)</h3>
+            <p>Full-page overlay using <code>/embed/slug/secret?companyId=</code> on your chat app host.</p>
             <pre id="global-iframe-example"></pre>
             <div class="button-row">
               <button type="button" class="btn-ghost" data-copy-target="global-iframe-example">Copy global iframe install</button>
@@ -664,7 +664,7 @@
 
       <div class="field inline-check">
         <input id="exact-project" type="checkbox" />
-        <label for="exact-project">Exact localhost profile: fix script/API origin to http://localhost:7001 (iframe always uses /slug?apiKey=&amp;companyId=)</label>
+        <label for="exact-project">Exact localhost profile: script/API/embed origin http://localhost:7001 (Vite proxies /api and /embed to the Node server)</label>
       </div>
 
       <div class="field">
@@ -683,8 +683,8 @@
       </div>
 
       <div class="field">
-        <label for="api-key">Embed API key</label>
-        <input id="api-key" type="text" spellcheck="false" />
+        <label for="api-key">Embed secret (API key)</label>
+        <input id="api-key" type="text" spellcheck="false" placeholder="Paste from Admin → Settings → Website embed" autocomplete="off" />
       </div>
 
       <div class="button-row">
@@ -727,7 +727,7 @@
         slug: 'jp-loft',
         companyId: '_JP_Loft',
         companyName: 'JP Loft',
-        apiKey: 'ba6d20d0722f560415ed0f6c1e0dcba4bb429aad3f7dff237a28029d12a30a9a'
+        apiKey: ''
       };
 
       var state = readStateFromUrl();
@@ -884,20 +884,37 @@
         var origin = formState.exactProject
           ? PROJECT_ORIGIN
           : normalizeOrigin(formState.appOrigin);
-        var slugPath = '/' + encodeURIComponent(formState.slug);
-        var query = 'apiKey=' + encodeURIComponent(formState.apiKey) + '&companyId=' + encodeURIComponent(formState.companyId);
+        var slugEnc = encodeURIComponent(String(formState.slug || '').trim() || 'slug');
+        var secretRaw = String(formState.apiKey || '').trim();
+        var hasApiKey = Boolean(secretRaw);
+        var secretEnc = encodeURIComponent(secretRaw);
+        var cidEnc = encodeURIComponent(String(formState.companyId || '').trim() || '');
+        var embedPath = hasApiKey
+          ? '/embed/' + slugEnc + '/' + secretEnc + '?companyId=' + cidEnc
+          : '';
+        var embedTemplatePath = '/embed/' + slugEnc + '/YOUR_EMBED_SECRET?companyId=' + cidEnc;
         var apiUrl = origin + '/api';
         var scriptSrc = origin + '/chat-widget.js';
-        var slugHostUrl = origin + slugPath + '?' + query;
-        /** Iframe mode always uses /&lt;slug&gt;?apiKey=&amp;companyId= (same as production third-party embed). */
-        var iframeModeUrl = slugHostUrl;
+        var embedPageUrl = hasApiKey ? (origin + embedPath) : '';
+        var embedTemplateUrl = origin + embedTemplatePath;
+        var widgetHostUrl = origin + '/embed-widget-iframe-host.html' +
+          '?apiUrl=' + encodeURIComponent(apiUrl) +
+          '&companyId=' + cidEnc +
+          '&companyName=' + encodeURIComponent(String(formState.companyName || '').trim()) +
+          (hasApiKey ? '&apiKey=' + secretEnc : '') +
+          '&forceOpen=true';
         return {
           origin: origin,
           apiUrl: apiUrl,
           scriptSrc: scriptSrc,
-          slugHostUrl: slugHostUrl,
-          iframeModeUrl: iframeModeUrl,
-          hostUrl: iframeModeUrl
+          embedPageUrl: embedPageUrl,
+          slugHostUrl: hasApiKey ? embedPageUrl : embedTemplateUrl,
+          iframeModeUrl: embedPageUrl,
+          iframeTemplateUrl: embedTemplateUrl,
+          embedPath: embedPath,
+          hostUrl: hasApiKey ? embedPageUrl : embedTemplateUrl,
+          hasApiKey: hasApiKey,
+          widgetHostUrl: widgetHostUrl
         };
       }
 
@@ -923,10 +940,11 @@
       }
 
       function buildIframeSnippet(urls) {
+        var iframeSrc = urls.hasApiKey ? urls.iframeModeUrl : urls.iframeTemplateUrl;
         return [
           '<iframe',
-          '  src="' + urls.iframeModeUrl + '"',
-          '  title="JP Loft Chat"',
+          '  src="' + iframeSrc + '"',
+          '  title="Chat"',
           '  style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483646;"',
           '  allow="clipboard-write"',
           '  loading="lazy">',
@@ -952,10 +970,11 @@
 
       function buildGlobalIframeInstallSnippet(urls) {
         var closeScriptTag = '</' + 'script>';
+        var iframeSrc = urls.hasApiKey ? urls.iframeModeUrl : urls.iframeTemplateUrl;
         return [
           '<!-- Add once in your global layout -->',
           '<div id="jp-loft-embed" style="position:fixed;inset:0;display:none;z-index:2147483646;">',
-          '  <iframe src="' + urls.iframeModeUrl + '" title="JP Loft Chat" style="width:100%;height:100%;border:0;" allow="clipboard-write" loading="lazy"></iframe>',
+          '  <iframe src="' + iframeSrc + '" title="Chat" style="width:100%;height:100%;border:0;" allow="clipboard-write" loading="lazy"></iframe>',
           '</div>',
           '<script>',
           "  // Open chat: document.getElementById('jp-loft-embed').style.display = 'block';",
@@ -981,10 +1000,19 @@
         elements.iframeSnippet.textContent = buildIframeSnippet(urls);
         elements.globalScriptExample.textContent = buildGlobalScriptInstallSnippet(formState, urls);
         elements.globalIframeExample.textContent = buildGlobalIframeInstallSnippet(urls);
-        elements.hostUrl.textContent = urls.slugHostUrl;
+        elements.hostUrl.textContent = urls.hasApiKey ? urls.slugHostUrl : '— paste embed secret to generate URL —';
+        elements.openFrameModal.disabled = !urls.hasApiKey;
+        elements.openFrameModal.title = urls.hasApiKey
+          ? 'Open full-screen host preview'
+          : 'Paste embed secret first';
 
-        elements.iframePreviewFrame.src = urls.iframeModeUrl;
-        elements.fullFrame.src = urls.iframeModeUrl;
+        if (urls.hasApiKey) {
+          elements.iframePreviewFrame.src = urls.iframeModeUrl;
+          elements.fullFrame.src = urls.iframeModeUrl;
+        } else {
+          elements.iframePreviewFrame.src = 'about:blank';
+          elements.fullFrame.src = 'about:blank';
+        }
 
         var iframeActive = formState.mode === 'iframe';
         elements.iframePreview.classList.toggle('show', iframeActive);
@@ -994,17 +1022,51 @@
         var formState = readFormState();
         var urls = buildUrls(formState);
 
-        if (formState.mode === 'iframe') {
+        if (!urls.hasApiKey) {
           elements.modeStatus.classList.add('warn');
+          elements.modeStatus.textContent = 'Paste your embed secret (Admin → Settings → Website embed) to launch the integration.';
+          return;
+        }
+
+        // Validate embed secret against the server before launching anything
+        elements.modeStatus.classList.remove('warn');
+        elements.modeStatus.textContent = 'Validating embed secret…';
+        elements.launchMode.disabled = true;
+
+        var validateUrl = urls.apiUrl + '/embed/validate' +
+          '?companyId=' + encodeURIComponent(formState.companyId) +
+          '&embedSecret=' + encodeURIComponent(formState.apiKey);
+
+        fetch(validateUrl)
+          .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+          .then(function (result) {
+            elements.launchMode.disabled = false;
+            if (!result.ok || !result.body.valid) {
+              elements.modeStatus.classList.add('warn');
+              elements.modeStatus.textContent = 'Invalid embed secret: ' + (result.body.error || 'does not match this company ID.');
+              return;
+            }
+            doLaunch(formState, urls);
+          })
+          .catch(function () {
+            elements.launchMode.disabled = false;
+            elements.modeStatus.classList.add('warn');
+            elements.modeStatus.textContent = 'Could not reach server to validate embed secret. Verify app origin and server availability.';
+          });
+      }
+
+      function doLaunch(formState, urls) {
+        if (formState.mode === 'iframe') {
+          elements.modeStatus.classList.remove('warn');
           elements.modeStatus.textContent =
-            'Iframe mode: preview loads ' + urls.slugHostUrl + ' (slug host with apiKey + companyId).';
+            'Iframe mode: preview loads ' + urls.embedPageUrl + ' (Express route GET /embed/:slug/:token?companyId=).';
           return;
         }
 
         elements.modeStatus.classList.remove('warn');
         elements.modeStatus.textContent = formState.exactProject
-          ? 'Script mode active with exact localhost profile (http://localhost:7001). Theme and behavior come from your running project assets.'
-          : 'Script mode active. JP Loft launcher should appear in the lower-right corner.';
+          ? 'Script mode active with exact localhost profile (http://localhost:7001). Vite proxies /api and /embed to your API port.'
+          : 'Script mode active. The launcher should appear in the corner.';
 
         window.JPLoftChatConfig = {
           apiUrl: urls.apiUrl,

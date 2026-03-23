@@ -11,26 +11,23 @@ function getEmbedAppOrigin() {
   return '';
 }
 
-function buildIntegrationDemoUrl({ embed, companyName, chatbotName }) {
+function buildIntegrationDemoUrl({ embed, companyName, chatbotName, companyId }) {
   const originFallback = getEmbedAppOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
-  const host = embed?.slugHostUrl || `${originFallback}${embed?.slugHostPath || ''}`;
-  if (!host) return `${originFallback}/embed-integration-demo.html`;
+  if (!embed?.embedPath) return `${originFallback}/embed-integration-demo.html`;
 
   const widgetTitle = (chatbotName || '').trim() || (companyName || '').trim();
+  const base = embed.embedUrl || `${originFallback}${embed.embedPath}`;
 
   try {
-    const parsed = new URL(host, typeof window !== 'undefined' ? window.location.origin : originFallback);
-    const srcParams = parsed.searchParams;
-    const companyId = srcParams.get('companyId') || srcParams.get('company_id') || '';
-    const apiKey = srcParams.get('apiKey') || '';
+    const parsed = new URL(base, typeof window !== 'undefined' ? window.location.origin : originFallback);
     const demoParams = new URLSearchParams({
       mode: 'script',
       appOrigin: parsed.origin,
       exactProject: parsed.origin === 'http://localhost:7001' ? '1' : '0',
       slug: embed?.slug || '',
-      companyId,
+      companyId: companyId || '',
       companyName: widgetTitle,
-      apiKey,
+      apiKey: '',
     });
     return `${parsed.origin}/embed-integration-demo.html?${demoParams.toString()}`;
   } catch {
@@ -97,6 +94,7 @@ export default function Settings() {
   const { showToast } = useAdminToast();
   const location = useLocation();
   const [companyName, setCompanyName] = useState('');
+  const [settingsCompanyId, setSettingsCompanyId] = useState('');
   const [chatbotName, setChatbotName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
@@ -134,6 +132,7 @@ export default function Settings() {
         const d = await settingsRes.json();
 
         setEmbed(d.embed || null);
+        setSettingsCompanyId(d.companyId || '');
         setCompanyName(d.companyName || d.name || '');
         setChatbotName(d.chatbotName ?? d.displayName ?? '');
         setIconUrl(d.iconUrl || '');
@@ -386,11 +385,13 @@ export default function Settings() {
               <div className="mb-3 p-3 rounded-3" style={{ ...cardStyle, background: 'var(--chat-bg)' }}>
                 <div className="fw-semibold mb-2" style={headingStyle}>Website embed</div>
                 <p className="small mb-2" style={mutedStyle}>
-                  Third‑party iframe: use <code>/{embed.slug}?apiKey=…&amp;companyId=…</code>. Both parameters are <strong>required</strong> (embed secret + your company / train_data id). Omitting either disables the widget.
+                  Third‑party sites use either the <strong>script</strong> snippet (floating widget) or an <strong>iframe</strong> pointing at{' '}
+                  <code>/embed/{'{slug}'}/{'{embed secret}'}?companyId={'{company id}'}</code> on your app host. The secret is validated server-side; the
+                  company id in the query must match the company linked to that embed.
                 </p>
                 <div className="small mb-1" style={labelStyle}>Slug</div>
                 <code className="small d-block mb-2" style={{ wordBreak: 'break-all' }}>{embed.slug}</code>
-                <div className="small mb-1" style={labelStyle}>Host page URL (iframe or new tab)</div>
+                <div className="small mb-1" style={labelStyle}>Embed page URL (iframe — same as “Open host page”)</div>
                 <div className="input-group input-group-sm mb-2">
                   <input
                     type="text"
@@ -410,7 +411,7 @@ export default function Settings() {
                     Copy
                   </button>
                 </div>
-                <div className="small mb-1" style={labelStyle}>Direct chat URL (inner)</div>
+                <div className="small mb-1" style={labelStyle}>Canonical embed path (path only — for docs)</div>
                 <div className="input-group input-group-sm mb-2">
                   <input
                     type="text"
@@ -456,7 +457,7 @@ export default function Settings() {
                   type="button"
                   className="btn btn-sm btn-outline-secondary"
                   onClick={() => {
-                    const demoUrl = buildIntegrationDemoUrl({ embed, companyName, chatbotName });
+                    const demoUrl = buildIntegrationDemoUrl({ embed, companyName, chatbotName, companyId: settingsCompanyId });
                     window.open(demoUrl, '_blank', 'noopener,noreferrer');
                   }}
                 >

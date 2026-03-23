@@ -1,84 +1,56 @@
-# Embeddable Chat Widget
+# Third-party website embed (plugin)
 
-## Full Third-Party Demo (JP Loft Defaults)
+Your stack is **React (Vite) + Node (Express)**. The **same Node server** serves `/api`, static `chat-widget.js`, and the **embed HTML page** used for iframe installs.
 
-Open `/embed-integration-demo.html` for the integration lab. Slug URLs like `/jp-loft?apiKey=…&companyId=…` are served from `chat-embed-host.html`.
+## Who can embed?
 
-The demo includes both integration styles in one place:
-- `script` mode (loads `chat-widget.js` with `window.JPLoftChatConfig`)
-- `iframe` mode (loads `/<embed_slug>?apiKey=...&companyId=...`)
+Anyone with your **embed slug**, **embed secret**, and **company id** (from **Admin → Settings → Website embed**) can add the chat to their site. Treat the embed secret like an API key: rotate it if it leaks.
 
-Default demo credentials are pre-filled for JP Loft:
-- `embed slug`: `jp-loft`
-- `companyId`: `_JP_Loft`
-- `apiKey`: `ba6d20d0722f560415ed0f6c1e0dcba4bb429aad3f7dff237a28029d12a30a9a`
+## Two integration options
 
-## Host page URL (iframe-friendly)
+### 1. Script (recommended — floating launcher)
 
-On your deployed app (same host as `/api`):
-
-`https://your-host/<embed_slug>?apiKey=<embed_secret>&companyId=<company_folder_id>`
-
-Both **apiKey** and **companyId** are required. The host page loads an iframe to `/embed/<slug>/<secret>?companyId=...`, which returns 404 if `companyId` does not match that embed.
-
-Vite dev (port 7001) and Express both support the `/<embed_slug>` path.
-
----
-
-Use the widget on any website with a single script tag (like DataTables).
-
-## Quick start
-
-```html
-<script
-  src="https://your-domain.com/chat-widget.js"
-  data-api-url="https://your-api.com/api"
-  data-company-id="_JP_Loft"
-  data-company-name="JP Loft"
-></script>
-```
-
-Or set config before loading:
+Host `chat-widget.js` from your deployed app (or CDN copy). The customer’s site loads one script; the widget calls your API (CORS must allow their origin — default server uses permissive CORS).
 
 ```html
 <script>
   window.JPLoftChatConfig = {
-    apiUrl: 'https://your-api.com/api',
-    companyId: '_JP_Loft',
-    companyName: 'JP Loft'
+    apiUrl: 'https://YOUR_APP_ORIGIN/api',
+    companyId: 'YOUR_COMPANY_ID',
+    companyName: 'Your brand',
+    apiKey: 'YOUR_EMBED_SECRET'
   };
 </script>
-<script src="https://your-domain.com/chat-widget.js"></script>
+<script src="https://YOUR_APP_ORIGIN/chat-widget.js" async></script>
 ```
 
-## Attributes / config
+`apiKey` is sent as `X-Embed-Api-Key` on API requests (optional but recommended).
 
-| Option        | Description                          | Default    |
-|---------------|--------------------------------------|------------|
-| `apiUrl`      | Base URL of the chat API             | required   |
-| `companyId`   | Company/bot ID (e.g. `_JP_Loft`)     | `_JP_Loft` |
-| `companyName` | Name shown in the widget header      | JP Loft    |
-| `apiKey`      | Optional embed key sent as `X-Embed-Api-Key` | empty |
+### 2. Iframe (full-page or fixed overlay)
 
-## Behavior (per AI Chat Agent doc)
+Point an iframe at your app’s **embed route** (served by Express):
 
-- **Launcher icon**: always visible; clicking it opens chat immediately in all modes.
-- **Panel open mode (admin controlled)**:
-  - `click`: panel opens only when the visitor clicks the launcher.
-  - `auto`: panel opens proactively based on trigger rules below.
-- **Drag support**: launcher and floating close button are draggable and clamped to viewport bounds.
-- **Activation checks** (apply only when open mode is `auto`):
-  - 6–10 seconds on landing page, OR
-  - 40% scroll, OR
-  - 8 seconds user idle (no mouse/keyboard/scroll)
-- **Fullscreen toggle**: header expand button toggles desktop fullscreen mode and restore mode.
-- **Opening message**: “Hi! Welcome to JP Loft! I'm Anaya, your digital consultant. Are you looking to build something or just exploring ideas?”
+`https://YOUR_APP_ORIGIN/embed/{slug}/{embed_secret}?companyId={company_id}`
 
-## CORS
+- **slug** and **embed_secret** are looked up in the database; **companyId** query must match the company tied to that embed.
+- This route returns minimal HTML that sets `JPLoftChatConfig` and loads `chat-widget.js`.
 
-If the widget is embedded on a different domain than the API, the API must allow that origin (e.g. `Access-Control-Allow-Origin: *` or the embedder’s domain). The default server uses `cors()` and allows all origins.
+## Local development
 
-## Serving the script
+| URL | Role |
+|-----|------|
+| `http://localhost:7001` | Vite dev client; proxies `/api` and `/embed` → Node |
+| `http://localhost:7022` (or `PORT` in `.env`) | Express API + static + `/embed/*` |
 
-- **Vite dev**: Script is at `http://localhost:7001/chat-widget.js`; use `data-api-url="http://localhost:7001/api"` (or your API URL) for local testing.
-- **Production**: Copy `chat-widget.js` to your CDN or static host and set `src` and `data-api-url` to your production URLs.
+Integration lab: open **`/embed-integration-demo.html`** (served from `client/public`). Use **Exact localhost profile** so origins stay on port **7001** (proxy forwards to the API).
+
+## Production checklist
+
+1. Set **`PUBLIC_APP_URL`** on the server so Admin shows canonical `https://…` embed URLs.
+2. Serve **`client` build** + API from the same host (or put `chat-widget.js` on a CDN and set `data-api-url` / `JPLoftChatConfig.apiUrl` to your API origin).
+3. Use **HTTPS** in production.
+4. Tighten **CORS** if you no longer want `*` (optional `cors({ origin: … })` in `server.js`).
+
+## Widget behaviour (admin)
+
+Launcher stays visible; **open mode** (click vs auto-trigger) and **page rules** come from **Admin → Settings**. See app docs for timing, scroll, and path targeting.
