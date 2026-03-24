@@ -23,7 +23,7 @@
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
   var companyIconUrl = null;
   var companyGreetingMessage = null;
-mu  var companyPrimaryLanguage = 'en';
+  var companyPrimaryLanguage = 'en';
   var companyVoiceTtsLanguage = '';
   var companyContentLocaleHint = '';
   var companyBusinessProfile = { id: 'generic_business' };
@@ -883,19 +883,7 @@ mu  var companyPrimaryLanguage = 'en';
 
   function setLauncherIconContents() {
     if (!launcher) return;
-    launcher.innerHTML = '';
-    if (companyIconUrl) {
-      var img = document.createElement('img');
-      img.className = 'jploft-launcher-icon';
-      img.alt = '';
-      img.src = companyIconUrl;
-      img.onerror = function () {
-        launcher.innerHTML = LAUNCHER_SVG;
-      };
-      launcher.appendChild(img);
-    } else {
-      launcher.innerHTML = LAUNCHER_SVG;
-    }
+    launcher.innerHTML = LAUNCHER_SVG;
   }
 
   function setAvatarContents(avatarEl) {

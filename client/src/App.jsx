@@ -571,7 +571,6 @@ export default function App() {
   const [isDraggingWidgetButton, setIsDraggingWidgetButton] = useState(false);
   const [companyId, setCompanyId]   = useState(() => initialChatState?.companyId || DEFAULT_COMPANY_ID);
   const [widgetHeaderIconFailed, setWidgetHeaderIconFailed] = useState(false);
-  const [widgetLauncherIconFailed, setWidgetLauncherIconFailed] = useState(false);
   const [companies, setCompanies]   = useState([]);
   const [messages, setMessages]     = useState(() => Array.isArray(initialChatState?.messages) ? initialChatState.messages : []);
   const [loading, setLoading]       = useState(false);
@@ -621,7 +620,6 @@ export default function App() {
 
   useEffect(() => {
     setWidgetHeaderIconFailed(false);
-    setWidgetLauncherIconFailed(false);
   }, [currentCompany?.iconUrl]);
 
   const dragStateRef = useRef({
@@ -1739,23 +1737,12 @@ export default function App() {
           aria-label="Open chatbot"
           title="Open chatbot"
         >
-          {companyIconUrl && !widgetLauncherIconFailed ? (
-            <img
-              src={companyIconUrl}
-              alt=""
-              width={28}
-              height={28}
-              style={{ width: 28, height: 28, objectFit: 'contain', objectPosition: 'center', borderRadius: 8, display: 'block' }}
-              onError={() => setWidgetLauncherIconFailed(true)}
-            />
-          ) : (
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              <circle cx="9" cy="10" r="1" fill="currentColor" />
-              <circle cx="12" cy="10" r="1" fill="currentColor" />
-              <circle cx="15" cy="10" r="1" fill="currentColor" />
-            </svg>
-          )}
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <circle cx="9" cy="10" r="1" fill="currentColor" />
+            <circle cx="12" cy="10" r="1" fill="currentColor" />
+            <circle cx="15" cy="10" r="1" fill="currentColor" />
+          </svg>
         </button>
       )}
     </>

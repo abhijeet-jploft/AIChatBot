@@ -37,6 +37,8 @@ router.post('/companies/:companyId/impersonate', requireSuperAuth, companiesCont
 router.get('/companies/:companyId/stats', requireSuperAuth, companiesController.getCompanyStats);
 router.get('/companies/:companyId/settings', requireSuperAuth, companySettingsController.getCompanySettings);
 router.get('/companies/:companyId/settings/modes', requireSuperAuth, companySettingsController.getCompanyModeSettings);
+router.get('/companies/:companyId/settings/voices', requireSuperAuth, companySettingsController.getCompanyVoices);
+router.post('/companies/:companyId/settings/voice-preview', requireSuperAuth, companySettingsController.previewCompanyVoice);
 router.patch('/companies/:companyId/settings', requireSuperAuth, companySettingsController.patchCompanySettings);
 
 // Training (per company)
