@@ -5,6 +5,30 @@ const SA_TOKEN_KEY = 'super_admin_token';
 
 const SuperAuthContext = createContext(null);
 
+async function readJsonSafe(response) {
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const raw = await response.text().catch(() => '');
+  if (!raw) return {};
+  if (!contentType.includes('application/json')) {
+    return {
+      error: response.ok
+        ? 'Server returned a non-JSON response.'
+        : 'Server returned a non-JSON error response.',
+      raw,
+    };
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {
+      error: response.ok
+        ? 'Server returned invalid JSON.'
+        : 'Server returned an invalid JSON error response.',
+      raw,
+    };
+  }
+}
+
 export function SuperAuthProvider({ children }) {
   const [token, setTokenState] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem(SA_TOKEN_KEY) : null
@@ -28,7 +52,7 @@ export function SuperAuthProvider({ children }) {
     fetch(`${API_BASE}/super-admin/auth/me`, {
       headers: { Authorization: `Bearer ${storedToken}` },
     })
-      .then((r) => { if (!r.ok) throw new Error('Session invalid'); return r.json(); })
+      .then(async (r) => { if (!r.ok) throw new Error('Session invalid'); return await readJsonSafe(r); })
       .then(setAdmin)
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
@@ -40,8 +64,9 @@ export function SuperAuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    const data = await res.json();
+    const data = await readJsonSafe(res);
     if (!res.ok) throw new Error(data.error || 'Login failed');
+    if (!data?.token) throw new Error(data.error || 'Login failed: missing token in server response');
     setToken(data.token);
     setAdmin({ username: data.username });
   }, [setToken]);

@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS voice_settings (
   voice_custom_name VARCHAR(255),
   voice_custom_gender VARCHAR(10),
   voice_ignore_emoji BOOLEAN NOT NULL DEFAULT FALSE,
-  voice_response_enabled BOOLEAN NOT NULL DEFAULT TRUE
+  voice_response_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  voice_tts_language_code VARCHAR(12)
 );
 
 CREATE TABLE IF NOT EXISTS escalation_settings (
@@ -103,10 +104,11 @@ CREATE TABLE IF NOT EXISTS safety_settings (
 CREATE TABLE IF NOT EXISTS language_settings (
   company_id VARCHAR(255) PRIMARY KEY REFERENCES chatbots(company_id) ON DELETE CASCADE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  language_primary VARCHAR(50) NOT NULL DEFAULT 'English',
+  language_primary VARCHAR(50) NOT NULL DEFAULT 'en',
   language_multi_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   language_auto_detect_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  language_manual_switch_enabled BOOLEAN NOT NULL DEFAULT FALSE
+  language_manual_switch_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  language_extra_locales TEXT
 );
 
 CREATE TABLE IF NOT EXISTS embed_settings (

@@ -25,7 +25,7 @@ function clip(text, maxChars) {
 function tokenizeQuery(query) {
   const raw = String(query || '')
     .toLowerCase()
-    .replace(/[^a-z0-9\s]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
     .split(/\s+/)
     .filter(Boolean)
     .filter((w) => !STOP_WORDS.has(w));
@@ -120,6 +120,76 @@ function getCompanies() {
 }
 
 /**
+ * Some scrapers write multiple top-level `{...}` objects on one line with no delimiter.
+ * Walk the string and parse each balanced object (strings respected).
+ */
+function extractConcatenatedJsonObjects(raw) {
+  const objs = [];
+  const str = String(raw || '');
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < str.length; i += 1) {
+    const c = str[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (c === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (c === '"' && !escape) {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (c === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (c === '}') {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        const slice = str.slice(start, i + 1);
+        try {
+          objs.push(JSON.parse(slice));
+        } catch {
+          // skip invalid segment
+        }
+        start = -1;
+      }
+    }
+  }
+
+  return objs;
+}
+
+/**
+ * One physical JSONL line may be: one object, a JSON array of objects, or concatenated objects.
+ */
+function parseJsonlLineRecords(line) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed) return [];
+
+  try {
+    const one = JSON.parse(trimmed);
+    if (Array.isArray(one)) {
+      return one.filter((x) => x && typeof x === 'object');
+    }
+    if (one && typeof one === 'object') {
+      return [one];
+    }
+  } catch {
+    // concatenated / non-standard line
+  }
+
+  return extractConcatenatedJsonObjects(trimmed);
+}
+
+/**
  * Parse JSONL training examples and return context snippets.
  * For query-driven requests, only the top relevant entries are included.
  */
@@ -127,36 +197,41 @@ function buildJsonlContext(data, fileLabel, queryTokens) {
   const phrases = buildPhrases(queryTokens);
   const lines = String(data || '').split(/\r?\n/).filter((l) => l.trim());
   const entries = [];
+  let entryCounter = 0;
 
   for (let i = 0; i < lines.length; i += 1) {
-    try {
-      const parsed = JSON.parse(lines[i]);
-      const msgList = Array.isArray(parsed.messages) ? parsed.messages : [];
-      const userMsg = msgList.find((m) => m && m.role === 'user')?.content || '';
-      const assistantMsg = msgList.find((m) => m && m.role === 'assistant')?.content || '';
-      const sourceUrl =
-        parsed?.source?.page_url ||
-        parsed?.metadata?.source_url ||
-        parsed?.url ||
-        firstHttpUrl(assistantMsg);
-      const sourceTitle =
-        parsed?.source?.page_title ||
-        parsed?.metadata?.source_title ||
-        '';
-      const combined = `${userMsg}\n${assistantMsg}\n${sourceUrl || ''}`.trim();
+    const records = parseJsonlLineRecords(lines[i]);
+    for (const parsed of records) {
+      try {
+        if (!parsed || typeof parsed !== 'object') continue;
+        const msgList = Array.isArray(parsed.messages) ? parsed.messages : [];
+        const userMsg = msgList.find((m) => m && m.role === 'user')?.content || '';
+        const assistantMsg = msgList.find((m) => m && m.role === 'assistant')?.content || '';
+        const sourceUrl =
+          parsed?.source?.page_url ||
+          parsed?.metadata?.source_url ||
+          parsed?.url ||
+          firstHttpUrl(assistantMsg);
+        const sourceTitle =
+          parsed?.source?.page_title ||
+          parsed?.metadata?.source_title ||
+          '';
+        const combined = `${userMsg}\n${assistantMsg}\n${sourceUrl || ''}`.trim();
 
-      if (!combined) continue;
+        if (!combined) continue;
 
-      entries.push({
-        idx: i + 1,
-        score: scoreTextForQuery(combined, queryTokens, phrases),
-        userMsg: normalizeWhitespace(userMsg),
-        assistantExcerpt: buildRelevantExcerpt(assistantMsg || combined, queryTokens, phrases),
-        sourceUrl: normalizeWhitespace(sourceUrl),
-        sourceTitle: normalizeWhitespace(sourceTitle),
-      });
-    } catch {
-      // Ignore malformed JSONL rows, keep processing valid rows.
+        entryCounter += 1;
+        entries.push({
+          idx: entryCounter,
+          score: scoreTextForQuery(combined, queryTokens, phrases),
+          userMsg: normalizeWhitespace(userMsg),
+          assistantExcerpt: buildRelevantExcerpt(assistantMsg || combined, queryTokens, phrases),
+          sourceUrl: normalizeWhitespace(sourceUrl),
+          sourceTitle: normalizeWhitespace(sourceTitle),
+        });
+      } catch {
+        // Ignore malformed JSONL rows, keep processing valid rows.
+      }
     }
   }
 
@@ -225,8 +300,8 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
               const databaseParts = [];
 
               for (const line of lines) {
-                try {
-                  const o = JSON.parse(line);
+                const records = parseJsonlLineRecords(line);
+                for (const o of records) {
                   if (!o || typeof o !== 'object') continue;
                   if (o.type === 'conversational') {
                     if (o.text) conversationalParts.push(`Instruction: ${o.text}`);
@@ -249,10 +324,8 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
                       docParts.push(`Media${mediaLabel ? ` (${mediaLabel})` : ''}: ${mediaText}`);
                     }
                   } else if (o.messages && (o.source || o.system)) {
-                    scrapedLines.push(line);
+                    scrapedLines.push(JSON.stringify(o));
                   }
-                } catch {
-                  // skip malformed lines
                 }
               }
 
@@ -281,25 +354,34 @@ function collectDirContent(dirPath, basePath, queryTokens, buckets) {
               }
             } else if (/conversational_instructions\.jsonl$/i.test(entry.name)) {
               const lines = data.split(/\r?\n/).filter((l) => l.trim());
-              const parts = lines.map((line) => {
-                try {
-                  const o = JSON.parse(line);
-                  if (o.text) return `Instruction: ${o.text}`;
-                  if (o.userMessage || o.assistantMessage) {
-                    return `Q: ${o.userMessage || ''}\nA: ${o.assistantMessage || ''}`.trim();
+              const parts = [];
+              for (const line of lines) {
+                const records = parseJsonlLineRecords(line);
+                if (!records.length) {
+                  parts.push(line);
+                  continue;
+                }
+                for (const o of records) {
+                  if (o.text) parts.push(`Instruction: ${o.text}`);
+                  else if (o.userMessage || o.assistantMessage) {
+                    parts.push(`Q: ${o.userMessage || ''}\nA: ${o.assistantMessage || ''}`.trim());
                   }
-                  return line;
-                } catch { return line; }
-              });
+                }
+              }
               buckets.regular.push(`\n--- ${label} (Owner instructions / Q&A) ---\n${parts.join('\n\n')}\n`);
             } else if (/structured_data\.jsonl$/i.test(entry.name)) {
               const lines = data.split(/\r?\n/).filter((l) => l.trim());
-              const parts = lines.map((line) => {
-                try {
-                  const o = JSON.parse(line);
-                  return typeof o === 'object' ? (o.data != null ? JSON.stringify(o.data) : JSON.stringify(o)) : line;
-                } catch { return line; }
-              });
+              const parts = [];
+              for (const line of lines) {
+                const records = parseJsonlLineRecords(line);
+                if (!records.length) {
+                  parts.push(line);
+                  continue;
+                }
+                for (const o of records) {
+                  parts.push(typeof o === 'object' ? (o.data != null ? JSON.stringify(o.data) : JSON.stringify(o)) : String(o));
+                }
+              }
               buckets.regular.push(`\n--- ${label} (Structured data) ---\n${parts.join('\n')}\n`);
             } else {
               const { priority, regular } = buildJsonlContext(data, label, queryTokens);

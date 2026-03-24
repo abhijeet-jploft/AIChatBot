@@ -7,7 +7,17 @@ const {
   normalizeConversationModeId,
 } = require('../../services/conversationModes');
 const {
+  getLanguageCatalogForClient,
+  getElevenLabsTtsLanguageCatalog,
+  normalizeLanguagePrimaryToCode,
+  parseLanguageExtraLocalesJson,
+  normalizeLanguageExtraLocalesInput,
+  serializeLanguageExtraLocales,
+  resolveSpeechLanguageCode,
+} = require('../../services/supportedChatLanguages');
+const {
   createCustomVoiceFromSamples,
+  debugVoiceSelection,
   getVoiceList,
   getVoicePreviewText,
   getVoicePresetCatalog,
@@ -105,13 +115,15 @@ function getCompanyCustomVoice(company) {
   };
 }
 
-function buildVoicePayload(company) {
+async function buildVoicePayload(company) {
   const customVoice = getCompanyCustomVoice(company);
   const storedProfile = normalizeVoiceProfile(company?.voice_profile) || 'professional';
   const effectiveProfile = storedProfile === 'custom' && !customVoice ? 'professional' : storedProfile;
   const effectiveGender = effectiveProfile === 'custom'
     ? (customVoice?.gender || 'female')
     : normalizeVoiceGender(company?.voice_gender);
+  const ttsRaw = String(company?.voice_tts_language_code || '').trim().toLowerCase();
+  const catalogLanguageCode = ttsRaw || normalizeLanguagePrimaryToCode(company?.language_primary || 'en');
 
   return {
     enabled: Boolean(company?.voice_mode_enabled),
@@ -119,6 +131,8 @@ function buildVoicePayload(company) {
     gender: effectiveGender,
     profile: effectiveProfile,
     ignoreEmoji: Boolean(company?.voice_ignore_emoji),
+    ttsLanguageCode: ttsRaw || null,
+    ttsLanguageCatalog: getElevenLabsTtsLanguageCatalog(),
     custom: customVoice
       ? {
         available: true,
@@ -129,7 +143,11 @@ function buildVoicePayload(company) {
       : {
         available: false,
       },
-    catalog: getVoicePresetCatalog({ customVoice }),
+    catalog: await getVoicePresetCatalog({
+      customVoice,
+      apiKey: company?.elevenlabs_api_key || null,
+      languageCode: catalogLanguageCode,
+    }),
   };
 }
 
@@ -188,7 +206,7 @@ function buildAiPayload(company) {
   };
 }
 
-function serializeCompanySettings(company) {
+async function serializeCompanySettings(company) {
   const modeCatalog = getModeCatalog(company.ai_mode);
   return {
     companyId: company.company_id,
@@ -196,7 +214,7 @@ function serializeCompanySettings(company) {
     companyName: company.name,
     chatbotName: company.display_name || '',
     displayName: company.display_name || '',
-    iconUrl: company.icon_url || null,
+    iconUrl: (company.icon_url != null && String(company.icon_url).trim()) || null,
     greetingMessage: company.greeting_message || null,
     widget: {
       position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
@@ -208,7 +226,7 @@ function serializeCompanySettings(company) {
       emailEnabled: Boolean(company.lead_email_notifications_enabled),
       email: company.lead_notification_email || null,
     },
-    voice: buildVoicePayload(company),
+    voice: await buildVoicePayload(company),
     escalation: {
       triggers: {
         userRequestsHuman: Boolean(company.escalation_trigger_user_requests_human),
@@ -233,10 +251,12 @@ function serializeCompanySettings(company) {
       restrictFileSharing: Boolean(company.safety_restrict_file_sharing),
     },
     language: {
-      primary: company.language_primary || 'English',
+      primary: normalizeLanguagePrimaryToCode(company.language_primary || 'en'),
+      catalog: getLanguageCatalogForClient(),
       multiEnabled: Boolean(company.language_multi_enabled),
       autoDetectEnabled: Boolean(company.language_auto_detect_enabled),
       manualSwitchEnabled: Boolean(company.language_manual_switch_enabled),
+      extraLocales: parseLanguageExtraLocalesJson(company.language_extra_locales),
     },
     theme: mergeCompanyTheme(company.company_id, {
       primaryColor: company.theme_primary_color,
@@ -254,7 +274,7 @@ function serializeCompanySettings(company) {
 async function getSettingsJsonForCompany(companyId) {
   const company = await CompanyAdmin.findByCompanyId(companyId);
   if (!company) return null;
-  return serializeCompanySettings(company);
+  return await serializeCompanySettings(company);
 }
 
 async function getSettings(req, res) {
@@ -381,7 +401,7 @@ async function updateSettings(req, res) {
     await CompanyAdmin.updateSettings(req.adminCompanyId, {
       company_name: resolvedCompanyName,
       display_name: chatbotTitle,
-      icon_url: iconUrl !== undefined ? iconUrl : undefined,
+      icon_url: iconUrl !== undefined ? (String(iconUrl).trim() || null) : undefined,
       greeting_message: greetingMessage !== undefined ? greetingMessage : undefined,
       widget_position: widget?.position !== undefined
         ? (String(widget.position).toLowerCase() === 'left' ? 'left' : 'right')
@@ -417,6 +437,11 @@ async function updateSettings(req, res) {
       voice_gender: normalizedVoiceGender !== undefined ? normalizedVoiceGender : undefined,
       voice_profile: normalizedVoiceProfile !== undefined ? normalizedVoiceProfile : undefined,
       voice_ignore_emoji: voice?.ignoreEmoji !== undefined ? Boolean(voice.ignoreEmoji) : undefined,
+      voice_tts_language_code: (() => {
+        if (voice?.ttsLanguageCode === undefined) return undefined;
+        const raw = String(voice.ttsLanguageCode || '').trim().toLowerCase();
+        return raw || null;
+      })(),
       escalation_trigger_user_requests_human: escalation?.triggers?.userRequestsHuman !== undefined
         ? Boolean(escalation.triggers.userRequestsHuman)
         : undefined,
@@ -463,10 +488,21 @@ async function updateSettings(req, res) {
       safety_restrict_file_sharing: safety?.restrictFileSharing !== undefined
         ? Boolean(safety.restrictFileSharing)
         : undefined,
-      language_primary: language?.primary !== undefined ? String(language.primary || 'English') : undefined,
+      language_primary:
+        language?.primary !== undefined ? normalizeLanguagePrimaryToCode(language.primary) : undefined,
       language_multi_enabled: language?.multiEnabled !== undefined ? Boolean(language.multiEnabled) : undefined,
       language_auto_detect_enabled: language?.autoDetectEnabled !== undefined ? Boolean(language.autoDetectEnabled) : undefined,
       language_manual_switch_enabled: language?.manualSwitchEnabled !== undefined ? Boolean(language.manualSwitchEnabled) : undefined,
+      language_extra_locales: (() => {
+        if (language?.extraLocales === undefined) return undefined;
+        const p =
+          language?.primary !== undefined
+            ? normalizeLanguagePrimaryToCode(language.primary)
+            : normalizeLanguagePrimaryToCode(companyBeforeUpdate.language_primary);
+        return serializeLanguageExtraLocales(
+          normalizeLanguageExtraLocalesInput(language.extraLocales, p)
+        );
+      })(),
     });
 
     const updated = await getSettingsJsonForCompany(req.adminCompanyId);
@@ -529,6 +565,16 @@ async function previewVoice(req, res) {
         customVoiceGender: customVoice?.gender,
       });
 
+    const { detectNaturalLanguageFromText } = require('../../services/chatRules');
+    const requestedPreviewLang = String(req.body?.ttsLanguageCode || '').trim().toLowerCase();
+    const speechLang = resolveSpeechLanguageCode({
+      assistantText: previewText,
+      userText: '',
+      primaryStored: company.language_primary,
+      detectFn: detectNaturalLanguageFromText,
+      voicePreferenceCode: requestedPreviewLang || company.voice_tts_language_code || null,
+    });
+
     const voice = await synthesizeTextResponse(previewText, {
       apiKey: company?.elevenlabs_api_key || null,
       gender,
@@ -537,6 +583,7 @@ async function previewVoice(req, res) {
       customVoiceName: customVoice?.voiceName,
       customVoiceGender: customVoice?.gender,
       ignoreEmoji: true,
+      languageCode: speechLang || undefined,
     });
 
     if (!voice) {
@@ -569,10 +616,44 @@ async function listVoices(req, res) {
     const gender = req.query.gender || null;
     const profile = req.query.profile || null;
     const search = req.query.search || null;
-    const voices = getVoiceList({ gender, profile, search }, { customVoice });
+    const language = req.query.language || null;
+    const voices = await getVoiceList(
+      { gender, profile, search, language },
+      {
+        customVoice,
+        apiKey: company?.elevenlabs_api_key || null,
+      }
+    );
     res.json({ voices });
   } catch (err) {
     console.error('[admin settings] list voices:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function debugVoices(req, res) {
+  try {
+    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const languageCode = req.query.language || company.voice_tts_language_code || company.language_primary || 'en';
+    const profile = req.query.profile || company.voice_profile || 'professional';
+    const gender = req.query.gender || company.voice_gender || 'female';
+    const limit = req.query.limit || 30;
+
+    const debug = await debugVoiceSelection({
+      apiKey: company?.elevenlabs_api_key || null,
+      languageCode,
+      profile,
+      gender,
+      limit,
+    });
+
+    res.json(debug);
+  } catch (err) {
+    console.error('[admin settings] debug voices:', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -635,7 +716,7 @@ async function trainCustomVoice(req, res) {
         voiceName: trainedVoice.voiceName,
         gender: trainedVoice.gender,
       },
-      voice: buildVoicePayload(updatedCompany),
+      voice: await buildVoicePayload(updatedCompany),
     });
   } catch (err) {
     console.error('[admin settings] train custom voice:', err);
@@ -672,6 +753,7 @@ module.exports = {
   updateSettings,
   previewVoice,
   listVoices,
+  debugVoices,
   trainCustomVoice,
   getModeSettings,
   listActiveSessions,

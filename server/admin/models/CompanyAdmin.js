@@ -64,6 +64,7 @@ async function findByCompanyId(companyId) {
             vo.voice_custom_gender,
             vo.voice_ignore_emoji,
             vo.voice_response_enabled,
+            vo.voice_tts_language_code,
             esc.escalation_trigger_user_requests_human,
             esc.escalation_trigger_ai_confidence_low,
             esc.escalation_trigger_urgent_keywords,
@@ -83,6 +84,7 @@ async function findByCompanyId(companyId) {
             lg.language_multi_enabled,
             lg.language_auto_detect_enabled,
             lg.language_manual_switch_enabled,
+            lg.language_extra_locales,
             em.embed_slug,
             em.embed_secret
      FROM chatbots c
@@ -155,6 +157,7 @@ async function updateSettings(companyId, {
   voice_custom_gender,
   voice_ignore_emoji,
   voice_response_enabled,
+  voice_tts_language_code,
   escalation_trigger_user_requests_human,
   escalation_trigger_ai_confidence_low,
   escalation_trigger_urgent_keywords,
@@ -174,6 +177,7 @@ async function updateSettings(companyId, {
   language_multi_enabled,
   language_auto_detect_enabled,
   language_manual_switch_enabled,
+  language_extra_locales,
 }) {
   if (company_name !== undefined) {
     const n = String(company_name || '').trim().slice(0, 255);
@@ -338,6 +342,11 @@ async function updateSettings(companyId, {
     voiceUpdates.push(`voice_response_enabled = $${vi++}`);
     voiceValues.push(Boolean(voice_response_enabled));
   }
+  if (voice_tts_language_code !== undefined) {
+    voiceUpdates.push(`voice_tts_language_code = $${vi++}`);
+    const raw = String(voice_tts_language_code || '').trim().toLowerCase();
+    voiceValues.push(raw || null);
+  }
 
   const escUpdates = [];
   const escValues = [];
@@ -412,7 +421,7 @@ async function updateSettings(companyId, {
   let gi = 1;
   if (language_primary !== undefined) {
     langUpdates.push(`language_primary = $${gi++}`);
-    langValues.push(String(language_primary || 'English').slice(0, 50));
+    langValues.push(String(language_primary || 'en').trim().slice(0, 50));
   }
   if (language_multi_enabled !== undefined) {
     langUpdates.push(`language_multi_enabled = $${gi++}`);
@@ -425,6 +434,11 @@ async function updateSettings(companyId, {
   if (language_manual_switch_enabled !== undefined) {
     langUpdates.push(`language_manual_switch_enabled = $${gi++}`);
     langValues.push(Boolean(language_manual_switch_enabled));
+  }
+  if (language_extra_locales !== undefined) {
+    langUpdates.push(`language_extra_locales = $${gi++}`);
+    const v = language_extra_locales == null ? null : String(language_extra_locales);
+    langValues.push(v && v.length ? v : null);
   }
 
   const totalPatches =

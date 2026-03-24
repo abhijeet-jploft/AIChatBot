@@ -43,6 +43,7 @@ async function findByCompanyId(companyId) {
       vo.voice_custom_gender,
       vo.voice_ignore_emoji,
       vo.voice_response_enabled,
+      vo.voice_tts_language_code,
       esc.escalation_trigger_user_requests_human,
       esc.escalation_trigger_ai_confidence_low,
       esc.escalation_trigger_urgent_keywords,
@@ -61,7 +62,8 @@ async function findByCompanyId(companyId) {
       lg.language_primary,
       lg.language_multi_enabled,
       lg.language_auto_detect_enabled,
-      lg.language_manual_switch_enabled
+      lg.language_manual_switch_enabled,
+      lg.language_extra_locales
     FROM chatbots c
     INNER JOIN chat_settings ch ON ch.company_id = c.company_id
     INNER JOIN voice_settings vo ON vo.company_id = c.company_id

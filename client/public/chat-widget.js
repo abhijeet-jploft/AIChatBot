@@ -23,6 +23,10 @@
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
   var companyIconUrl = null;
   var companyGreetingMessage = null;
+mu  var companyPrimaryLanguage = 'en';
+  var companyVoiceTtsLanguage = '';
+  var companyContentLocaleHint = '';
+  var companyBusinessProfile = { id: 'generic_business' };
 
   var DEFAULT_OPENING_QUESTION = 'Are you looking to build something or just exploring ideas?';
   var CHAT_STATE_KEY = 'ai-chat-state';
@@ -51,6 +55,129 @@
     }
     if (apiKey) h['X-Embed-Api-Key'] = apiKey;
     return h;
+  }
+
+  var ISO_OPENING = { en: 'english', ru: 'russian', uk: 'ukrainian', ar: 'arabic', hi: 'hindi', ja: 'japanese', zh: 'chinese', ko: 'korean' };
+  var LANG_BCP47 = { en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', pl: 'pl-PL', tr: 'tr-TR', ru: 'ru-RU', uk: 'uk-UA', nl: 'nl-NL', cs: 'cs-CZ', ar: 'ar-SA', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR', hi: 'hi-IN', hu: 'hu-HU', fi: 'fi-FI', el: 'el-GR', he: 'he-IL', vi: 'vi-VN', no: 'nb-NO', sv: 'sv-SE', da: 'da-DK', ro: 'ro-RO', id: 'id-ID', ms: 'ms-MY', fil: 'fil-PH', sk: 'sk-SK', hr: 'hr-HR', bg: 'bg-BG', ta: 'ta-IN', te: 'te-IN', mr: 'mr-IN' };
+
+  function resolveWidgetSpeechBcp47(text) {
+    var t = String(text || '');
+    try {
+      if (/\p{Script=Cyrillic}/u.test(t)) return 'ru-RU';
+      if (/\p{Script=Arabic}/u.test(t)) return 'ar-SA';
+      if (/\p{Script=Devanagari}/u.test(t)) return 'hi-IN';
+      if (/\p{Script=Han}/u.test(t)) return 'zh-CN';
+      if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(t)) return 'ja-JP';
+      if (/\p{Script=Hangul}/u.test(t)) return 'ko-KR';
+    } catch (e) {}
+    var ove = String(companyVoiceTtsLanguage || '').trim().toLowerCase();
+    if (ove && LANG_BCP47[ove]) return LANG_BCP47[ove];
+    var c = String(companyPrimaryLanguage || 'en').trim().toLowerCase();
+    return LANG_BCP47[c] || 'en-US';
+  }
+
+  function normalizePrimaryLanguage(language) {
+    var value = String(language || '').trim().toLowerCase();
+    if (!value) return 'english';
+    if (Object.prototype.hasOwnProperty.call(ISO_OPENING, value)) return ISO_OPENING[value];
+    if (['ru', 'ru-ru', 'russian', 'русский', 'русский язык'].indexOf(value) >= 0) return 'russian';
+    if (['uk', 'uk-ua', 'ukrainian', 'українська', 'украинский'].indexOf(value) >= 0) return 'ukrainian';
+    if (['ar', 'arabic', 'العربية'].indexOf(value) >= 0) return 'arabic';
+    if (['hi', 'hindi', 'हिन्दी', 'हिंदी'].indexOf(value) >= 0) return 'hindi';
+    if (['ja', 'ja-jp', 'japanese', '日本語'].indexOf(value) >= 0) return 'japanese';
+    if (['zh', 'zh-cn', 'zh-tw', 'chinese', '中文'].indexOf(value) >= 0) return 'chinese';
+    if (['ko', 'ko-kr', 'korean', '한국어'].indexOf(value) >= 0) return 'korean';
+    return 'english';
+  }
+
+  function getEffectiveOpeningLanguage(primaryLanguage, contentLocaleHint, businessProfileId) {
+    var primary = normalizePrimaryLanguage(primaryLanguage);
+    var hint = contentLocaleHint ? normalizePrimaryLanguage(contentLocaleHint) : null;
+    if (primary !== 'english') return primary;
+    if (String(businessProfileId || 'generic_business') === 'ecommerce_marketplace' && hint && hint !== 'english') {
+      return hint;
+    }
+    return primary;
+  }
+
+  function isLegacyGenericGreeting(text, primaryLanguage, businessProfileId) {
+    var value = String(text || '').trim();
+    if (!value) return false;
+
+    var normalizedLanguage = normalizePrimaryLanguage(primaryLanguage);
+    var englishLegacy = /(hi!\s*welcome to|your digital consultant|are you looking to build something|exploring ideas)/i.test(value);
+    var genericBusinessPitch = /(цифровой консультант|решени(е|я) для своего бизнеса|наших услуг|изучаете возможности|what do you want to build|our services|business solution)/i.test(value);
+    var storeTerms = /(товар|товары|категори|акци|доставк|возврат|пункт(ы)? выдачи|магазин|маркетплейс|product|products|category|categories|promotion|delivery|return|pickup|store|marketplace)/i.test(value);
+
+    if (normalizedLanguage !== 'english' && englishLegacy) return true;
+    if (String(businessProfileId || 'generic_business') === 'ecommerce_marketplace' && genericBusinessPitch && !storeTerms) return true;
+    return false;
+  }
+
+  function buildOpeningCopy(language, legalName, botName, businessProfileId) {
+    var introName = String(botName || '').trim();
+    var welcomeCompany = String(legalName || companyName || 'our company').trim() || 'our company';
+
+    if (String(businessProfileId || 'generic_business') === 'ecommerce_marketplace') {
+      var marketplaceCopyByLanguage = {
+        russian: {
+          welcome: 'Здравствуйте! Добро пожаловать в ' + welcomeCompany + '!',
+          intro: introName ? 'Я ' + introName + '.' : 'Я помогу вам с сайтом магазина.',
+          question: 'Подскажу по товарам, категориям, акциям, доставке, возврату и пунктам выдачи. Что вас интересует?',
+        },
+        english: {
+          welcome: 'Hi! Welcome to ' + welcomeCompany + '!',
+          intro: introName ? "I\'m " + introName + '.' : 'I can help you with the store website.',
+          question: 'I can help with products, categories, promotions, delivery, returns, and pickup points. What are you looking for?',
+        },
+      };
+
+      return marketplaceCopyByLanguage[language] || marketplaceCopyByLanguage.english;
+    }
+
+    var copyByLanguage = {
+      russian: {
+        welcome: 'Здравствуйте! Добро пожаловать в ' + welcomeCompany + '!',
+        intro: introName ? 'Я ' + introName + ', ваш цифровой консультант.' : 'Я ваш цифровой консультант.',
+        question: 'Вы хотите что-то создать или просто изучаете варианты?',
+      },
+      ukrainian: {
+        welcome: 'Вітаю! Ласкаво просимо до ' + welcomeCompany + '!',
+        intro: introName ? 'Я ' + introName + ', ваш цифровий консультант.' : 'Я ваш цифровий консультант.',
+        question: 'Ви хочете щось створити чи просто вивчаєте варіанти?',
+      },
+      arabic: {
+        welcome: 'مرحباً! أهلاً بك في ' + welcomeCompany + '!',
+        intro: introName ? 'أنا ' + introName + '، مستشارك الرقمي.' : 'أنا مستشارك الرقمي.',
+        question: 'هل ترغب في بناء شيء ما أم أنك تستكشف الأفكار فقط؟',
+      },
+      hindi: {
+        welcome: 'नमस्ते! ' + welcomeCompany + ' में आपका स्वागत है!',
+        intro: introName ? 'मैं ' + introName + ' हूं, आपका डिजिटल कंसल्टेंट।' : 'मैं आपका डिजिटल कंसल्टेंट हूं।',
+        question: 'क्या आप कुछ बनवाना चाहते हैं या अभी सिर्फ विकल्प देख रहे हैं?',
+      },
+      japanese: {
+        welcome: 'こんにちは。' + welcomeCompany + 'へようこそ。',
+        intro: introName ? '私は' + introName + 'です。デジタルコンサルタントとしてご案内します。' : 'デジタルコンサルタントとしてご案内します。',
+        question: '何かを構築したいですか、それとも情報収集中ですか。',
+      },
+      chinese: {
+        welcome: '您好，欢迎来到' + welcomeCompany + '！',
+        intro: introName ? '我是' + introName + '，您的数字顾问。' : '我是您的数字顾问。',
+        question: '您是想开始搭建项目，还是先了解一下可选方案？',
+      },
+      korean: {
+        welcome: '안녕하세요. ' + welcomeCompany + '에 오신 것을 환영합니다.',
+        intro: introName ? '저는 ' + introName + '이며 디지털 컨설턴트입니다.' : '저는 디지털 컨설턴트입니다.',
+        question: '무언가를 구축하려고 하시나요, 아니면 먼저 아이디어를 살펴보고 계신가요?',
+      },
+      english: {
+        welcome: 'Hi! Welcome to ' + welcomeCompany + '!',
+        intro: introName ? "I'm " + introName + ', your digital consultant.' : "I'm your digital consultant.",
+        question: DEFAULT_OPENING_QUESTION,
+      },
+    };
+    return copyByLanguage[language] || copyByLanguage.english;
   }
 
   var activated = false;
@@ -634,6 +761,7 @@
       '#jploft-chat-root *{outline:none}',
       '#jploft-chat-root *::before,#jploft-chat-root *::after{box-sizing:border-box}',
 
+      '#jploft-chat-root .jploft-btn img.jploft-launcher-icon,#jploft-chat-root .jploft-close-fab img.jploft-launcher-icon{width:28px;height:28px;object-fit:contain;object-position:center;border-radius:8px;display:block;pointer-events:none}',
       '#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{position:fixed;right:24px;bottom:24px;width:56px;height:56px;border:0;border-radius:999px;padding:0;background:linear-gradient(135deg,var(--chat-launcher-gradient-start,#E02F3A),var(--chat-launcher-gradient-end,#B02530));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 18px 38px -20px var(--chat-launcher-shadow,rgba(224,47,58,.55));z-index:99998;transition:transform .2s,box-shadow .2s}',
       '#jploft-chat-root .jploft-btn:hover,#jploft-chat-root .jploft-close-fab:hover{transform:translateY(-2px);box-shadow:0 24px 45px -22px var(--chat-launcher-shadow,rgba(224,47,58,.7))}',
       '#jploft-chat-root .jploft-btn:focus,#jploft-chat-root .jploft-close-fab:focus{outline:2px solid rgba(255,255,255,.5);outline-offset:2px}',
@@ -733,6 +861,70 @@
     return div.innerHTML;
   }
 
+  /** Resolve relative / protocol-relative icon URLs against the host page (embed runs on third-party origins). */
+  function resolvePublicMediaUrl(raw) {
+    var s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^data:/i.test(s)) return s;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.indexOf('//') === 0) {
+      return (typeof window !== 'undefined' && window.location && window.location.protocol ? window.location.protocol : 'https:') + s;
+    }
+    if (typeof window === 'undefined' || !window.location) return s;
+    try {
+      return new URL(s, window.location.href).href;
+    } catch (e) {
+      return s;
+    }
+  }
+
+  var LAUNCHER_SVG =
+    '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="12" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>';
+
+  function setLauncherIconContents() {
+    if (!launcher) return;
+    launcher.innerHTML = '';
+    if (companyIconUrl) {
+      var img = document.createElement('img');
+      img.className = 'jploft-launcher-icon';
+      img.alt = '';
+      img.src = companyIconUrl;
+      img.onerror = function () {
+        launcher.innerHTML = LAUNCHER_SVG;
+      };
+      launcher.appendChild(img);
+    } else {
+      launcher.innerHTML = LAUNCHER_SVG;
+    }
+  }
+
+  function setAvatarContents(avatarEl) {
+    if (!avatarEl) return;
+    avatarEl.innerHTML = '';
+    var letter = String(avatarLetter || 'J').toUpperCase().charAt(0) || 'J';
+    if (!companyIconUrl) {
+      var spanOnly = document.createElement('span');
+      spanOnly.className = 'jploft-avatar-text';
+      spanOnly.textContent = letter;
+      avatarEl.appendChild(spanOnly);
+      return;
+    }
+    var img = document.createElement('img');
+    img.alt = '';
+    img.src = companyIconUrl;
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:center;background:#fff';
+    img.onerror = function () {
+      avatarEl.innerHTML = '';
+      var span = document.createElement('span');
+      span.className = 'jploft-avatar-text';
+      span.textContent = letter;
+      avatarEl.appendChild(span);
+    };
+    avatarEl.appendChild(img);
+  }
+
+  companyIconUrl = resolvePublicMediaUrl(config.iconUrl || null);
+
   function normalizeAssistantNameInText(text, assistantName) {
     var safeName = String(assistantName || '').replace(/\s+/g, ' ').trim();
     if (!safeName) return String(text || '');
@@ -827,13 +1019,15 @@
     return out;
   }
 
-  function getPreferredBrowserVoice(gender) {
+  function getPreferredBrowserVoice(gender, preferredBcp47) {
     if (typeof window === 'undefined' || !window.speechSynthesis) return null;
     var allVoices = window.speechSynthesis.getVoices() || [];
     if (!allVoices.length) return null;
 
-    var englishVoices = allVoices.filter(function (v) { return /^en(-|$)/i.test(v.lang || ''); });
-    var pool = englishVoices.length ? englishVoices : allVoices;
+    var want = String(preferredBcp47 || 'en-US').trim();
+    var prefix = want.split('-')[0].toLowerCase();
+    var langVoices = allVoices.filter(function (v) { return String(v.lang || '').toLowerCase().indexOf(prefix) === 0; });
+    var pool = langVoices.length ? langVoices : allVoices;
     var femaleHint = /(female|woman|zira|susan|samantha|aria|eva|linda|hazel|jenny|karen|emma|alloy)/i;
     var maleHint = /(male|man|david|mark|alex|guy|daniel|george|james|tom|ryan|adam)/i;
     var matcher = String(gender || 'female').toLowerCase() === 'male' ? maleHint : femaleHint;
@@ -852,16 +1046,18 @@
       return;
     }
 
+    var bcp47 = resolveWidgetSpeechBcp47(speechText);
+
     try {
       window.speechSynthesis.cancel();
 
       var utterance = new SpeechSynthesisUtterance(speechText);
-      var selectedVoice = getPreferredBrowserVoice(gender);
+      var selectedVoice = getPreferredBrowserVoice(gender, bcp47);
       if (selectedVoice) {
         utterance.voice = selectedVoice;
-        utterance.lang = selectedVoice.lang || 'en-US';
+        utterance.lang = selectedVoice.lang || bcp47;
       } else {
-        utterance.lang = 'en-US';
+        utterance.lang = bcp47;
       }
 
       utterance.pitch = String(gender || '').toLowerCase() === 'male' ? 0.9 : 1.1;
@@ -1011,6 +1207,34 @@
     }
   }
 
+  function fetchAssistantVoice(messageIndex, text) {
+    return fetch(apiUrl + '/chat/voice', {
+      method: 'POST',
+      headers: mergeHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        companyId: companyId,
+        sessionId: sessionId || undefined,
+        messageIndex: messageIndex,
+        text: text || '',
+      }),
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          return response.json().catch(function () { return {}; }).then(function (err) {
+            throw new Error(err.error || 'Failed to synthesize message voice');
+          });
+        }
+        return response.json();
+      })
+      .then(function (data) {
+        var audioDataUrl = data && data.voice && data.voice.audioDataUrl ? String(data.voice.audioDataUrl) : '';
+        if (!audioDataUrl) {
+          throw new Error('Missing ElevenLabs audio response');
+        }
+        return audioDataUrl;
+      });
+  }
+
   function playMessageVoice(messageIndex) {
     var msg = messages[messageIndex];
     if (!msg || msg.role !== 'assistant' || !msg.content || !voiceResponseEnabled) return;
@@ -1020,15 +1244,26 @@
       return;
     }
 
+    // Fallback when server-side TTS was unavailable for this message.
+    if (!voiceEnabled) return;
     pauseAssistantVoice();
     playingMessageIndex = messageIndex;
     renderMessages();
-    speakWithBrowserVoice(msg.content, voiceGender, voiceIgnoreEmoji, function () {
-      if (playingMessageIndex === messageIndex) {
-        playingMessageIndex = null;
-        renderMessages();
-      }
-    });
+    fetchAssistantVoice(messageIndex, msg.content)
+      .then(function (audioDataUrl) {
+        if (!messages[messageIndex]) return;
+        messages[messageIndex].voiceUrl = audioDataUrl;
+        persistState();
+        playAssistantVoice(audioDataUrl, messageIndex);
+      })
+      .catch(function () {
+        speakWithBrowserVoice(msg.content, voiceGender, voiceIgnoreEmoji, function () {
+          if (playingMessageIndex === messageIndex) {
+            playingMessageIndex = null;
+            renderMessages();
+          }
+        });
+      });
   }
 
   function applyVoiceFeatureState() {
@@ -1117,15 +1352,39 @@
   }
 
   function getOpeningMessage() {
-    if (companyGreetingMessage && companyGreetingMessage.trim()) return companyGreetingMessage.trim();
+    var profileId = companyBusinessProfile && companyBusinessProfile.id;
+    var effectiveOpening = getEffectiveOpeningLanguage(companyPrimaryLanguage, companyContentLocaleHint, profileId);
+    if (
+      companyGreetingMessage
+      && companyGreetingMessage.trim()
+      && !isLegacyGenericGreeting(companyGreetingMessage, effectiveOpening, profileId)
+    ) {
+      return companyGreetingMessage.trim();
+    }
 
-    var welcomeCompany = String(companyLegalName || companyName || 'our company').trim() || 'our company';
-    var introName = String(chatbotDisplayName || '').trim();
-    var introLine = introName
-      ? "I'm " + introName + ', your digital consultant.'
-      : "I'm your digital consultant.";
+    var copy = buildOpeningCopy(
+      effectiveOpening,
+      companyLegalName || companyName || 'our company',
+      chatbotDisplayName,
+      profileId
+    );
 
-    return 'Hi! Welcome to ' + welcomeCompany + '!\n' + introLine + '\n' + DEFAULT_OPENING_QUESTION;
+    return copy.welcome + '\n' + copy.intro + '\n' + copy.question;
+  }
+
+  function refreshLegacyOpeningMessage() {
+    if (!Array.isArray(messages) || messages.length === 0) return;
+    if (!messages[0] || messages[0].role !== 'assistant') return;
+    var profileId = companyBusinessProfile && companyBusinessProfile.id;
+    var effectiveOpening = getEffectiveOpeningLanguage(companyPrimaryLanguage, companyContentLocaleHint, profileId);
+    if (!isLegacyGenericGreeting(messages[0].content, effectiveOpening, profileId)) return;
+
+    var nextOpeningMessage = getOpeningMessage();
+    if (messages[0].content === nextOpeningMessage) return;
+
+    messages[0] = { role: 'assistant', content: nextOpeningMessage };
+    if (messagesEl) renderMessages();
+    persistState();
   }
 
   function openPanel() {
@@ -1222,8 +1481,6 @@
         if (voiceResponseEnabled) {
           if (voiceUrl) {
             playAssistantVoice(voiceUrl, assistantIndex);
-          } else if (voiceEnabled) {
-            playMessageVoice(assistantIndex);
           }
         }
         loadSessions();
@@ -1289,7 +1546,7 @@
     launcher.type = 'button';
     launcher.className = 'jploft-btn jploft-draggable';
     launcher.setAttribute('aria-label', 'Open chat');
-    launcher.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="12" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>';
+    launcher.innerHTML = LAUNCHER_SVG;
     launcher.style.display = 'flex';
     launcher.onclick = withDragGuard(openPanel);
 
@@ -1539,17 +1796,23 @@
           if (company.companyName) companyLegalName = company.companyName;
           if (company.chatbotName) chatbotDisplayName = company.chatbotName;
           if (company.displayName) companyName = company.displayName;
-          companyIconUrl = company.iconUrl || null;
+          companyIconUrl = resolvePublicMediaUrl(company.iconUrl || config.iconUrl);
           companyGreetingMessage = company.greetingMessage || null;
+          companyPrimaryLanguage = (company.language && company.language.primary) || 'en';
+          companyContentLocaleHint = (company.language && company.language.contentLocaleHint) || '';
+          companyBusinessProfile = company.businessProfile || { id: 'generic_business' };
+          refreshLegacyOpeningMessage();
           if (company.voice && typeof company.voice === 'object') {
             voiceEnabled = Boolean(company.voice.enabled);
             voiceResponseEnabled = company.voice.responseEnabled !== false;
             voiceGender = company.voice.gender === 'male' ? 'male' : 'female';
+            companyVoiceTtsLanguage = (company.voice.ttsLanguageCode && String(company.voice.ttsLanguageCode)) || '';
             voiceIgnoreEmoji = Boolean(company.voice.ignoreEmoji);
           } else {
             voiceEnabled = false;
             voiceResponseEnabled = true;
             voiceGender = 'female';
+            companyVoiceTtsLanguage = '';
             voiceIgnoreEmoji = false;
           }
           if (company.autoTrigger && typeof company.autoTrigger === 'object') {
@@ -1573,12 +1836,15 @@
           var avatarEl = widgetRoot.querySelector('.jploft-avatar');
           if (avatarEl) {
             avatarLetter = (companyName || '').trim().charAt(0) || 'J';
-            if (companyIconUrl) {
-              avatarEl.innerHTML = '<span class="jploft-avatar-text" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--chat-accent);">' + escapeHtml(avatarLetter.toUpperCase()) + '</span><img src="' + escapeHtml(companyIconUrl) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">';
-            } else {
-              avatarEl.innerHTML = '<span class="jploft-avatar-text">' + escapeHtml(avatarLetter.toUpperCase()) + '</span>';
-            }
+            setAvatarContents(avatarEl);
           }
+          setLauncherIconContents();
+        } else {
+          companyIconUrl = resolvePublicMediaUrl(config.iconUrl || null);
+          avatarLetter = (companyName || '').trim().charAt(0) || 'J';
+          var avatarFallback = widgetRoot.querySelector('.jploft-avatar');
+          if (avatarFallback) setAvatarContents(avatarFallback);
+          setLauncherIconContents();
         }
         messages = messages.map(function (msg) {
           if (!msg || msg.role !== 'assistant') return msg;

@@ -1,6 +1,12 @@
 const { getCompanies, loadCompanyContext } = require('../services/trainingLoader');
 const pool = require('../db/index');
 const { mergeCompanyTheme } = require('../services/companyTheme');
+const { inferCompanyProfile, inferTrainingContentLanguageHint } = require('../services/chatRules');
+const {
+  getLanguageCatalogForClient,
+  normalizeLanguagePrimaryToCode,
+  parseLanguageExtraLocalesJson,
+} = require('../services/supportedChatLanguages');
 
 function resolveAutoTriggerOpenMode(dbRow) {
   const enabled = dbRow?.auto_trigger_enabled !== false;
@@ -13,11 +19,28 @@ function resolveAutoTriggerOpenMode(dbRow) {
 
 /**
  * GET /api/train/companies
- * Returns companies from train_data, enriched with display_name, icon_url, greeting_message, theme from DB
+ * Returns companies from train_data, enriched with display_name, greeting, language, icon, and theme from DB
  */
 async function getCompaniesList(req, res) {
   try {
-    const companies = getCompanies();
+    const fsCompanies = getCompanies();
+    const { rows: dbCompanyRows } = await pool.query(
+      `SELECT c.company_id, c.name
+       FROM chatbots c
+       INNER JOIN chat_settings ch ON ch.company_id = c.company_id
+       WHERE c.company_id != '_default'
+       ORDER BY c.name ASC`
+    );
+    const merged = new Map();
+    for (const r of dbCompanyRows) {
+      merged.set(r.company_id, { id: r.company_id, name: r.name });
+    }
+    for (const c of fsCompanies) {
+      if (!merged.has(c.id)) {
+        merged.set(c.id, c);
+      }
+    }
+    const companies = Array.from(merged.values());
     if (!companies.length) {
       return res.json([]);
     }
@@ -36,11 +59,18 @@ async function getCompaniesList(req, res) {
               vo.voice_custom_id,
               vo.voice_custom_gender,
               vo.voice_ignore_emoji,
-              vo.voice_response_enabled
+                  vo.voice_response_enabled,
+                  vo.voice_tts_language_code,
+                  lg.language_primary,
+                  lg.language_multi_enabled,
+                  lg.language_auto_detect_enabled,
+                  lg.language_manual_switch_enabled,
+                  lg.language_extra_locales
          FROM chatbots c
          INNER JOIN chat_settings ch ON ch.company_id = c.company_id
          INNER JOIN theme_settings th ON th.company_id = c.company_id
          INNER JOIN voice_settings vo ON vo.company_id = c.company_id
+                INNER JOIN language_settings lg ON lg.company_id = c.company_id
        WHERE c.company_id = ANY($1::text[])`,
       [companyIds]
     );
@@ -53,10 +83,13 @@ async function getCompaniesList(req, res) {
       const resolvedProfile = customAvailable
         ? (dbRow.voice_profile === 'custom' ? 'custom' : (dbRow.voice_profile || 'professional'))
         : (dbRow.voice_profile === 'custom' ? 'professional' : (dbRow.voice_profile || 'professional'));
-      const resolvedGender = customAvailable
+      const resolvedGender = resolvedProfile === 'custom' && customAvailable
         ? (dbRow.voice_custom_gender === 'male' ? 'male' : 'female')
         : (dbRow.voice_gender === 'male' ? 'male' : 'female');
       const openMode = resolveAutoTriggerOpenMode(dbRow);
+      const trainingContext = loadCompanyContext(c.id);
+      const businessProfile = inferCompanyProfile({ context: trainingContext });
+      const contentLocaleHint = inferTrainingContentLanguageHint(trainingContext);
 
       return {
         id: c.id,
@@ -64,7 +97,7 @@ async function getCompaniesList(req, res) {
         companyName: companyLabel,
         chatbotName: chatbotRaw,
         displayName: chatbotRaw || companyLabel,
-        iconUrl: dbRow.icon_url || null,
+        iconUrl: (dbRow.icon_url && String(dbRow.icon_url).trim()) || null,
         greetingMessage: dbRow.greeting_message || null,
         widgetPosition: String(dbRow.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
         autoTrigger: {
@@ -84,7 +117,18 @@ async function getCompaniesList(req, res) {
           profile: resolvedProfile,
           customAvailable,
           ignoreEmoji: Boolean(dbRow.voice_ignore_emoji),
+          ttsLanguageCode: String(dbRow.voice_tts_language_code || '').trim().toLowerCase() || null,
         },
+        language: {
+          primary: normalizeLanguagePrimaryToCode(dbRow.language_primary || 'en'),
+          catalog: getLanguageCatalogForClient(),
+          multiEnabled: Boolean(dbRow.language_multi_enabled),
+          autoDetectEnabled: Boolean(dbRow.language_auto_detect_enabled !== false),
+          manualSwitchEnabled: Boolean(dbRow.language_manual_switch_enabled),
+          extraLocales: parseLanguageExtraLocalesJson(dbRow.language_extra_locales),
+          contentLocaleHint: contentLocaleHint || null,
+        },
+        businessProfile,
         theme: mergeCompanyTheme(c.id, {
           primaryColor: dbRow.theme_primary_color,
           primaryDarkColor: dbRow.theme_primary_dark_color,

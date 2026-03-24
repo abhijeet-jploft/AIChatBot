@@ -15,6 +15,8 @@ export default function CompanyVoiceSettings() {
     gender: 'female',
     profile: 'professional',
     ignoreEmoji: false,
+    ttsLanguageCode: '',
+    ttsLanguageCatalog: [{ code: '', label: 'Auto — follow message text' }],
     catalog: [],
   });
 
@@ -42,6 +44,15 @@ export default function CompanyVoiceSettings() {
   }, [voice.catalog]);
 
   const setField = (k, v) => setVoice((p) => ({ ...p, [k]: v }));
+  const choosePreset = (next) =>
+    setVoice((p) => ({
+      ...p,
+      ...next,
+      // Keep super-admin behavior aligned with admin page:
+      // choosing preset voice implies enabling spoken responses.
+      enabled: true,
+      responseEnabled: true,
+    }));
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -57,6 +68,7 @@ export default function CompanyVoiceSettings() {
             gender: voice.gender === 'male' ? 'male' : 'female',
             profile: voice.profile,
             ignoreEmoji: Boolean(voice.ignoreEmoji),
+            ttsLanguageCode: String(voice.ttsLanguageCode || '').trim() || null,
           },
         }),
       });
@@ -86,18 +98,35 @@ export default function CompanyVoiceSettings() {
         <div className="sa-field-check"><label><input type="checkbox" checked={Boolean(voice.responseEnabled)} onChange={(e) => setField('responseEnabled', e.target.checked)} />Voice response enabled</label></div>
         <div className="sa-field">
           <label>Voice profile</label>
-          <select value={voice.profile || 'professional'} onChange={(e) => setField('profile', e.target.value)}>
+          <select value={voice.profile || 'professional'} onChange={(e) => choosePreset({ profile: e.target.value })}>
             {profiles.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </div>
         <div className="sa-field">
           <label>Voice gender</label>
-          <select value={voice.gender === 'male' ? 'male' : 'female'} onChange={(e) => setField('gender', e.target.value === 'male' ? 'male' : 'female')}>
+          <select value={voice.gender === 'male' ? 'male' : 'female'} onChange={(e) => choosePreset({ gender: e.target.value === 'male' ? 'male' : 'female' })}>
             <option value="female">Female</option>
             <option value="male">Male</option>
           </select>
         </div>
         <div className="sa-field-check"><label><input type="checkbox" checked={Boolean(voice.ignoreEmoji)} onChange={(e) => setField('ignoreEmoji', e.target.checked)} />Ignore emoji in voice output</label></div>
+        <div className="sa-field">
+          <label>Spoken language (Text-to-Speech API)</label>
+          <select
+            value={voice.ttsLanguageCode || ''}
+            onChange={(e) => setField('ttsLanguageCode', e.target.value)}
+          >
+            {(Array.isArray(voice.ttsLanguageCatalog) && voice.ttsLanguageCatalog.length
+              ? voice.ttsLanguageCatalog
+              : [{ code: '', label: 'Auto — detect from message text' }]
+            ).map((opt) => (
+              <option key={opt.code || 'auto'} value={opt.code}>{opt.label}</option>
+            ))}
+          </select>
+          <p className="sa-text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Auto detects from text; set to Russian (etc.) if browser/ElevenLabs only spoke Latin words. Use multilingual ElevenLabs model on server.
+          </p>
+        </div>
         <div className="sa-field-actions">
           <button className="sa-btn sa-btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save voice settings'}</button>
         </div>

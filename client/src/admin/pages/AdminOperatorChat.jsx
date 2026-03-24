@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import ChatMain from '../../components/ChatMain';
 import { useAuth } from '../context/AuthContext';
 import { buildCompanyThemeStyle } from '../../lib/companyThemeStyle';
+import { resolveBrowserSpeechBCp47 } from '../../constants/chatLanguages';
 import '../../index.css';
 
 const THEME_KEY = 'ai-chat-theme';
@@ -53,12 +54,14 @@ export default function AdminOperatorChat() {
     [stripEmoji, stripLeadingInvisible]
   );
 
-  const getPreferredBrowserVoice = useCallback((gender) => {
+  const getPreferredBrowserVoice = useCallback((gender, preferredBcp47) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return null;
     const allVoices = window.speechSynthesis.getVoices() || [];
     if (!allVoices.length) return null;
-    const englishVoices = allVoices.filter((v) => /^en(-|$)/i.test(v.lang || ''));
-    const pool = englishVoices.length ? englishVoices : allVoices;
+    const want = String(preferredBcp47 || 'en-US').trim();
+    const prefix = want.split('-')[0].toLowerCase();
+    const langVoices = allVoices.filter((v) => String(v.lang || '').toLowerCase().startsWith(prefix));
+    const pool = langVoices.length ? langVoices : allVoices;
     const femaleHint = /(female|woman|zira|susan|samantha|aria|eva|linda|hazel|jenny|karen|emma|alloy)/i;
     const maleHint = /(male|man|david|mark|alex|guy|daniel|george|james|tom|ryan|adam)/i;
     const matcher = String(gender || 'female').toLowerCase() === 'male' ? maleHint : femaleHint;
@@ -66,21 +69,22 @@ export default function AdminOperatorChat() {
   }, []);
 
   const speakWithBrowserVoice = useCallback(
-    (text, gender = 'female', ignoreEmoji = false, onEnd) => {
+    (text, gender = 'female', ignoreEmoji = false, onEnd, localeOpts = {}) => {
       if (typeof window === 'undefined' || !window.speechSynthesis || typeof window.SpeechSynthesisUtterance === 'undefined') {
         return;
       }
       const speechText = sanitizeSpeechText(text, { ignoreEmoji });
       if (!speechText) return;
+      const bcp47 = resolveBrowserSpeechBCp47(speechText, localeOpts.companyLangCode, localeOpts.ttsOverride);
       try {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(speechText);
-        const selectedVoice = getPreferredBrowserVoice(gender);
+        const selectedVoice = getPreferredBrowserVoice(gender, bcp47);
         if (selectedVoice) {
           utterance.voice = selectedVoice;
-          utterance.lang = selectedVoice.lang || 'en-US';
+          utterance.lang = selectedVoice.lang || bcp47;
         } else {
-          utterance.lang = 'en-US';
+          utterance.lang = bcp47;
         }
         const isMale = String(gender || '').toLowerCase() === 'male';
         utterance.pitch = isMale ? 0.9 : 1.1;
@@ -240,9 +244,18 @@ export default function AdminOperatorChat() {
     (content, messageIndex) => {
       if (!content) return;
       setPlayingMessageIndex(messageIndex ?? null);
-      speakWithBrowserVoice(content, voiceGender, ignoreEmoji, () => setPlayingMessageIndex(null));
+      speakWithBrowserVoice(
+        content,
+        voiceGender,
+        ignoreEmoji,
+        () => setPlayingMessageIndex(null),
+        {
+          companyLangCode: settings?.language?.primary,
+          ttsOverride: settings?.voice?.ttsLanguageCode,
+        }
+      );
     },
-    [voiceGender, ignoreEmoji, speakWithBrowserVoice]
+    [voiceGender, ignoreEmoji, speakWithBrowserVoice, settings?.language?.primary, settings?.voice?.ttsLanguageCode]
   );
 
   if (!sessionId) {

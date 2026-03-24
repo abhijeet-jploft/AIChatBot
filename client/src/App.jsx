@@ -3,17 +3,136 @@ import { useLocation } from 'react-router-dom';
 import ChatSidebar from './components/ChatSidebar';
 import ChatMain from './components/ChatMain';
 import Landing from './pages/Landing';
+import { ISO_TO_OPENING_LANG, resolveBrowserSpeechBCp47 } from './constants/chatLanguages';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-function buildDefaultOpeningMessage(companyName, chatbotName) {
-  const safeCompanyName = String(companyName || DEFAULT_COMPANY_NAME).trim() || DEFAULT_COMPANY_NAME;
-  const safeChatbotName = String(chatbotName || '').trim();
-  const introLine = safeChatbotName
-    ? `I'm ${safeChatbotName}, your digital consultant.`
-    : "I'm your digital consultant.";
+function normalizePrimaryLanguage(language) {
+  const value = String(language || '').trim().toLowerCase();
+  if (!value) return 'english';
+  if (ISO_TO_OPENING_LANG[value]) return ISO_TO_OPENING_LANG[value];
+  if (['ru', 'ru-ru', 'russian', 'русский', 'русский язык'].includes(value)) return 'russian';
+  if (['uk', 'uk-ua', 'ukrainian', 'українська', 'украинский'].includes(value)) return 'ukrainian';
+  if (['ar', 'arabic', 'العربية'].includes(value)) return 'arabic';
+  if (['hi', 'hindi', 'हिन्दी', 'हिंदी'].includes(value)) return 'hindi';
+  if (['ja', 'ja-jp', 'japanese', '日本語'].includes(value)) return 'japanese';
+  if (['zh', 'zh-cn', 'zh-tw', 'chinese', '中文'].includes(value)) return 'chinese';
+  if (['ko', 'ko-kr', 'korean', '한국어'].includes(value)) return 'korean';
+  return 'english';
+}
 
-  return `Hi! Welcome to ${safeCompanyName}!\n${introLine}\nAre you looking to build something or just exploring ideas?`;
+/** When admin left primary as English but training text is clearly Russian retail, use training for the widget opening only. */
+function getEffectiveOpeningLanguage(primaryLanguage, contentLocaleHint, businessProfileId = 'generic_business') {
+  const primary = normalizePrimaryLanguage(primaryLanguage);
+  const hint = contentLocaleHint ? normalizePrimaryLanguage(contentLocaleHint) : null;
+  if (primary !== 'english') return primary;
+  if (String(businessProfileId) === 'ecommerce_marketplace' && hint && hint !== 'english') return hint;
+  return primary;
+}
+
+function isLegacyGenericGreeting(text, primaryLanguage, businessProfileId = 'generic_business') {
+  const value = String(text || '').trim();
+  if (!value) return false;
+
+  const normalizedLanguage = normalizePrimaryLanguage(primaryLanguage);
+  const englishLegacy = /(hi!\s*welcome to|your digital consultant|are you looking to build something|exploring ideas)/i.test(value);
+  const genericBusinessPitch = /(цифровой консультант|решени(е|я) для своего бизнеса|наших услуг|изучаете возможности|what do you want to build|our services|business solution)/i.test(value);
+  const storeTerms = /(товар|товары|категори|акци|доставк|возврат|пункт(ы)? выдачи|магазин|маркетплейс|product|products|category|categories|promotion|delivery|return|pickup|store|marketplace)/i.test(value);
+
+  if (normalizedLanguage !== 'english' && englishLegacy) {
+    return true;
+  }
+
+  if (businessProfileId === 'ecommerce_marketplace' && genericBusinessPitch && !storeTerms) {
+    return true;
+  }
+
+  return false;
+}
+
+function buildOpeningCopy(language, companyName, chatbotName, businessProfileId = 'generic_business') {
+  const introName = String(chatbotName || '').trim();
+  const safeCompanyName = String(companyName || DEFAULT_COMPANY_NAME).trim() || DEFAULT_COMPANY_NAME;
+
+  if (businessProfileId === 'ecommerce_marketplace') {
+    const marketplaceCopyByLanguage = {
+      russian: {
+        welcome: `Здравствуйте! Добро пожаловать в ${safeCompanyName}!`,
+        intro: introName ? `Я ${introName}.` : 'Я помогу вам с сайтом магазина.',
+        question: 'Подскажу по товарам, категориям, акциям, доставке, возврату и пунктам выдачи. Что вас интересует?',
+      },
+      english: {
+        welcome: `Hi! Welcome to ${safeCompanyName}!`,
+        intro: introName ? `I\'m ${introName}.` : 'I can help you with the store website.',
+        question: 'I can help with products, categories, promotions, delivery, returns, and pickup points. What are you looking for?',
+      },
+    };
+
+    return marketplaceCopyByLanguage[language] || marketplaceCopyByLanguage.english;
+  }
+
+  const copyByLanguage = {
+    russian: {
+      welcome: `Здравствуйте! Добро пожаловать в ${safeCompanyName}!`,
+      intro: introName ? `Я ${introName}, ваш цифровой консультант.` : 'Я ваш цифровой консультант.',
+      question: 'Вы хотите что-то создать или просто изучаете варианты?',
+    },
+    ukrainian: {
+      welcome: `Вітаю! Ласкаво просимо до ${safeCompanyName}!`,
+      intro: introName ? `Я ${introName}, ваш цифровий консультант.` : 'Я ваш цифровий консультант.',
+      question: 'Ви хочете щось створити чи просто вивчаєте варіанти?',
+    },
+    arabic: {
+      welcome: `مرحباً! أهلاً بك في ${safeCompanyName}!`,
+      intro: introName ? `أنا ${introName}، مستشارك الرقمي.` : 'أنا مستشارك الرقمي.',
+      question: 'هل ترغب في بناء شيء ما أم أنك تستكشف الأفكار فقط؟',
+    },
+    hindi: {
+      welcome: `नमस्ते! ${safeCompanyName} में आपका स्वागत है!`,
+      intro: introName ? `मैं ${introName} हूं, आपका डिजिटल कंसल्टेंट।` : 'मैं आपका डिजिटल कंसल्टेंट हूं।',
+      question: 'क्या आप कुछ बनवाना चाहते हैं या अभी सिर्फ विकल्प देख रहे हैं?',
+    },
+    japanese: {
+      welcome: `こんにちは。${safeCompanyName}へようこそ。`,
+      intro: introName ? `私は${introName}です。デジタルコンサルタントとしてご案内します。` : 'デジタルコンサルタントとしてご案内します。',
+      question: '何かを構築したいですか、それとも情報収集中ですか。',
+    },
+    chinese: {
+      welcome: `您好，欢迎来到${safeCompanyName}！`,
+      intro: introName ? `我是${introName}，您的数字顾问。` : '我是您的数字顾问。',
+      question: '您是想开始搭建项目，还是先了解一下可选方案？',
+    },
+    korean: {
+      welcome: `안녕하세요. ${safeCompanyName}에 오신 것을 환영합니다.`,
+      intro: introName ? `저는 ${introName}이며 디지털 컨설턴트입니다.` : '저는 디지털 컨설턴트입니다.',
+      question: '무언가를 구축하려고 하시나요, 아니면 먼저 아이디어를 살펴보고 계신가요?',
+    },
+    english: {
+      welcome: `Hi! Welcome to ${safeCompanyName}!`,
+      intro: introName ? `I'm ${introName}, your digital consultant.` : "I'm your digital consultant.",
+      question: 'Are you looking to build something or just exploring ideas?',
+    },
+  };
+
+  return copyByLanguage[language] || copyByLanguage.english;
+}
+
+function buildDefaultOpeningMessage(
+  companyName,
+  chatbotName,
+  primaryLanguage,
+  businessProfileId = 'generic_business',
+  contentLocaleHint = ''
+) {
+  const safeCompanyName = String(companyName || DEFAULT_COMPANY_NAME).trim() || DEFAULT_COMPANY_NAME;
+  const copy = buildOpeningCopy(
+    getEffectiveOpeningLanguage(primaryLanguage, contentLocaleHint, businessProfileId),
+    safeCompanyName,
+    chatbotName,
+    businessProfileId
+  );
+
+  return `${copy.welcome}\n${copy.intro}\n${copy.question}`;
 }
 
 function normalizeAssistantNameInText(text, chatbotName) {
@@ -47,6 +166,25 @@ const WIDGET_BUTTON_DRAGGED_KEY = 'ai-chat-widget-button-dragged';
 const CHAT_STATE_KEY = 'ai-chat-state';
 const DEFAULT_COMPANY_ID = '_JP_Loft';
 const DEFAULT_COMPANY_NAME = 'JP Loft';
+
+/** Icon URL from settings may be relative (e.g. /favicon.ico) or //cdn… — resolve against the current page. */
+function resolvePublicMediaUrl(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^data:/i.test(s)) return s;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('//')) {
+    if (typeof window === 'undefined' || !window.location) return `https:${s}`;
+    return `${window.location.protocol}${s}`;
+  }
+  if (typeof window === 'undefined') return s;
+  try {
+    return new URL(s, window.location.href).href;
+  } catch {
+    return s;
+  }
+}
+
 const MOBILE_BREAKPOINT = 768;
 const TABLET_BREAKPOINT = 1024; // below this: open in full page; above: panel relative to button
 const WIDGET_BUTTON_SIZE = 56;
@@ -432,6 +570,8 @@ export default function App() {
   });
   const [isDraggingWidgetButton, setIsDraggingWidgetButton] = useState(false);
   const [companyId, setCompanyId]   = useState(() => initialChatState?.companyId || DEFAULT_COMPANY_ID);
+  const [widgetHeaderIconFailed, setWidgetHeaderIconFailed] = useState(false);
+  const [widgetLauncherIconFailed, setWidgetLauncherIconFailed] = useState(false);
   const [companies, setCompanies]   = useState([]);
   const [messages, setMessages]     = useState(() => Array.isArray(initialChatState?.messages) ? initialChatState.messages : []);
   const [loading, setLoading]       = useState(false);
@@ -440,7 +580,23 @@ export default function App() {
   const currentCompany = companies.find((c) => c.id === companyId);
   const companyNameForOpening = currentCompany?.companyName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const chatbotNameForOpening = String(currentCompany?.chatbotName || '').trim();
-  const openingMessageText = String(currentCompany?.greetingMessage || '').trim() || buildDefaultOpeningMessage(companyNameForOpening, chatbotNameForOpening);
+  const businessProfileId = String(currentCompany?.businessProfile?.id || 'generic_business');
+  const effectiveOpeningLanguage = getEffectiveOpeningLanguage(
+    currentCompany?.language?.primary,
+    currentCompany?.language?.contentLocaleHint,
+    businessProfileId
+  );
+  const configuredOpeningMessage = String(currentCompany?.greetingMessage || '').trim();
+  const openingMessageText = configuredOpeningMessage
+    && !isLegacyGenericGreeting(configuredOpeningMessage, effectiveOpeningLanguage, businessProfileId)
+    ? configuredOpeningMessage
+    : buildDefaultOpeningMessage(
+      companyNameForOpening,
+      chatbotNameForOpening,
+      currentCompany?.language?.primary,
+      businessProfileId,
+      currentCompany?.language?.contentLocaleHint
+    );
   const resolvedAutoTriggerMode = resolveAutoTriggerOpenMode(currentCompany?.autoTrigger);
   const autoTriggerConfig = useMemo(() => ({
     enabled: resolvedAutoTriggerMode === 'auto',
@@ -462,6 +618,11 @@ export default function App() {
     currentCompany?.autoTrigger?.onPortfolioPage,
     currentCompany?.autoTrigger?.selectedPages,
   ]);
+
+  useEffect(() => {
+    setWidgetHeaderIconFailed(false);
+    setWidgetLauncherIconFailed(false);
+  }, [currentCompany?.iconUrl]);
 
   const dragStateRef = useRef({
     pointerId: null,
@@ -504,14 +665,16 @@ export default function App() {
     return out;
   }, [stripEmoji, stripLeadingInvisible]);
 
-  const getPreferredBrowserVoice = useCallback((gender) => {
+  const getPreferredBrowserVoice = useCallback((gender, preferredBcp47) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return null;
 
     const allVoices = window.speechSynthesis.getVoices() || [];
     if (!allVoices.length) return null;
 
-    const englishVoices = allVoices.filter((v) => /^en(-|$)/i.test(v.lang || ''));
-    const pool = englishVoices.length ? englishVoices : allVoices;
+    const want = String(preferredBcp47 || 'en-US').trim();
+    const prefix = want.split('-')[0].toLowerCase();
+    const langVoices = allVoices.filter((v) => String(v.lang || '').toLowerCase().startsWith(prefix));
+    const pool = langVoices.length ? langVoices : allVoices;
 
     const femaleHint = /(female|woman|zira|susan|samantha|aria|eva|linda|hazel|jenny|karen|emma|alloy)/i;
     const maleHint = /(male|man|david|mark|alex|guy|daniel|george|james|tom|ryan|adam)/i;
@@ -520,7 +683,7 @@ export default function App() {
     return pool.find((v) => matcher.test(v.name || '')) || pool[0] || null;
   }, []);
 
-  const speakWithBrowserVoice = useCallback((text, gender = 'female', ignoreEmoji = false, onEnd) => {
+  const speakWithBrowserVoice = useCallback((text, gender = 'female', ignoreEmoji = false, onEnd, localeOpts = {}) => {
     if (typeof window === 'undefined' || !window.speechSynthesis || typeof window.SpeechSynthesisUtterance === 'undefined') {
       return;
     }
@@ -528,16 +691,22 @@ export default function App() {
     const speechText = sanitizeSpeechText(text, { ignoreEmoji });
     if (!speechText) return;
 
+    const bcp47 = resolveBrowserSpeechBCp47(
+      speechText,
+      localeOpts.companyLangCode,
+      localeOpts.ttsOverride
+    );
+
     try {
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(speechText);
-      const selectedVoice = getPreferredBrowserVoice(gender);
+      const selectedVoice = getPreferredBrowserVoice(gender, bcp47);
       if (selectedVoice) {
         utterance.voice = selectedVoice;
-        utterance.lang = selectedVoice.lang || 'en-US';
+        utterance.lang = selectedVoice.lang || bcp47;
       } else {
-        utterance.lang = 'en-US';
+        utterance.lang = bcp47;
       }
 
       const isMale = String(gender || '').toLowerCase() === 'male';
@@ -564,6 +733,14 @@ export default function App() {
       if (typeof onEnd === 'function') onEnd();
     }
   }, [getPreferredBrowserVoice, sanitizeSpeechText]);
+
+  const browserVoiceLocaleOpts = useMemo(
+    () => ({
+      companyLangCode: currentCompany?.language?.primary,
+      ttsOverride: currentCompany?.voice?.ttsLanguageCode,
+    }),
+    [currentCompany?.language?.primary, currentCompany?.voice?.ttsLanguageCode]
+  );
 
   const pauseAssistantVoice = useCallback(() => {
     try {
@@ -805,6 +982,20 @@ export default function App() {
     setAutoPopupHandled(true);
   }, [isWebsiteView, widgetActivated, autoPopupHandled, messages.length, openingMessageShown, openingMessageText]);
 
+  useEffect(() => {
+    if (!messages.length) return;
+    const firstMessage = messages[0];
+    if (!firstMessage || firstMessage.role !== 'assistant') return;
+    if (!isLegacyGenericGreeting(firstMessage.content, effectiveOpeningLanguage, businessProfileId)) return;
+    if (firstMessage.content === openingMessageText) return;
+
+    setMessages((prev) => {
+      if (!prev.length || prev[0]?.role !== 'assistant') return prev;
+      if (!isLegacyGenericGreeting(prev[0]?.content, effectiveOpeningLanguage, businessProfileId)) return prev;
+      return [{ ...prev[0], content: openingMessageText }, ...prev.slice(1)];
+    });
+  }, [messages, openingMessageText, effectiveOpeningLanguage, businessProfileId]);
+
   // â”€â”€ Resize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const onResize = () => {
@@ -899,7 +1090,8 @@ export default function App() {
             const msg = JSON.parse(ev.data);
             if (msg.type === 'message' && msg.content != null) {
               const content = normalizeAssistantNameInText(String(msg.content), chatbotNameForOpening);
-              setMessages((prev) => [...prev, { role: 'assistant', content }]);
+              const voiceUrl = msg.voice?.audioDataUrl ? String(msg.voice.audioDataUrl) : undefined;
+              setMessages((prev) => [...prev, { role: 'assistant', content, voiceUrl }]);
             }
           } catch (_) {}
         };
@@ -1066,11 +1258,6 @@ export default function App() {
       }]);
       if (responseAudioDataUrl) {
         playAssistantVoice(responseAudioDataUrl, newAssistantIndex);
-      } else if (voiceEnabled && voiceResponseEnabled) {
-        const voiceGender = currentCompany?.voice?.gender === 'male' ? 'male' : 'female';
-        const ignoreEmoji = Boolean(currentCompany?.voice?.ignoreEmoji);
-        setPlayingMessageIndex(newAssistantIndex);
-        speakWithBrowserVoice(normalizedAssistantContent, voiceGender, ignoreEmoji, () => setPlayingMessageIndex(null));
       }
 
       // Update active session ID (server returns the created/used session)
@@ -1271,17 +1458,61 @@ export default function App() {
   };
 
   const companyName = currentCompany?.displayName || currentCompany?.name || DEFAULT_COMPANY_NAME;
-  const companyIconUrl = currentCompany?.iconUrl || null;
+  const companyIconUrl = resolvePublicMediaUrl(currentCompany?.iconUrl);
   const widgetSide = currentCompany?.widgetPosition === 'left' ? 'left' : 'right';
   const greetingMessage = currentCompany?.greetingMessage || null;
   const voiceEnabled = Boolean(currentCompany?.voice?.enabled);
   const voiceResponseEnabled = currentCompany?.voice?.responseEnabled !== false;
   const voiceGender = currentCompany?.voice?.gender === 'male' ? 'male' : 'female';
-  const handlePlayBrowserVoice = useCallback((content, messageIndex) => {
-    if (!content) return;
-    setPlayingMessageIndex(messageIndex ?? null);
-    speakWithBrowserVoice(content, voiceGender, Boolean(currentCompany?.voice?.ignoreEmoji), () => setPlayingMessageIndex(null));
-  }, [voiceGender, currentCompany?.voice?.ignoreEmoji, speakWithBrowserVoice]);
+  const handlePlayBrowserVoice = useCallback(async (content, messageIndex) => {
+    if (!content || messageIndex == null) return;
+
+    pauseAssistantVoice();
+    setPlayingMessageIndex(messageIndex);
+
+    try {
+      if (!sessionId) throw new Error('Session-backed ElevenLabs audio is unavailable');
+
+      const res = await fetch(`${API_BASE}/chat/voice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '',
+        },
+        body: JSON.stringify({
+          companyId: companyId || DEFAULT_COMPANY_ID,
+          sessionId: sessionId || undefined,
+          messageIndex: messageIndex ?? undefined,
+          text: content,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to synthesize message voice');
+      }
+
+      const data = await res.json();
+      const audioDataUrl = data?.voice?.audioDataUrl;
+      if (!audioDataUrl) {
+        throw new Error('Missing ElevenLabs audio response');
+      }
+
+      setMessages((prev) => prev.map((message, index) => (
+        index === messageIndex ? { ...message, voiceUrl: audioDataUrl } : message
+      )));
+      playAssistantVoice(audioDataUrl, messageIndex);
+      return;
+    } catch {
+      speakWithBrowserVoice(
+        content,
+        voiceGender,
+        Boolean(currentCompany?.voice?.ignoreEmoji),
+        () => setPlayingMessageIndex(null),
+        browserVoiceLocaleOpts
+      );
+    }
+  }, [pauseAssistantVoice, sessionId, companyId, playAssistantVoice, speakWithBrowserVoice, voiceGender, currentCompany?.voice?.ignoreEmoji, browserVoiceLocaleOpts]);
   const companyThemeStyle = buildCompanyThemeStyle(currentCompany?.theme, theme);
   const isFullPage = chatViewMode === CHAT_VIEW_MODES.FULL_PAGE;
   const isWidgetOpen = chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN;
@@ -1432,8 +1663,41 @@ export default function App() {
                   </svg>
                 </button>
 
-                <span className="chat-widget-avatar" style={{ width: 36, height: 36, borderRadius: 8, overflow: 'hidden', position: 'relative', flexShrink: 0 }} aria-hidden="true">
-                  {companyIconUrl && <img src={companyIconUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />}
+                <span
+                  className="chat-widget-avatar"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    position: 'relative',
+                    flexShrink: 0,
+                    background: 'rgba(255,255,255,0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  aria-hidden="true"
+                >
+                  {companyIconUrl && !widgetHeaderIconFailed ? (
+                    <img
+                      src={companyIconUrl}
+                      alt=""
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        objectPosition: 'center',
+                        display: 'block',
+                        background: '#fff',
+                      }}
+                      onError={() => setWidgetHeaderIconFailed(true)}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--chat-header-text, #fff)' }}>
+                      {(companyName || '?').trim().charAt(0).toUpperCase() || '?'}
+                    </span>
+                  )}
                 </span>
               </div>
             </header>
@@ -1475,12 +1739,23 @@ export default function App() {
           aria-label="Open chatbot"
           title="Open chatbot"
         >
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            <circle cx="9" cy="10" r="1" fill="currentColor" />
-            <circle cx="12" cy="10" r="1" fill="currentColor" />
-            <circle cx="15" cy="10" r="1" fill="currentColor" />
-          </svg>
+          {companyIconUrl && !widgetLauncherIconFailed ? (
+            <img
+              src={companyIconUrl}
+              alt=""
+              width={28}
+              height={28}
+              style={{ width: 28, height: 28, objectFit: 'contain', objectPosition: 'center', borderRadius: 8, display: 'block' }}
+              onError={() => setWidgetLauncherIconFailed(true)}
+            />
+          ) : (
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              <circle cx="9" cy="10" r="1" fill="currentColor" />
+              <circle cx="12" cy="10" r="1" fill="currentColor" />
+              <circle cx="15" cy="10" r="1" fill="currentColor" />
+            </svg>
+          )}
         </button>
       )}
     </>

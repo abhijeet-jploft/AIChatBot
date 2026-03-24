@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { loadCompanyContext } = require('./trainingLoader');
-const { buildDocxRulesPrompt, enforceOutputRules } = require('./chatRules');
+const { buildBusinessProfilePrompt, buildDocxRulesPrompt, buildLanguageInstruction, enforceOutputRules, inferCompanyProfile } = require('./chatRules');
 const {
   buildConversationModePrompt,
   buildModeContext,
@@ -28,8 +28,12 @@ const BASE_SYSTEM_PROMPT_PREFIX =
   '- Use emojis naturally in your responses to make the conversation fun and engaging (e.g. 👍 😊 ✨ 🎯 💡). Do not overuse—1–3 per message is enough.\n' +
   '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n';
 
-function buildBaseSystemPrompt(assistantName = '') {
-  return BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName });
+function buildBaseSystemPrompt(assistantName = '', languageInstruction = '', businessProfilePrompt = '', companyProfile = null) {
+  return [
+    BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName, companyProfile }),
+    languageInstruction,
+    businessProfilePrompt,
+  ].filter(Boolean).join('\n');
 }
 
 /**
@@ -44,10 +48,24 @@ function buildBaseSystemPrompt(assistantName = '') {
  *
  * If there is no company context, the base persona block itself carries the cache marker.
  */
-function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext = null, assistantName = '') {
+function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext = null, assistantName = '', languageConfig = {}) {
   const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const context = loadCompanyContext(companyId, userQuery);
-  const baseSystemPrompt = buildBaseSystemPrompt(assistantName);
+  const companyProfile = inferCompanyProfile({ context });
+  const languageInstruction = buildLanguageInstruction({
+    latestUserMessage: userQuery,
+    companyPrimaryLanguage: languageConfig?.primary,
+    languageMultiEnabled: languageConfig?.multiEnabled,
+    languageAutoDetectEnabled: languageConfig?.autoDetectEnabled,
+    languageExtraLocales: languageConfig?.extraLocales,
+    context,
+  });
+  const baseSystemPrompt = buildBaseSystemPrompt(
+    assistantName,
+    languageInstruction,
+    buildBusinessProfilePrompt(companyProfile),
+    companyProfile
+  );
 
   if (context) {
     return [
@@ -116,6 +134,8 @@ function buildCachedMessages(messages) {
  */
 async function sendMessage(companyId, messages, options = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
+  const companyContext = loadCompanyContext(companyId, latestUserMessage);
+  const companyProfile = inferCompanyProfile({ context: companyContext });
   const {
     modeId: requestedModeId,
     modeContext: providedModeContext,
@@ -123,6 +143,7 @@ async function sendMessage(companyId, messages, options = {}) {
     apiKey,
     model,
     assistantName,
+    languageConfig,
     ...anthropicOptions
   } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
@@ -135,7 +156,7 @@ async function sendMessage(companyId, messages, options = {}) {
   const params = {
     model: model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 1024,
-    system: buildSystemBlocks(companyId, latestUserMessage, modeId, modeContext, assistantName),
+    system: buildSystemBlocks(companyId, latestUserMessage, modeId, modeContext, assistantName, languageConfig),
     messages: buildCachedMessages(messages),
     ...anthropicOptions,
   };
@@ -144,7 +165,18 @@ async function sendMessage(companyId, messages, options = {}) {
   const response = await client.messages.create(params);
   const textBlock = response.content.find((b) => b.type === 'text');
   const modelText = textBlock ? textBlock.text : '';
-  return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig, assistantName });
+  return enforceOutputRules({
+    latestUserMessage,
+    modelText,
+    messages,
+    modeContext,
+    safetyConfig,
+    assistantName,
+    companyProfile,
+    companyPrimaryLanguage: languageConfig?.primary,
+    languageConfig,
+    context: companyContext,
+  });
 }
 
 module.exports = { sendMessage, buildSystemBlocks };

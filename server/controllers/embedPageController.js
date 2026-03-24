@@ -23,7 +23,8 @@ async function renderEmbedPage(req, res) {
   try {
     const { rows } = await pool.query(
       `SELECT c.company_id,
-              COALESCE(NULLIF(BTRIM(ch.display_name), ''), c.name) AS widget_title
+              COALESCE(NULLIF(BTRIM(ch.display_name), ''), c.name) AS widget_title,
+              ch.icon_url
        FROM embed_settings em
        INNER JOIN chatbots c ON c.company_id = em.company_id
        LEFT JOIN chat_settings ch ON ch.company_id = em.company_id
@@ -34,6 +35,7 @@ async function renderEmbedPage(req, res) {
       return res.status(404).type('text/plain').send('Not found');
     }
     const row = rows[0];
+    const iconUrlRaw = row.icon_url != null ? String(row.icon_url).trim() : '';
     const companyIdParam = String(req.query.companyId || req.query.company_id || '').trim();
     if (!companyIdParam || companyIdParam !== row.company_id) {
       return res.status(404).type('text/plain').send('Not found');
@@ -57,6 +59,7 @@ window.JPLoftChatConfig = {
   companyId: ${JSON.stringify(row.company_id)},
   companyName: ${JSON.stringify(row.widget_title || 'Chat')},
   apiKey: ${JSON.stringify(token)},
+  iconUrl: ${JSON.stringify(iconUrlRaw || '')},
   forceOpen: true
 };
 </script>

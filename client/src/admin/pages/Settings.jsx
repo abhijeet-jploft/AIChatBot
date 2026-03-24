@@ -98,6 +98,12 @@ export default function Settings() {
   const [chatbotName, setChatbotName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
+  const [languagePrimary, setLanguagePrimary] = useState('en');
+  const [languageCatalog, setLanguageCatalog] = useState([]);
+  const [languageMulti, setLanguageMulti] = useState(false);
+  const [languageAuto, setLanguageAuto] = useState(true);
+  const [languageManual, setLanguageManual] = useState(false);
+  const [languageExtra, setLanguageExtra] = useState([]);
   const [widgetPosition, setWidgetPosition] = useState('right');
   const [leadEmailNotificationsEnabled, setLeadEmailNotificationsEnabled] = useState(false);
   const [leadNotificationEmail, setLeadNotificationEmail] = useState('');
@@ -157,6 +163,14 @@ export default function Settings() {
         }
         if (d.safety) {
           setSafety((prev) => ({ ...prev, ...d.safety }));
+        }
+        if (d.language) {
+          setLanguagePrimary(d.language.primary || 'en');
+          setLanguageMulti(Boolean(d.language.multiEnabled));
+          setLanguageAuto(d.language.autoDetectEnabled !== false);
+          setLanguageManual(Boolean(d.language.manualSwitchEnabled));
+          setLanguageCatalog(Array.isArray(d.language.catalog) ? d.language.catalog : []);
+          setLanguageExtra(Array.isArray(d.language.extraLocales) ? d.language.extraLocales : []);
         }
       })
       .catch(() => showToast('Failed to load settings', 'error'));
@@ -225,6 +239,13 @@ export default function Settings() {
             restrictDatabasePriceExposure: safety.restrictDatabasePriceExposure,
             disableCompetitorComparisons: safety.disableCompetitorComparisons,
             restrictFileSharing: safety.restrictFileSharing,
+          },
+          language: {
+            primary: languagePrimary,
+            multiEnabled: languageMulti,
+            autoDetectEnabled: languageAuto,
+            manualSwitchEnabled: languageManual,
+            extraLocales: languageExtra,
           },
         }),
       });
@@ -334,19 +355,24 @@ export default function Settings() {
             <div className="mb-3">
               <label className="form-label">Icon URL</label>
               <input
-                type="url"
+                type="text"
                 className="form-control"
                 value={iconUrl}
                 onChange={(e) => setIconUrl(e.target.value)}
-                placeholder="https://example.com/icon.png"
+                placeholder="https://example.com/icon.ico or /favicon.ico"
+                inputMode="url"
+                autoComplete="off"
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               />
+              <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
+                PNG, SVG, or ICO. Use a full <code>https://…</code> URL, or a path like <code>/favicon.ico</code> relative to your site.
+              </div>
               {iconUrl && (
                 <div className="mt-2">
                   <img
                     src={iconUrl}
                     alt="Preview"
-                    style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }}
+                    style={{ width: 48, height: 48, objectFit: 'contain', objectPosition: 'center', borderRadius: 8, background: 'var(--chat-surface)' }}
                     onError={(e) => { e.target.style.display = 'none'; }}
                   />
                 </div>
@@ -363,6 +389,95 @@ export default function Settings() {
                 placeholder="Custom welcome message"
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               />
+            </div>
+
+            <div className="mb-4 p-3 rounded-3" style={cardStyle}>
+              <div className="fw-semibold mb-2" style={headingStyle}>Chat languages</div>
+              <p className="small mb-3" style={mutedStyle}>
+                Default language for replies when the visitor&apos;s language is unclear. With multi-language enabled, the assistant matches the visitor when possible.
+                ElevenLabs voice uses the same language hint as the generated reply (multilingual voices).
+              </p>
+              <div className="mb-3">
+                <label className="form-label">Primary language</label>
+                <select
+                  className="form-select"
+                  value={languagePrimary}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setLanguagePrimary(next);
+                    setLanguageExtra((prev) => prev.filter((c) => c !== next));
+                  }}
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                >
+                  {(languageCatalog.length
+                    ? languageCatalog
+                    : [{ code: 'en', label: 'English' }]
+                  ).map((opt) => (
+                    <option key={opt.code} value={opt.code}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-check mb-2">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="lang-multi"
+                  checked={languageMulti}
+                  onChange={(e) => setLanguageMulti(e.target.checked)}
+                />
+                <label className="form-check-label" htmlFor="lang-multi" style={labelStyle}>
+                  Multi-language replies (match visitor language when supported)
+                </label>
+              </div>
+              {languageMulti && (
+                <>
+                  <div className="form-check mb-2">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="lang-auto"
+                      checked={languageAuto}
+                      onChange={(e) => setLanguageAuto(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="lang-auto" style={labelStyle}>
+                      Auto-detect language from visitor messages
+                    </label>
+                  </div>
+                  <div className="form-check mb-3">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="lang-manual"
+                      checked={languageManual}
+                      onChange={(e) => setLanguageManual(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="lang-manual" style={labelStyle}>
+                      Allow manual language switch (widget / client)
+                    </label>
+                  </div>
+                  <label className="form-label">Additional reply languages (optional)</label>
+                  <p className="small mb-1" style={mutedStyle}>
+                    Hold Ctrl (Windows) or ⌘ (Mac) to select multiple. Leave empty to allow any supported language together with the primary.
+                  </p>
+                  <select
+                    multiple
+                    className="form-select"
+                    size={Math.min(12, Math.max(6, (languageCatalog.length || 8) - 1))}
+                    value={languageExtra}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                      setLanguageExtra(selected.filter((c) => c !== languagePrimary));
+                    }}
+                    style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                  >
+                    {languageCatalog
+                      .filter((opt) => opt.code !== languagePrimary)
+                      .map((opt) => (
+                        <option key={opt.code} value={opt.code}>{opt.label}</option>
+                      ))}
+                  </select>
+                </>
+              )}
             </div>
 
             <div className="mb-3">

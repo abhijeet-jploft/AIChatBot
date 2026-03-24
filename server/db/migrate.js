@@ -297,6 +297,8 @@ async function ensureModuleSettingsTables(client) {
   await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS anthropic_api_key TEXT');
   await client.query('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS gemini_api_key TEXT');
   await client.query('ALTER TABLE voice_settings ADD COLUMN IF NOT EXISTS elevenlabs_api_key TEXT');
+  await client.query('ALTER TABLE language_settings ADD COLUMN IF NOT EXISTS language_extra_locales TEXT');
+  await client.query('ALTER TABLE voice_settings ADD COLUMN IF NOT EXISTS voice_tts_language_code VARCHAR(12)');
 }
 
 async function splitMonolithicSettingsIntoModules(client) {
@@ -406,6 +408,8 @@ async function migrate() {
     console.log('[db] Module settings rows ensured');
     await backfillEmbedCredentials(client);
     console.log('[db] Embed paths ready');
+    await normalizeLanguagePrimaryCodes(client);
+    console.log('[db] Language primary codes normalized (if needed)');
     await ensureSuperAdminTables(client);
     console.log('[db] Super admin tables ready');
   } finally {
@@ -450,6 +454,33 @@ CREATE TABLE IF NOT EXISTS super_admin_alert_rules (
 async function ensureSuperAdminTables(client) {
   await client.query(SUPER_ADMIN_SCHEMA);
   await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
+}
+
+/** Map legacy language labels to ISO 639-1 codes used by admin + ElevenLabs. */
+async function normalizeLanguagePrimaryCodes(client) {
+  const {
+    normalizeLanguagePrimaryToCode,
+    parseLanguageExtraLocalesJson,
+    serializeLanguageExtraLocales,
+    normalizeLanguageExtraLocalesInput,
+  } = require('../services/supportedChatLanguages');
+
+  const { rows } = await client.query(
+    `SELECT company_id, language_primary, language_extra_locales FROM language_settings`
+  );
+  for (const r of rows) {
+    const nextPrimary = normalizeLanguagePrimaryToCode(r.language_primary);
+    const extra = normalizeLanguageExtraLocalesInput(
+      parseLanguageExtraLocalesJson(r.language_extra_locales),
+      nextPrimary
+    );
+    const extraJson = serializeLanguageExtraLocales(extra);
+    await client.query(
+      `UPDATE language_settings SET language_primary = $2, language_extra_locales = $3, updated_at = NOW()
+       WHERE company_id = $1 AND (language_primary IS DISTINCT FROM $2 OR language_extra_locales IS DISTINCT FROM $3)`,
+      [r.company_id, nextPrimary, extraJson]
+    );
+  }
 }
 
 module.exports = { migrate };

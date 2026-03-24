@@ -1,6 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { loadCompanyContext } = require('./trainingLoader');
-const { buildDocxRulesPrompt, enforceOutputRules } = require('./chatRules');
+const { buildBusinessProfilePrompt, buildDocxRulesPrompt, buildLanguageInstruction, enforceOutputRules, inferCompanyProfile } = require('./chatRules');
 const {
   buildConversationModePrompt,
   buildModeContext,
@@ -22,8 +22,12 @@ const BASE_SYSTEM_PROMPT_PREFIX =
   '- Use emojis naturally in your responses to make the conversation fun and engaging (e.g. 👍 😊 ✨ 🎯 💡). Do not overuse—1–3 per message is enough.\n' +
   '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n';
 
-function buildBaseSystemPrompt(assistantName = '') {
-  return BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName });
+function buildBaseSystemPrompt(assistantName = '', languageInstruction = '', businessProfilePrompt = '', companyProfile = null) {
+  return [
+    BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName, companyProfile }),
+    languageInstruction,
+    businessProfilePrompt,
+  ].filter(Boolean).join('\n');
 }
 
 const GEMINI_MODEL_FALLBACKS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-latest'];
@@ -34,13 +38,27 @@ function isModelNotFoundError(err) {
   return (msg.includes('404') && (msg.includes('not found') || msg.includes('not supported'))) || msg.includes('429');
 }
 
-function buildPrompt(companyId, messages, modeId, modeContext, assistantName = '') {
+function buildPrompt(companyId, messages, modeId, modeContext, assistantName = '', languageConfig = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
   const context = loadCompanyContext(companyId, latestUserMessage);
+  const companyProfile = inferCompanyProfile({ context });
   const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const convo = (messages || []).map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`).join('\n');
   return [
-    buildBaseSystemPrompt(assistantName),
+    buildBaseSystemPrompt(
+      assistantName,
+      buildLanguageInstruction({
+        latestUserMessage,
+        companyPrimaryLanguage: languageConfig?.primary,
+        languageMultiEnabled: languageConfig?.multiEnabled,
+        languageAutoDetectEnabled: languageConfig?.autoDetectEnabled,
+        languageExtraLocales: languageConfig?.extraLocales,
+        context,
+      })
+      ,
+      buildBusinessProfilePrompt(companyProfile),
+      companyProfile
+    ),
     context
       ? `## Company Knowledge Base\nUse the following information to answer accurately and contextually:\n\n${context}`
       : '## Company Knowledge Base\nNo company-specific context found.',
@@ -53,6 +71,8 @@ function buildPrompt(companyId, messages, modeId, modeContext, assistantName = '
 
 async function sendMessage(companyId, messages, options = {}) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
+  const companyContext = loadCompanyContext(companyId, latestUserMessage);
+  const companyProfile = inferCompanyProfile({ context: companyContext });
   const {
     modeId: requestedModeId,
     modeContext: providedModeContext,
@@ -60,6 +80,7 @@ async function sendMessage(companyId, messages, options = {}) {
     apiKey,
     model,
     assistantName,
+    languageConfig,
     ..._rest
   } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
@@ -75,7 +96,7 @@ async function sendMessage(companyId, messages, options = {}) {
   if (modelName.toLowerCase().includes('claude')) {
     modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   }
-  const prompt = buildPrompt(companyId, messages, modeId, modeContext, assistantName);
+  const prompt = buildPrompt(companyId, messages, modeId, modeContext, assistantName, languageConfig);
   const candidates = [modelName, ...GEMINI_MODEL_FALLBACKS].filter((v, i, arr) => v && arr.indexOf(v) === i);
   try {
     for (let i = 0; i < candidates.length; i += 1) {
@@ -84,7 +105,18 @@ async function sendMessage(companyId, messages, options = {}) {
         const gModel = genAI.getGenerativeModel({ model: candidate });
         const result = await gModel.generateContent(prompt);
         const modelText = result?.response?.text?.() || '';
-        return enforceOutputRules({ latestUserMessage, modelText, messages, modeContext, safetyConfig, assistantName });
+        return enforceOutputRules({
+          latestUserMessage,
+          modelText,
+          messages,
+          modeContext,
+          safetyConfig,
+          assistantName,
+          companyProfile,
+          companyPrimaryLanguage: languageConfig?.primary,
+          languageConfig,
+          context: companyContext,
+        });
       } catch (err) {
         if (isModelNotFoundError(err) && i < candidates.length - 1) continue;
         throw err;

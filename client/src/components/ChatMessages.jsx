@@ -97,7 +97,7 @@ export default function ChatMessages({ messages, loading, greetingMessage, onPla
             <div className="message-content">
               <MessageContent content={msg.content} isUser={msg.role === 'user'} />
             </div>
-            {msg.role === 'assistant' && msg.content && voiceResponseEnabled && (msg.voiceUrl || typeof onPlayBrowserVoice === 'function' || (voiceEnabled && typeof onPlayVoice === 'function')) && (
+            {msg.role === 'assistant' && msg.content && voiceResponseEnabled && (Boolean(msg.voiceUrl) || typeof onPlayBrowserVoice === 'function') && (
               <div className="mt-2 d-inline-flex align-items-center gap-2">
                 {playingMessageIndex === i ? (
                   <>
@@ -133,7 +133,10 @@ export default function ChatMessages({ messages, loading, greetingMessage, onPla
                       height: 28,
                       borderRadius: 8,
                     }}
-                    onClick={() => { if (msg.voiceUrl && onPlayVoice) onPlayVoice(msg.voiceUrl, i); else if (onPlayBrowserVoice) onPlayBrowserVoice(msg.content, i); }}
+                    onClick={() => {
+                      if (msg.voiceUrl && onPlayVoice) onPlayVoice(msg.voiceUrl, i);
+                      else if (onPlayBrowserVoice) onPlayBrowserVoice(msg.content, i);
+                    }}
                     aria-label="Play response"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>

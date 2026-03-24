@@ -57,6 +57,12 @@ export default function CompanySettings() {
   const [chatbotName, setChatbotName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
+  const [languagePrimary, setLanguagePrimary] = useState('en');
+  const [languageCatalog, setLanguageCatalog] = useState([]);
+  const [languageMulti, setLanguageMulti] = useState(false);
+  const [languageAuto, setLanguageAuto] = useState(true);
+  const [languageManual, setLanguageManual] = useState(false);
+  const [languageExtra, setLanguageExtra] = useState([]);
   const [widgetPosition, setWidgetPosition] = useState('right');
   const [leadEmailNotificationsEnabled, setLeadEmailNotificationsEnabled] = useState(false);
   const [leadNotificationEmail, setLeadNotificationEmail] = useState('');
@@ -87,6 +93,14 @@ export default function CompanySettings() {
         }));
       }
       if (d.safety) setSafety((prev) => ({ ...prev, ...d.safety }));
+      if (d.language) {
+        setLanguagePrimary(d.language.primary || 'en');
+        setLanguageMulti(Boolean(d.language.multiEnabled));
+        setLanguageAuto(d.language.autoDetectEnabled !== false);
+        setLanguageManual(Boolean(d.language.manualSwitchEnabled));
+        setLanguageCatalog(Array.isArray(d.language.catalog) ? d.language.catalog : []);
+        setLanguageExtra(Array.isArray(d.language.extraLocales) ? d.language.extraLocales : []);
+      }
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -132,6 +146,13 @@ export default function CompanySettings() {
           },
           escalation,
           safety,
+          language: {
+            primary: languagePrimary,
+            multiEnabled: languageMulti,
+            autoDetectEnabled: languageAuto,
+            manualSwitchEnabled: languageManual,
+            extraLocales: languageExtra,
+          },
         }),
       });
       const updated = await res.json();
@@ -173,12 +194,83 @@ export default function CompanySettings() {
         </div>
         <div className="sa-field">
           <label>Icon URL</label>
-          <input type="url" value={iconUrl} onChange={(e) => setIconUrl(e.target.value)} placeholder="https://example.com/icon.png" />
+          <input
+            type="text"
+            value={iconUrl}
+            onChange={(e) => setIconUrl(e.target.value)}
+            placeholder="https://…/favicon.ico or /favicon.ico"
+            inputMode="url"
+            autoComplete="off"
+          />
+          <p className="sa-text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+            PNG, SVG, or ICO — full URL or site-relative path.
+          </p>
         </div>
         <div className="sa-field">
           <label>Greeting message</label>
           <textarea className="sa-textarea" rows={3} value={greetingMessage} onChange={(e) => setGreetingMessage(e.target.value)} />
         </div>
+
+        <hr style={{ borderColor: 'var(--sa-border)' }} />
+        <h4 className="sa-panel-title" style={{ marginTop: 0 }}>Chat languages</h4>
+        <p className="sa-text-muted" style={{ fontSize: 12 }}>
+          Primary language and optional multi-language list. ElevenLabs uses multilingual models with a language hint from the reply text.
+        </p>
+        <div className="sa-field">
+          <label>Primary language</label>
+          <select
+            value={languagePrimary}
+            onChange={(e) => {
+              const next = e.target.value;
+              setLanguagePrimary(next);
+              setLanguageExtra((prev) => prev.filter((c) => c !== next));
+            }}
+          >
+            {(languageCatalog.length ? languageCatalog : [{ code: 'en', label: 'English' }]).map((opt) => (
+              <option key={opt.code} value={opt.code}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="sa-field-check">
+          <label>
+            <input type="checkbox" checked={languageMulti} onChange={(e) => setLanguageMulti(e.target.checked)} />
+            Multi-language replies
+          </label>
+        </div>
+        {languageMulti && (
+          <>
+            <div className="sa-field-check">
+              <label>
+                <input type="checkbox" checked={languageAuto} onChange={(e) => setLanguageAuto(e.target.checked)} />
+                Auto-detect visitor language
+              </label>
+            </div>
+            <div className="sa-field-check">
+              <label>
+                <input type="checkbox" checked={languageManual} onChange={(e) => setLanguageManual(e.target.checked)} />
+                Manual language switch
+              </label>
+            </div>
+            <div className="sa-field">
+              <label>Additional reply languages (multi-select)</label>
+              <select
+                multiple
+                className="sa-textarea"
+                style={{ minHeight: 160 }}
+                value={languageExtra}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                  setLanguageExtra(selected.filter((c) => c !== languagePrimary));
+                }}
+              >
+                {languageCatalog.filter((opt) => opt.code !== languagePrimary).map((opt) => (
+                  <option key={opt.code} value={opt.code}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+
         <div className="sa-field">
           <label>Widget side</label>
           <select value={widgetPosition} onChange={(e) => setWidgetPosition(e.target.value === 'left' ? 'left' : 'right')}>

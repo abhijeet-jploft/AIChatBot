@@ -6,6 +6,18 @@ import { useSaTheme } from '../context/ThemeContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+async function readJsonSafe(response) {
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const raw = await response.text().catch(() => '');
+  if (!raw) return {};
+  if (!contentType.includes('application/json')) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
 export default function Login() {
   const { theme } = useSaTheme();
   const { login } = useSuperAuth();
@@ -19,7 +31,7 @@ export default function Login() {
 
   useEffect(() => {
     fetch(`${API_BASE}/super-admin/auth/status`)
-      .then((r) => r.json())
+      .then((r) => readJsonSafe(r))
       .then((d) => setNeedsSetup(d.needsSetup))
       .catch(() => {});
   }, []);
@@ -35,7 +47,7 @@ export default function Login() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: username.trim(), email: setupEmail.trim() || undefined, password }),
         });
-        const data = await res.json();
+        const data = await readJsonSafe(res);
         if (!res.ok) throw new Error(data.error || 'Setup failed');
         await login(username.trim(), password);
       } else {

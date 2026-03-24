@@ -454,10 +454,10 @@ async function fetchPage(url) {
  */
 function buildJsonlLines(pages, globalText, companyName, rootUrl) {
   const system =
-    `You are a helpful AI sales assistant and customer representative for ${companyName}. ` +
-    `You help website visitors and customers with accurate, friendly answers using only the ` +
-    `provided business knowledge. Be professional, concise, and always guide users toward ` +
-    `taking action or booking a consultation.`;
+    `You are a helpful AI assistant for ${companyName}. ` +
+    `Answer visitors accurately using only the provided business knowledge. Be concise and professional. ` +
+    `For retail or marketplace sites, guide users toward products, orders, delivery, or support. ` +
+    `For service businesses, it is ok to guide toward contact or a meeting when relevant.`;
 
   const oneline = (s) => s.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
   const lines = [];

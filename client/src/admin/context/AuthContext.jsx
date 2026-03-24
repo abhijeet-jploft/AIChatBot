@@ -5,6 +5,30 @@ const ADMIN_TOKEN_KEY = 'admin_token';
 
 const AuthContext = createContext(null);
 
+async function readJsonSafe(response) {
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const raw = await response.text().catch(() => '');
+  if (!raw) return {};
+  if (!contentType.includes('application/json')) {
+    return {
+      error: response.ok
+        ? 'Server returned a non-JSON response.'
+        : 'Server returned a non-JSON error response.',
+      raw,
+    };
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {
+      error: response.ok
+        ? 'Server returned invalid JSON.'
+        : 'Server returned an invalid JSON error response.',
+      raw,
+    };
+  }
+}
+
 export function AuthProvider({ children }) {
   const [token, setTokenState] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem(ADMIN_TOKEN_KEY) : null
@@ -58,9 +82,9 @@ export function AuthProvider({ children }) {
     fetch(`${API_BASE}/admin/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => {
+      .then(async (r) => {
         if (!r.ok) throw new Error('Session invalid');
-        return r.json();
+        return await readJsonSafe(r);
       })
       .then((d) =>
         setCompany({
@@ -80,10 +104,15 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json();
+    const data = await readJsonSafe(res);
     if (!res.ok) {
       setError(data.error || 'Login failed');
-      throw new Error(data.error);
+      throw new Error(data.error || 'Login failed');
+    }
+    if (!data?.token) {
+      const message = data.error || 'Login failed: missing token in server response';
+      setError(message);
+      throw new Error(message);
     }
     setToken(data.token);
     setCompany({

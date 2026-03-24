@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
 
@@ -26,6 +26,11 @@ export default function ChatMain({
   const prevLoadingRef = useRef(loading);
   const prevMessageCountRef = useRef(messages.length);
   const scrollToLeadDoneRef = useRef(false);
+  const [headerIconFailed, setHeaderIconFailed] = useState(false);
+
+  useEffect(() => {
+    setHeaderIconFailed(false);
+  }, [companyIconUrl]);
 
   useEffect(() => {
     const scrollEl = scrollRef.current;
@@ -70,8 +75,28 @@ export default function ChatMain({
             boxShadow: 'var(--chat-header-shadow, none)',
           }}
         >
-          {companyIconUrl && (
-            <img src={companyIconUrl} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+          {companyIconUrl && !headerIconFailed ? (
+            <img
+              src={companyIconUrl}
+              alt=""
+              style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain', objectPosition: 'center', background: 'rgba(255,255,255,0.2)' }}
+              onError={() => setHeaderIconFailed(true)}
+            />
+          ) : (
+            <span
+              className="d-inline-flex align-items-center justify-content-center flex-shrink-0 fw-semibold"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                fontSize: 15,
+                background: 'rgba(255,255,255,0.2)',
+                color: 'inherit',
+              }}
+              aria-hidden
+            >
+              {(companyName || '?').trim().charAt(0).toUpperCase() || '?'}
+            </span>
           )}
           <div>
             <span className="fw-semibold" style={{ color: 'inherit' }}>{companyName}</span>

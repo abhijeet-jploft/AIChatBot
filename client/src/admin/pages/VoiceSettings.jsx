@@ -54,14 +54,32 @@ function normalizeCatalog(rawCatalog) {
       voices: {
         female: {
           label: item?.voices?.female?.label ? String(item.voices.female.label) : 'Female voice',
+          source: item?.voices?.female?.source ? String(item.voices.female.source) : 'fallback',
         },
         male: {
           label: item?.voices?.male?.label ? String(item.voices.male.label) : 'Male voice',
+          source: item?.voices?.male?.source ? String(item.voices.male.source) : 'fallback',
         },
       },
     }));
 
   return sanitized.length ? sanitized : FALLBACK_VOICE_CATALOG;
+}
+
+function getVoiceSourceMeta(source) {
+  if (String(source || '').toLowerCase() === 'elevenlabs') {
+    return {
+      label: 'Dynamic',
+      className: 'text-bg-success',
+      title: 'Loaded from ElevenLabs for the selected spoken language.',
+    };
+  }
+
+  return {
+    label: 'Fallback',
+    className: 'text-bg-secondary',
+    title: 'Using the built-in preset because no matching ElevenLabs default voice was found.',
+  };
 }
 
 export default function VoiceSettings() {
@@ -79,6 +97,8 @@ export default function VoiceSettings() {
   const [voiceGender, setVoiceGender] = useState('female');
   const [voiceProfile, setVoiceProfile] = useState('professional');
   const [voiceIgnoreEmoji, setVoiceIgnoreEmoji] = useState(false);
+  const [voiceTtsLanguage, setVoiceTtsLanguage] = useState('');
+  const [voiceTtsCatalog, setVoiceTtsCatalog] = useState([{ code: '', label: 'Auto — follow message text' }]);
   const [voiceCatalog, setVoiceCatalog] = useState(FALLBACK_VOICE_CATALOG);
   const [voiceList, setVoiceList] = useState([]);
   const [filterGender, setFilterGender] = useState('all');
@@ -133,6 +153,12 @@ export default function VoiceSettings() {
     const requestedProfile = String(data.voice?.profile || 'professional');
     setVoiceProfile(profileIds.has(requestedProfile) ? requestedProfile : catalog[0].id);
     setVoiceIgnoreEmoji(Boolean(data.voice?.ignoreEmoji));
+    setVoiceTtsLanguage(String(data.voice?.ttsLanguageCode || '').trim());
+    setVoiceTtsCatalog(
+      Array.isArray(data.voice?.ttsLanguageCatalog) && data.voice.ttsLanguageCatalog.length
+        ? data.voice.ttsLanguageCatalog
+        : [{ code: '', label: 'Auto — detect from message text' }]
+    );
   }, [authFetch]);
 
   const loadVoiceList = useCallback(async () => {
@@ -141,6 +167,7 @@ export default function VoiceSettings() {
       const params = new URLSearchParams();
       if (filterGender && filterGender !== 'all') params.set('gender', filterGender);
       if (filterProfile && filterProfile !== 'all') params.set('profile', filterProfile);
+      if (voiceTtsLanguage && voiceTtsLanguage.trim()) params.set('language', voiceTtsLanguage.trim());
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
       const res = await authFetch(`/settings/voices?${params.toString()}`);
       if (res.ok) {
@@ -154,7 +181,7 @@ export default function VoiceSettings() {
     } finally {
       setVoiceListLoading(false);
     }
-  }, [authFetch, filterGender, filterProfile, searchQuery]);
+  }, [authFetch, filterGender, filterProfile, searchQuery, voiceTtsLanguage]);
 
   useEffect(() => {
     loadVoiceList();
@@ -202,13 +229,23 @@ export default function VoiceSettings() {
   }, [filterProfile, profileFilterOptions]);
 
   const selectedVoiceMeta = useMemo(() => {
+    const selectedRow = voiceList.find((row) => row.profileId === voiceProfile && row.gender === voiceGender);
+    if (selectedRow) {
+      return {
+        profileLabel: selectedRow.profileLabel || 'Professional',
+        voiceName: selectedRow.voiceName || (voiceGender === 'male' ? 'Male voice' : 'Female voice'),
+        source: selectedRow.source || 'fallback',
+      };
+    }
+
     const selectedProfile = voiceCatalog.find((profile) => profile.id === voiceProfile) || voiceCatalog[0] || FALLBACK_VOICE_CATALOG[0];
     const selectedVoice = selectedProfile?.voices?.[voiceGender] || null;
     return {
       profileLabel: selectedProfile?.label || 'Professional',
       voiceName: selectedVoice?.label || (voiceGender === 'male' ? 'Male voice' : 'Female voice'),
+      source: selectedVoice?.source || 'fallback',
     };
-  }, [voiceCatalog, voiceProfile, voiceGender]);
+  }, [voiceCatalog, voiceList, voiceProfile, voiceGender]);
 
   const handleSubmit = useCallback(async (event) => {
     event.preventDefault();
@@ -227,6 +264,7 @@ export default function VoiceSettings() {
             gender: voiceGender,
             profile: voiceProfile,
             ignoreEmoji: voiceIgnoreEmoji,
+            ttsLanguageCode: voiceTtsLanguage.trim() || null,
           },
         }),
       });
@@ -241,11 +279,14 @@ export default function VoiceSettings() {
     } finally {
       setSaving(false);
     }
-  }, [authFetch, showToast, stopPreview, voiceEnabled, voiceResponseEnabled, voiceGender, voiceProfile, voiceIgnoreEmoji]);
+  }, [authFetch, showToast, stopPreview, voiceEnabled, voiceResponseEnabled, voiceGender, voiceProfile, voiceIgnoreEmoji, voiceTtsLanguage]);
 
   const handleChooseVoice = useCallback((profileId, gender) => {
     setVoiceProfile(profileId);
     setVoiceGender(gender);
+    // Choosing a preset implies intent to use TTS responses.
+    setVoiceEnabled(true);
+    setVoiceResponseEnabled(true);
   }, []);
 
   const handlePreviewVoice = useCallback(async (profileId, gender) => {
@@ -263,7 +304,11 @@ export default function VoiceSettings() {
       const res = await authFetch('/settings/voice-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: profileId, gender }),
+        body: JSON.stringify({
+          profile: profileId,
+          gender,
+          ttsLanguageCode: voiceTtsLanguage.trim() || undefined,
+        }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -300,7 +345,7 @@ export default function VoiceSettings() {
     } finally {
       setPreviewLoadingKey((prev) => (prev === voiceKey ? null : prev));
     }
-  }, [authFetch, playingPreviewKey, showToast, stopPreview]);
+  }, [authFetch, playingPreviewKey, showToast, stopPreview, voiceTtsLanguage]);
 
   const handleTrainCustomVoice = useCallback(async (event) => {
     event.preventDefault();
@@ -433,6 +478,27 @@ export default function VoiceSettings() {
           <p className="small mb-0 mt-1" style={{ color: 'var(--chat-muted)' }}>
             When enabled, emojis are removed from the text before it is sent to voice (TTS). Response in chat still shows emojis.
           </p>
+
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--chat-border)' }}>
+            <label className="form-label" htmlFor="voice-tts-lang" style={{ color: 'var(--chat-text-heading)' }}>
+              Spoken language (Text-to-Speech API)
+            </label>
+            <select
+              id="voice-tts-lang"
+              className="form-select"
+              value={voiceTtsLanguage}
+              onChange={(e) => setVoiceTtsLanguage(e.target.value)}
+              style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)', maxWidth: 420 }}
+            >
+              {voiceTtsCatalog.map((opt) => (
+                <option key={opt.code || 'auto'} value={opt.code}>{opt.label}</option>
+              ))}
+            </select>
+            <p className="small mb-0 mt-2" style={{ color: 'var(--chat-muted)' }}>
+              <strong>Auto</strong> detects language from the message (e.g. Cyrillic → Russian). If playback only spoke Latin words like brand names, pick the real language here.
+              Use a <strong>multilingual</strong> ElevenLabs model (e.g. <code>eleven_multilingual_v2</code> in server <code>.env</code>) — supported on free tier with monthly character credits.
+            </p>
+          </div>
         </div>
 
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
@@ -533,7 +599,7 @@ export default function VoiceSettings() {
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Preset voices</h6>
           <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>
-            Search and filter by gender or voice type, then use Hear voice to preview and Choose to select.
+            Preset voices reload for the selected spoken language when ElevenLabs exposes matching default voices. Search and filter by gender or voice type, then use Hear voice to preview and Choose to select.
           </p>
 
           <div className="row g-2 mb-3">
@@ -598,9 +664,15 @@ export default function VoiceSettings() {
                     const isSelected = selectedVoiceKey === rowKey;
                     const isLoadingPreview = previewLoadingKey === rowKey;
                     const isPlayingPreview = playingPreviewKey === rowKey;
+                    const sourceMeta = getVoiceSourceMeta(row.source);
                     return (
                       <tr key={rowKey} style={isSelected ? { background: 'rgba(59, 130, 246, 0.08)' } : undefined}>
-                        <td style={{ fontWeight: 600 }}>{row.voiceName}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          <div className="d-flex align-items-center gap-2 flex-wrap">
+                            <span>{row.voiceName}</span>
+                            <span className={`badge ${sourceMeta.className}`} title={sourceMeta.title}>{sourceMeta.label}</span>
+                          </div>
+                        </td>
                         <td style={{ textTransform: 'capitalize' }}>{row.gender}</td>
                         <td>{row.profileLabel}</td>
                         <td className="text-end">
@@ -629,7 +701,15 @@ export default function VoiceSettings() {
           </div>
 
           <div className="small mt-3" style={{ color: 'var(--chat-muted)' }}>
-            Selected: {selectedVoiceMeta.profileLabel} — {voiceGender === 'male' ? 'Male' : 'Female'} ({selectedVoiceMeta.voiceName})
+            {(() => {
+              const sourceMeta = getVoiceSourceMeta(selectedVoiceMeta.source);
+              return (
+                <span>
+                  Selected: {selectedVoiceMeta.profileLabel} — {voiceGender === 'male' ? 'Male' : 'Female'} ({selectedVoiceMeta.voiceName}){' '}
+                  <span className={`badge ${sourceMeta.className}`} title={sourceMeta.title}>{sourceMeta.label}</span>
+                </span>
+              );
+            })()}
           </div>
         </div>
 

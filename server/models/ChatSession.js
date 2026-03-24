@@ -35,11 +35,11 @@ async function listByCompany(companyId, limit = 100) {
 /**
  * Get session by id.
  * @param {string} id
- * @returns {Promise<{title: string}|null>}
+ * @returns {Promise<{title: string, company_id: string}|null>}
  */
 async function findById(id) {
   const { rows } = await pool.query(
-    `SELECT title FROM chat_sessions WHERE id = $1`,
+    `SELECT title, company_id FROM chat_sessions WHERE id = $1`,
     [id]
   );
   return rows[0] || null;
