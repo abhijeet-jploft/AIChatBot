@@ -141,6 +141,13 @@
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.sa-user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .sa-user-name { font-size: 13px; font-weight: 600; color: var(--sa-text-heading); line-height: 1.2; }
 .sa-user-role { font-size: 11px; color: var(--sa-text-muted); }
@@ -380,6 +387,28 @@
   outline: none;
 }
 .sa-input-sm:focus { border-color: var(--sa-accent); }
+
+/* Super admin profile page */
+.sa-profile-panel { max-width: 520px; }
+.sa-profile-subtitle { margin-top: 6px; }
+.sa-profile-photo-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.sa-profile-avatar-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--sa-surface-2, #2a2a32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--sa-border);
+}
+.sa-profile-avatar-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sa-profile-avatar-fallback { font-size: 28px; font-weight: 700; color: var(--sa-text-heading); }
+.sa-profile-photo-note { font-size: 12px; margin-top: 8px; }
+.sa-profile-divider { border-color: var(--sa-border); margin: 20px 0; }
+.sa-profile-password-note { font-size: 13px; margin-top: 0; }
 
 /* ─── Modal ─── */
 .sa-modal-overlay {

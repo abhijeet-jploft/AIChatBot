@@ -29,12 +29,22 @@ async function readJsonSafe(response) {
   }
 }
 
+function mapSuperAdminMe(d) {
+  if (!d || typeof d !== 'object') return null;
+  return {
+    id: d.id,
+    username: d.username,
+    email: d.email ?? null,
+    avatarUrl: d.avatarUrl ?? null,
+  };
+}
+
 export function SuperAuthProvider({ children }) {
   const [token, setTokenState] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem(SA_TOKEN_KEY) : null
   );
   const [admin, setAdmin] = useState(null);
-  const [loading, setLoading] = useState(!!localStorage.getItem(SA_TOKEN_KEY));
+  const [loading, setLoading] = useState(() => !!localStorage.getItem(SA_TOKEN_KEY));
 
   const setToken = useCallback((t) => {
     setTokenState(t);
@@ -47,16 +57,38 @@ export function SuperAuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem(SA_TOKEN_KEY);
-    if (!storedToken) { setLoading(false); return; }
+    if (!token) {
+      setAdmin(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     fetch(`${API_BASE}/super-admin/auth/me`, {
-      headers: { Authorization: `Bearer ${storedToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     })
-      .then(async (r) => { if (!r.ok) throw new Error('Session invalid'); return await readJsonSafe(r); })
-      .then(setAdmin)
+      .then(async (r) => {
+        if (!r.ok) throw new Error('Session invalid');
+        return readJsonSafe(r);
+      })
+      .then((d) => setAdmin(mapSuperAdminMe(d)))
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
-  }, [setToken]);
+  }, [token, setToken]);
+
+  const refreshAdmin = useCallback(async () => {
+    const storedToken = localStorage.getItem(SA_TOKEN_KEY);
+    if (!storedToken) return;
+    try {
+      const r = await fetch(`${API_BASE}/super-admin/auth/me`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      if (!r.ok) return;
+      const d = await readJsonSafe(r);
+      setAdmin(mapSuperAdminMe(d));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const login = useCallback(async (username, password) => {
     const res = await fetch(`${API_BASE}/super-admin/auth/login`, {
@@ -68,7 +100,6 @@ export function SuperAuthProvider({ children }) {
     if (!res.ok) throw new Error(data.error || 'Login failed');
     if (!data?.token) throw new Error(data.error || 'Login failed: missing token in server response');
     setToken(data.token);
-    setAdmin({ username: data.username });
   }, [setToken]);
 
   const logout = useCallback(async () => {
@@ -84,14 +115,15 @@ export function SuperAuthProvider({ children }) {
 
   const saFetch = useCallback((path, options = {}) => {
     const storedToken = localStorage.getItem(SA_TOKEN_KEY);
-    return fetch(`${API_BASE}/super-admin${path}`, {
-      ...options,
-      headers: { ...options.headers, Authorization: `Bearer ${storedToken}` },
-    });
+    const headers = { ...(options.headers || {}) };
+    if (storedToken) headers.Authorization = `Bearer ${storedToken}`;
+    return fetch(`${API_BASE}/super-admin${path}`, { ...options, headers });
   }, []);
 
   return (
-    <SuperAuthContext.Provider value={{ token, admin, loading, login, logout, saFetch }}>
+    <SuperAuthContext.Provider
+      value={{ token, admin, loading, login, logout, saFetch, refreshAdmin }}
+    >
       {children}
     </SuperAuthContext.Provider>
   );

@@ -2,7 +2,7 @@ const pool = require('../../db/index');
 
 async function findByUsername(username) {
   const { rows } = await pool.query(
-    `SELECT id, username, email, password_hash FROM super_admins WHERE username = $1`,
+    `SELECT id, username, email, password_hash, avatar_url FROM super_admins WHERE username = $1`,
     [username]
   );
   return rows[0] || null;
@@ -10,10 +10,32 @@ async function findByUsername(username) {
 
 async function findById(id) {
   const { rows } = await pool.query(
-    `SELECT id, username, email FROM super_admins WHERE id = $1`,
+    `SELECT id, username, email, avatar_url FROM super_admins WHERE id = $1`,
     [id]
   );
   return rows[0] || null;
+}
+
+async function findOtherByUsername(username, excludeId) {
+  const { rows } = await pool.query(
+    `SELECT id FROM super_admins WHERE username = $1 AND id <> $2`,
+    [username, excludeId]
+  );
+  return rows[0] || null;
+}
+
+async function updateProfile(id, username, email) {
+  await pool.query(
+    `UPDATE super_admins SET username = $1, email = $2, updated_at = NOW() WHERE id = $3`,
+    [username, email || null, id]
+  );
+}
+
+async function setAvatarUrl(id, url) {
+  await pool.query(
+    `UPDATE super_admins SET avatar_url = $1, updated_at = NOW() WHERE id = $2`,
+    [url || null, id]
+  );
 }
 
 async function countAll() {
@@ -67,6 +89,9 @@ async function deleteAllSessions(superAdminId) {
 module.exports = {
   findByUsername,
   findById,
+  findOtherByUsername,
+  updateProfile,
+  setAvatarUrl,
   countAll,
   create,
   setPassword,

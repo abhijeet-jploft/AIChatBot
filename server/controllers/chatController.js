@@ -384,14 +384,19 @@ async function synthesizeMessageVoice(req, res) {
 
       const rows = await ChatMessage.listBySession(sessionId);
       const targetMessage = rows[normalizedIndex];
-      if (!targetMessage || targetMessage.role !== 'assistant') {
+
+      if (targetMessage?.role === 'assistant') {
+        assistantText = String(targetMessage.content || '').trim();
+      } else if (directText) {
+        // Widget greetings can be rendered locally before they exist in chat_messages.
+        assistantText = directText;
+      } else {
         return res.status(404).json({ error: 'Assistant message not found' });
       }
 
-      assistantText = String(targetMessage.content || '').trim();
       if (!resolvedUserText) {
         const priorUserMessage = rows
-          .slice(0, normalizedIndex)
+          .slice(0, Math.max(0, normalizedIndex))
           .reverse()
           .find((message) => message.role === 'user' && String(message.content || '').trim());
         resolvedUserText = String(priorUserMessage?.content || '').trim();

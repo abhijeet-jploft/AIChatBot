@@ -9,6 +9,7 @@ const systemController = require('../controllers/systemController');
 const { requireSuperAuth } = require('../middleware/requireSuperAuth');
 
 const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+const uploadAvatar = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -20,6 +21,8 @@ router.post('/auth/login', authController.login);
 // ─── Protected ───────────────────────────────────────────────────────────────
 router.post('/auth/logout', requireSuperAuth, authController.logout);
 router.get('/auth/me', requireSuperAuth, authController.me);
+router.patch('/auth/profile', requireSuperAuth, authController.updateProfile);
+router.post('/auth/profile/avatar', requireSuperAuth, uploadAvatar.single('avatar'), authController.uploadProfileAvatar);
 router.post('/auth/change-password', requireSuperAuth, authController.changePassword);
 
 // Dashboard

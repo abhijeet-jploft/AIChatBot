@@ -1545,8 +1545,6 @@ export default function App() {
     setPlayingMessageIndex(messageIndex);
 
     try {
-      if (!sessionId) throw new Error('Session-backed ElevenLabs audio is unavailable');
-
       const res = await fetch(`${API_BASE}/chat/voice`, {
         method: 'POST',
         headers: {

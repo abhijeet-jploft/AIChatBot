@@ -5,6 +5,45 @@ const ADMIN_TOKEN_KEY = 'admin_token';
 
 const AuthContext = createContext(null);
 
+/**
+ * Super-admin "Open as company admin" stores a one-time payload in localStorage and opens
+ * `/admin?handoff=…`. We must consume that synchronously before the first render, otherwise
+ * AdminApp sees token=null and redirects to `/admin/login` before useEffect runs.
+ */
+function readInitialAdminToken() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const hid = params.get('handoff');
+    if (hid) {
+      const raw = localStorage.getItem(`admin_handoff_${hid}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const handoffToken = parsed?.token;
+        const ts = parsed?.ts;
+        if (handoffToken && typeof ts === 'number') {
+          if (Date.now() - ts > 120000) {
+            localStorage.removeItem(`admin_handoff_${hid}`);
+          } else {
+            localStorage.removeItem(`admin_handoff_${hid}`);
+            localStorage.setItem(ADMIN_TOKEN_KEY, handoffToken);
+            const path = window.location.pathname || '/admin';
+            window.history.replaceState({}, '', path);
+            return handoffToken;
+          }
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    return localStorage.getItem(ADMIN_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
 async function readJsonSafe(response) {
   const contentType = String(response.headers.get('content-type') || '').toLowerCase();
   const raw = await response.text().catch(() => '');
@@ -30,11 +69,11 @@ async function readJsonSafe(response) {
 }
 
 export function AuthProvider({ children }) {
-  const [token, setTokenState] = useState(() =>
-    typeof window !== 'undefined' ? localStorage.getItem(ADMIN_TOKEN_KEY) : null
-  );
+  const [token, setTokenState] = useState(() => readInitialAdminToken());
   const [company, setCompany] = useState(null);
-  const [loading, setLoading] = useState(!!token);
+  const [loading, setLoading] = useState(
+    () => typeof window !== 'undefined' && !!localStorage.getItem(ADMIN_TOKEN_KEY)
+  );
   const [error, setError] = useState(null);
 
   const setToken = useCallback((t) => {
@@ -44,33 +83,6 @@ export function AuthProvider({ children }) {
     } else {
       try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch {}
       setCompany(null);
-    }
-  }, []);
-
-  /** Super-admin “Open as company admin” passes a one-time token via localStorage + ?handoff= */
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const hid = params.get('handoff');
-    if (!hid) return;
-    try {
-      const raw = localStorage.getItem(`admin_handoff_${hid}`);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const { token: handoffToken, ts } = parsed;
-      if (!handoffToken || typeof ts !== 'number') return;
-      if (Date.now() - ts > 120000) {
-        localStorage.removeItem(`admin_handoff_${hid}`);
-        return;
-      }
-      localStorage.removeItem(`admin_handoff_${hid}`);
-      localStorage.setItem(ADMIN_TOKEN_KEY, handoffToken);
-      setTokenState(handoffToken);
-      setLoading(true);
-      const path = window.location.pathname || '/admin';
-      window.history.replaceState({}, '', path);
-    } catch {
-      /* ignore */
     }
   }, []);
 

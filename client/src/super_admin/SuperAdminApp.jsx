@@ -17,7 +17,16 @@ import CompanyConfigurations from './pages/CompanyConfigurations';
 import CompanyVoiceSettings from './pages/CompanyVoiceSettings';
 import CompanyThemeSettings from './pages/CompanyThemeSettings';
 import CompanyModeSettings from './pages/CompanyModeSettings';
+import SuperAdminProfile from './pages/SuperAdminProfile';
 import './index.css';
+
+function saAvatarSrc(url) {
+  const s = String(url || '').trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s) || s.startsWith('data:')) return s;
+  if (typeof window !== 'undefined' && s.startsWith('/')) return `${window.location.origin}${s}`;
+  return s;
+}
 
 function SuperAdminLayout({ children }) {
   const { admin, logout } = useSuperAuth();
@@ -32,6 +41,7 @@ function SuperAdminLayout({ children }) {
         { to: '/super-admin', label: 'Dashboard', end: true },
         { to: '/super-admin/companies', label: 'Companies', end: false },
         { to: '/super-admin/reports', label: 'Reports' },
+        { to: '/super-admin/profile', label: 'My profile' },
       ],
     },
     {
@@ -93,10 +103,16 @@ function SuperAdminLayout({ children }) {
 
           <div className="sa-sidebar-footer">
             <div className="sa-sidebar-user">
-              <div className="sa-user-avatar">{admin?.username?.[0]?.toUpperCase() || 'S'}</div>
+              <div className="sa-user-avatar">
+                {admin?.avatarUrl ? (
+                  <img src={saAvatarSrc(admin.avatarUrl)} alt="" />
+                ) : (
+                  admin?.username?.[0]?.toUpperCase() || 'S'
+                )}
+              </div>
               <div>
                 <div className="sa-user-name">{admin?.username || 'Super Admin'}</div>
-                <div className="sa-user-role">Platform Admin</div>
+                <div className="sa-user-role">{admin?.email || 'Platform Admin'}</div>
               </div>
             </div>
             <button className="sa-logout-btn" onClick={handleLogout} title="Sign out">
@@ -185,6 +201,7 @@ export default function SuperAdminApp() {
                   <Route path="monitoring" element={<SystemMonitoring />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="alert-rules" element={<AlertRules />} />
+                  <Route path="profile" element={<SuperAdminProfile />} />
                   <Route path="*" element={<Navigate to="/super-admin" replace />} />
                 </Routes>
               </SuperAdminLayout>

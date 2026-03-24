@@ -454,6 +454,7 @@ CREATE TABLE IF NOT EXISTS super_admin_alert_rules (
 async function ensureSuperAdminTables(client) {
   await client.query(SUPER_ADMIN_SCHEMA);
   await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
+  await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
 }
 
 /** Map legacy language labels to ISO 639-1 codes used by admin + ElevenLabs. */

@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const SuperAdmin = require('../models/SuperAdmin');
 const { hashPassword, verifyPassword, generateToken, getSessionExpiry } = require('../../admin/utils/auth');
 
@@ -32,7 +34,13 @@ async function setup(req, res) {
     const expiresAt = getSessionExpiry();
     await SuperAdmin.createSession(admin.id, token, expiresAt);
 
-    return res.json({ token, expiresAt: expiresAt.toISOString(), username: admin.username });
+    return res.json({
+      token,
+      expiresAt: expiresAt.toISOString(),
+      username: admin.username,
+      email: admin.email || null,
+      avatarUrl: null,
+    });
   } catch (err) {
     console.error('[super admin auth] setup:', err);
     return res.status(500).json({ error: err.message });
@@ -62,7 +70,13 @@ async function login(req, res) {
     const expiresAt = getSessionExpiry();
     await SuperAdmin.createSession(admin.id, token, expiresAt);
 
-    return res.json({ token, expiresAt: expiresAt.toISOString(), username: admin.username });
+    return res.json({
+      token,
+      expiresAt: expiresAt.toISOString(),
+      username: admin.username,
+      email: admin.email || null,
+      avatarUrl: admin.avatar_url || null,
+    });
   } catch (err) {
     console.error('[super admin auth] login:', err);
     return res.status(500).json({ error: err.message });
@@ -83,7 +97,93 @@ async function logout(req, res) {
 
 // GET /super-admin/auth/me
 async function me(req, res) {
-  return res.json({ id: req.superAdminId, username: req.superAdminUsername });
+  try {
+    const admin = await SuperAdmin.findById(req.superAdminId);
+    if (!admin) return res.status(404).json({ error: 'Super admin not found' });
+    return res.json({
+      id: admin.id,
+      username: admin.username,
+      email: admin.email || null,
+      avatarUrl: admin.avatar_url || null,
+    });
+  } catch (err) {
+    console.error('[super admin auth] me:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// PATCH /super-admin/auth/profile — username, email
+async function updateProfile(req, res) {
+  try {
+    const username = String(req.body?.username || '').trim();
+    const email = String(req.body?.email || '').trim();
+    if (!username) return res.status(400).json({ error: 'username is required' });
+    if (username.length < 2 || username.length > 100) {
+      return res.status(400).json({ error: 'Username must be between 2 and 100 characters.' });
+    }
+    if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
+      return res
+        .status(400)
+        .json({ error: 'Username may only contain letters, numbers, dot, underscore, and hyphen.' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address.' });
+    }
+
+    const taken = await SuperAdmin.findOtherByUsername(username, req.superAdminId);
+    if (taken) return res.status(400).json({ error: 'That username is already in use.' });
+
+    await SuperAdmin.updateProfile(req.superAdminId, username, email || null);
+    const admin = await SuperAdmin.findById(req.superAdminId);
+    return res.json({
+      id: admin.id,
+      username: admin.username,
+      email: admin.email || null,
+      avatarUrl: admin.avatar_url || null,
+    });
+  } catch (err) {
+    console.error('[super admin auth] update profile:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// POST /super-admin/auth/profile/avatar — multipart field "avatar"
+async function uploadProfileAvatar(req, res) {
+  try {
+    const file = req.file;
+    if (!file?.buffer) return res.status(400).json({ error: 'Image file is required (field name: avatar).' });
+
+    const mime = String(file.mimetype || '').toLowerCase();
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+    if (!allowed.has(mime)) {
+      return res.status(400).json({ error: 'Only JPEG, PNG, WebP, or GIF images are allowed.' });
+    }
+
+    const extMap = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    };
+    const ext = extMap[mime] || 'bin';
+    const dir = path.join(__dirname, '../../../uploads/super-admin');
+    fs.mkdirSync(dir, { recursive: true });
+    const filename = `${req.superAdminId}-${Date.now()}.${ext}`;
+    fs.writeFileSync(path.join(dir, filename), file.buffer);
+
+    const publicUrl = `/uploads/super-admin/${filename}`;
+    await SuperAdmin.setAvatarUrl(req.superAdminId, publicUrl);
+    const admin = await SuperAdmin.findById(req.superAdminId);
+    return res.json({
+      avatarUrl: admin.avatar_url || null,
+      id: admin.id,
+      username: admin.username,
+      email: admin.email || null,
+    });
+  } catch (err) {
+    console.error('[super admin auth] upload avatar:', err);
+    return res.status(500).json({ error: err.message });
+  }
 }
 
 // POST /super-admin/auth/change-password
@@ -125,4 +225,4 @@ async function status(req, res) {
   }
 }
 
-module.exports = { setup, login, logout, me, changePassword, status };
+module.exports = { setup, login, logout, me, updateProfile, uploadProfileAvatar, changePassword, status };

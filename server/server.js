@@ -2,6 +2,7 @@ const path = require('path');
 // Use .env in project root only.
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
+const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -65,6 +66,10 @@ app.get('/embed/:slug', (req, res) => {
     .type('text/plain')
     .send('Missing embed token. Use /embed/{slug}/{embed_secret}?companyId={company_id}');
 });
+
+const superAdminUploadDir = path.join(__dirname, '../uploads/super-admin');
+fs.mkdirSync(superAdminUploadDir, { recursive: true });
+app.use('/uploads/super-admin', express.static(superAdminUploadDir));
 
 const clientDist = path.join(__dirname, '../client/dist');
 app.use(express.static(clientDist));
