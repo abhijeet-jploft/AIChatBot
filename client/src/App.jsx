@@ -75,42 +75,42 @@ function buildOpeningCopy(language, companyName, chatbotName, businessProfileId 
     russian: {
       welcome: `Здравствуйте! Добро пожаловать в ${safeCompanyName}!`,
       intro: introName ? `Я ${introName}, ваш цифровой консультант.` : 'Я ваш цифровой консультант.',
-      question: 'Вы хотите что-то создать или просто изучаете варианты?',
+      question: 'Чем могу помочь вам сегодня?',
     },
     ukrainian: {
       welcome: `Вітаю! Ласкаво просимо до ${safeCompanyName}!`,
       intro: introName ? `Я ${introName}, ваш цифровий консультант.` : 'Я ваш цифровий консультант.',
-      question: 'Ви хочете щось створити чи просто вивчаєте варіанти?',
+      question: 'Чим можу допомогти вам сьогодні?',
     },
     arabic: {
       welcome: `مرحباً! أهلاً بك في ${safeCompanyName}!`,
       intro: introName ? `أنا ${introName}، مستشارك الرقمي.` : 'أنا مستشارك الرقمي.',
-      question: 'هل ترغب في بناء شيء ما أم أنك تستكشف الأفكار فقط؟',
+      question: 'كيف يمكنني مساعدتك اليوم؟',
     },
     hindi: {
       welcome: `नमस्ते! ${safeCompanyName} में आपका स्वागत है!`,
       intro: introName ? `मैं ${introName} हूं, आपका डिजिटल कंसल्टेंट।` : 'मैं आपका डिजिटल कंसल्टेंट हूं।',
-      question: 'क्या आप कुछ बनवाना चाहते हैं या अभी सिर्फ विकल्प देख रहे हैं?',
+      question: 'मैं आज आपकी किस प्रकार सहायता कर सकता हूँ?',
     },
     japanese: {
       welcome: `こんにちは。${safeCompanyName}へようこそ。`,
       intro: introName ? `私は${introName}です。デジタルコンサルタントとしてご案内します。` : 'デジタルコンサルタントとしてご案内します。',
-      question: '何かを構築したいですか、それとも情報収集中ですか。',
+      question: '本日はどのようなご用件でしょうか。',
     },
     chinese: {
       welcome: `您好，欢迎来到${safeCompanyName}！`,
       intro: introName ? `我是${introName}，您的数字顾问。` : '我是您的数字顾问。',
-      question: '您是想开始搭建项目，还是先了解一下可选方案？',
+      question: '今天我可以为您提供什么帮助？',
     },
     korean: {
       welcome: `안녕하세요. ${safeCompanyName}에 오신 것을 환영합니다.`,
       intro: introName ? `저는 ${introName}이며 디지털 컨설턴트입니다.` : '저는 디지털 컨설턴트입니다.',
-      question: '무언가를 구축하려고 하시나요, 아니면 먼저 아이디어를 살펴보고 계신가요?',
+      question: '오늘 무엇을 도와드릴까요?',
     },
     english: {
       welcome: `Hi! Welcome to ${safeCompanyName}!`,
       intro: introName ? `I'm ${introName}, your digital consultant.` : "I'm your digital consultant.",
-      question: 'Are you looking to build something or just exploring ideas?',
+      question: 'How can I help you today?',
     },
   };
 
@@ -162,6 +162,7 @@ const THEME_KEY = 'ai-chat-theme';
 const CHAT_VIEW_MODE_KEY = 'ai-chat-view-mode';
 const WIDGET_BUTTON_POS_KEY = 'ai-chat-widget-button-position';
 const WIDGET_PANEL_SIDE_KEY = 'ai-chat-widget-panel-side';
+const WIDGET_SIDE_BY_COMPANY_KEY = 'ai-chat-widget-side-by-company-v1';
 const WIDGET_BUTTON_DRAGGED_KEY = 'ai-chat-widget-button-dragged';
 const CHAT_STATE_KEY = 'ai-chat-state';
 const COMPANIES_CACHE_KEY = 'ai-chat-companies-cache-v1';
@@ -427,6 +428,21 @@ function readCachedCompanies() {
   }
 }
 
+function readWidgetSideByCompany(companyId, cachedCompanies = []) {
+  const fromCache = cachedCompanies.find((c) => c?.id === companyId)?.widgetPosition;
+  if (fromCache === 'left' || fromCache === 'right') return fromCache;
+  if (typeof window === 'undefined') return 'right';
+  try {
+    const raw = localStorage.getItem(WIDGET_SIDE_BY_COMPANY_KEY);
+    if (!raw) return 'right';
+    const parsed = JSON.parse(raw);
+    const side = parsed && typeof parsed === 'object' ? parsed[companyId] : null;
+    return side === 'left' || side === 'right' ? side : 'right';
+  } catch {
+    return 'right';
+  }
+}
+
 /** Same rules as initial chatViewMode state — single source for mount-time panel mode. */
 function resolveInitialChatViewMode(isWebsiteView, initialChatState) {
   const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
@@ -592,6 +608,9 @@ export default function App() {
   });
   const [widgetHeaderIconFailed, setWidgetHeaderIconFailed] = useState(false);
   const [companies, setCompanies]   = useState(() => cachedCompanies);
+  const [widgetSideOverride, setWidgetSideOverride] = useState(() =>
+    readWidgetSideByCompany(initialChatState?.companyId || DEFAULT_COMPANY_ID, cachedCompanies)
+  );
   const [messages, setMessages]     = useState(() => Array.isArray(initialChatState?.messages) ? initialChatState.messages : []);
   const [loading, setLoading]       = useState(false);
   const [sessionId, setSessionId]   = useState(() => initialChatState?.sessionId || null);
@@ -642,6 +661,10 @@ export default function App() {
     setWidgetHeaderIconFailed(false);
   }, [currentCompany?.iconUrl]);
 
+  useEffect(() => {
+    setWidgetSideOverride(readWidgetSideByCompany(companyId, companies));
+  }, [companyId, companies]);
+
   const dragStateRef = useRef({
     pointerId: null,
     startClientX: 0,
@@ -657,6 +680,7 @@ export default function App() {
   const speechUtteranceRef = useRef(null);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+  const requestGenerationRef = useRef(0);
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
 
   const stripEmoji = useCallback((text) => {
@@ -936,6 +960,13 @@ export default function App() {
     });
 
     try { localStorage.setItem(WIDGET_PANEL_SIDE_KEY, panelSide); } catch {}
+    setWidgetSideOverride(panelSide);
+    try {
+      const raw = localStorage.getItem(WIDGET_SIDE_BY_COMPANY_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const next = { ...(parsed && typeof parsed === 'object' ? parsed : {}), [companyId]: panelSide };
+      localStorage.setItem(WIDGET_SIDE_BY_COMPANY_KEY, JSON.stringify(next));
+    } catch {}
   }, [companyId, companies]);
 
   // â”€â”€ Website view: when widget is open, keep activation/popup handled; when not website view, always activated â”€
@@ -1184,6 +1215,8 @@ export default function App() {
 
   // â”€â”€ Select a session: load its messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSelectSession = async (id) => {
+    requestGenerationRef.current += 1;
+    setLoading(false);
     setSessionId(id);
     try {
       const res  = await fetch(`${API_BASE}/sessions/${id}/messages`);
@@ -1197,19 +1230,34 @@ export default function App() {
   // â”€â”€ Delete a session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDeleteSession = async (id) => {
     try { await fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' }); } catch {}
-    if (sessionId === id) { setSessionId(null); setMessages([]); }
+    if (sessionId === id) {
+      requestGenerationRef.current += 1;
+      setLoading(false);
+      sessionIdRef.current = null;
+      setSessionId(null);
+      setMessages([]);
+    }
     loadSessions();
   };
 
   // â”€â”€ New chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const clearChat = () => {
+    try { pauseAssistantVoice(); } catch {}
+    try { sendTypingPresence(false); } catch {}
+    requestGenerationRef.current += 1;
+    sessionIdRef.current = null;
+    setLoading(false);
     setSessionId(null);
-    setMessages([]);
-    setOpeningMessageShown(false);
+    setMessages([{ role: 'assistant', content: openingMessageText }]);
+    setOpeningMessageShown(true);
+    setCurrentPage('chat');
   };
 
   // â”€â”€ Change company â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSelectCompany = (id) => {
+    requestGenerationRef.current += 1;
+    setLoading(false);
+    sessionIdRef.current = null;
     setCompanyId(id);
     setSessionId(null);
     setMessages([]);
@@ -1243,6 +1291,7 @@ export default function App() {
   const sendMessage = async (content) => {
     if (!content.trim() || loading) return;
     sendTypingPresence(false);
+    const requestGeneration = requestGenerationRef.current;
 
     const userMsg = { role: 'user', content: content.trim() };
     setMessages((prev) => [...prev, userMsg]);
@@ -1268,6 +1317,7 @@ export default function App() {
       }
 
       const data = await res.json();
+      if (requestGeneration !== requestGenerationRef.current) return;
       const normalizedAssistantContent = normalizeAssistantNameInText(String(data?.content || ''), chatbotNameForOpening);
       const responseAudioDataUrl = data?.voice?.audioDataUrl;
       // Index of the new assistant message: we already added the user message earlier, so it's messages.length + 1
@@ -1299,6 +1349,7 @@ export default function App() {
       }
       loadSessions(); // refresh history list
     } catch (err) {
+      if (requestGeneration !== requestGenerationRef.current) return;
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: 'We are facing some technical issue.' },
@@ -1480,7 +1531,9 @@ export default function App() {
 
   const companyName = currentCompany?.displayName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const companyIconUrl = resolvePublicMediaUrl(currentCompany?.iconUrl);
-  const widgetSide = currentCompany?.widgetPosition === 'left' ? 'left' : 'right';
+  const widgetSide = currentCompany?.widgetPosition === 'left'
+    ? 'left'
+    : (currentCompany?.widgetPosition === 'right' ? 'right' : widgetSideOverride);
   const greetingMessage = currentCompany?.greetingMessage || null;
   const voiceEnabled = Boolean(currentCompany?.voice?.enabled);
   const voiceResponseEnabled = currentCompany?.voice?.responseEnabled !== false;

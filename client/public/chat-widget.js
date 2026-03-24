@@ -19,7 +19,8 @@
   var chatbotDisplayName = '';
   var apiKey = (script && script.getAttribute('data-api-key')) || config.apiKey || '';
   var forceOpen = Boolean(config.forceOpen || (script && script.getAttribute('data-force-open') === 'true'));
-  var widgetSide = ((script && script.getAttribute('data-widget-side')) || config.widgetSide || 'right').toLowerCase() === 'left' ? 'left' : 'right';
+  var explicitWidgetSide = (script && script.getAttribute('data-widget-side')) || config.widgetSide || '';
+  var widgetSide = String(explicitWidgetSide || 'right').toLowerCase() === 'left' ? 'left' : 'right';
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
   var companyIconUrl = null;
   var companyGreetingMessage = null;
@@ -28,8 +29,9 @@
   var companyContentLocaleHint = '';
   var companyBusinessProfile = { id: 'generic_business' };
 
-  var DEFAULT_OPENING_QUESTION = 'Are you looking to build something or just exploring ideas?';
+  var DEFAULT_OPENING_QUESTION = 'How can I help you today?';
   var CHAT_STATE_KEY = 'ai-chat-state';
+  var WIDGET_SIDE_BY_COMPANY_KEY = 'ai-chat-widget-side-by-company-v1';
   var AUTO_TRIGGER_DEFAULT_SECONDS = 8;
   var AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT = 40;
   var TABLET_BREAKPOINT = 1024;
@@ -44,6 +46,20 @@
     console.warn('[JPLoft Chat] data-api-url or JPLoftChatConfig.apiUrl required');
     return;
   }
+
+  function readPersistedWidgetSide() {
+    if (explicitWidgetSide) return widgetSide;
+    try {
+      var raw = typeof localStorage !== 'undefined' && localStorage.getItem(WIDGET_SIDE_BY_COMPANY_KEY);
+      if (!raw) return widgetSide;
+      var parsed = JSON.parse(raw);
+      var side = parsed && typeof parsed === 'object' ? parsed[companyId] : null;
+      return side === 'left' || side === 'right' ? side : widgetSide;
+    } catch (e) {
+      return widgetSide;
+    }
+  }
+  widgetSide = readPersistedWidgetSide();
 
   function mergeHeaders(extra) {
     var h = {};
@@ -139,37 +155,37 @@
       russian: {
         welcome: 'Здравствуйте! Добро пожаловать в ' + welcomeCompany + '!',
         intro: introName ? 'Я ' + introName + ', ваш цифровой консультант.' : 'Я ваш цифровой консультант.',
-        question: 'Вы хотите что-то создать или просто изучаете варианты?',
+        question: 'Чем могу помочь вам сегодня?',
       },
       ukrainian: {
         welcome: 'Вітаю! Ласкаво просимо до ' + welcomeCompany + '!',
         intro: introName ? 'Я ' + introName + ', ваш цифровий консультант.' : 'Я ваш цифровий консультант.',
-        question: 'Ви хочете щось створити чи просто вивчаєте варіанти?',
+        question: 'Чим можу допомогти вам сьогодні?',
       },
       arabic: {
         welcome: 'مرحباً! أهلاً بك في ' + welcomeCompany + '!',
         intro: introName ? 'أنا ' + introName + '، مستشارك الرقمي.' : 'أنا مستشارك الرقمي.',
-        question: 'هل ترغب في بناء شيء ما أم أنك تستكشف الأفكار فقط؟',
+        question: 'كيف يمكنني مساعدتك اليوم؟',
       },
       hindi: {
         welcome: 'नमस्ते! ' + welcomeCompany + ' में आपका स्वागत है!',
         intro: introName ? 'मैं ' + introName + ' हूं, आपका डिजिटल कंसल्टेंट।' : 'मैं आपका डिजिटल कंसल्टेंट हूं।',
-        question: 'क्या आप कुछ बनवाना चाहते हैं या अभी सिर्फ विकल्प देख रहे हैं?',
+        question: 'मैं आज आपकी किस प्रकार सहायता कर सकता हूँ?',
       },
       japanese: {
         welcome: 'こんにちは。' + welcomeCompany + 'へようこそ。',
         intro: introName ? '私は' + introName + 'です。デジタルコンサルタントとしてご案内します。' : 'デジタルコンサルタントとしてご案内します。',
-        question: '何かを構築したいですか、それとも情報収集中ですか。',
+        question: '本日はどのようなご用件でしょうか。',
       },
       chinese: {
         welcome: '您好，欢迎来到' + welcomeCompany + '！',
         intro: introName ? '我是' + introName + '，您的数字顾问。' : '我是您的数字顾问。',
-        question: '您是想开始搭建项目，还是先了解一下可选方案？',
+        question: '今天我可以为您提供什么帮助？',
       },
       korean: {
         welcome: '안녕하세요. ' + welcomeCompany + '에 오신 것을 환영합니다.',
         intro: introName ? '저는 ' + introName + '이며 디지털 컨설턴트입니다.' : '저는 디지털 컨설턴트입니다.',
-        question: '무언가를 구축하려고 하시나요, 아니면 먼저 아이디어를 살펴보고 계신가요?',
+        question: '오늘 무엇을 도와드릴까요?',
       },
       english: {
         welcome: 'Hi! Welcome to ' + welcomeCompany + '!',
@@ -666,7 +682,15 @@
     }).join('');
     sidebarEl.innerHTML = '<div class="jploft-sidebar-header">Sessions</div>' + newBtn + '<div class="jploft-sidebar-list">' + list + '</div>';
     var newChatBtn = sidebarEl.querySelector('.jploft-sidebar-new');
-    if (newChatBtn) newChatBtn.onclick = function () { newChat(); };
+    if (newChatBtn) {
+      newChatBtn.onclick = function (e) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        newChat();
+      };
+    }
     sidebarEl.querySelectorAll('.jploft-sidebar-item').forEach(function (el) {
       var id = el.getAttribute('data-session-id');
       el.onclick = function (e) {
@@ -686,13 +710,23 @@
   function newChat() {
     stopMicCapture();
     pauseAssistantVoice();
+    if (typingTimer) {
+      clearTimeout(typingTimer);
+      typingTimer = null;
+    }
+    sendPresenceTyping(false);
     requestGeneration++;
     loading = false;
     sessionId = null;
+    sendPresenceRegister(undefined);
     messages = [];
     openingMessageShown = false;
     messages.push({ role: 'assistant', content: getOpeningMessage() });
     openingMessageShown = true;
+    if (inputEl) {
+      inputEl.value = '';
+      resizeInput();
+    }
     setSendButtonState();
     renderMessages();
     persistState();
@@ -1586,7 +1620,15 @@
     var closeBtn = panel.querySelector('.jploft-close-btn');
     closeBtn.onclick = closePanel;
     var newBtn = panel.querySelector('.jploft-new-btn');
-    if (newBtn) newBtn.onclick = newChat;
+    if (newBtn) {
+      newBtn.onclick = function (e) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        newChat();
+      };
+    }
 
     maxBtn = panel.querySelector('.jploft-max-btn');
     if (maxBtn) maxBtn.onclick = toggleFullscreen;
@@ -1815,6 +1857,19 @@
             autoTrigger.selectedPages = String(company.autoTrigger.selectedPages || '');
           }
           widgetSide = company.widgetPosition === 'left' ? 'left' : 'right';
+          try {
+            var rawSide = typeof localStorage !== 'undefined' && localStorage.getItem(WIDGET_SIDE_BY_COMPANY_KEY);
+            var parsedSide = rawSide ? JSON.parse(rawSide) : {};
+            var nextSide = {};
+            var key;
+            if (parsedSide && typeof parsedSide === 'object') {
+              for (key in parsedSide) {
+                if (Object.prototype.hasOwnProperty.call(parsedSide, key)) nextSide[key] = parsedSide[key];
+              }
+            }
+            nextSide[companyId] = widgetSide;
+            if (typeof localStorage !== 'undefined') localStorage.setItem(WIDGET_SIDE_BY_COMPANY_KEY, JSON.stringify(nextSide));
+          } catch (e) {}
           var vp = getViewport();
           widgetButtonPos = clampWidgetButtonPosition(widgetButtonPos, vp.width, vp.height);
           applyWidgetButtonPosition();
