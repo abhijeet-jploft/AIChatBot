@@ -4,8 +4,113 @@ const crypto = require('crypto');
 const { URL } = require('url');
 
 const MAX_PAGES = parseInt(process.env.SCRAPER_MAX_PAGES || '300', 10);
-const REQUEST_TIMEOUT = 15000;
+const REQUEST_TIMEOUT = 20000;
 const REQUEST_DELAY = 350; // ms between requests — polite crawling
+const READER_FALLBACK_PREFIX = process.env.SCRAPER_READER_FALLBACK_PREFIX || 'https://r.jina.ai/http://';
+const BOT_BLOCK_STATUSES = new Set([403, 406, 409, 412, 418, 429, 451, 498, 499, 503]);
+
+// Realistic browser User-Agent — avoids bot-detection blocks on most sites
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const BROWSER_HEADERS = {
+  'User-Agent': BROWSER_UA,
+  'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8,*;q=0.5',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'Upgrade-Insecure-Requests': '1',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+};
+
+// ─── Charset / encoding helpers ──────────────────────────────────────────────
+
+/**
+ * Normalise charset labels that TextDecoder may not recognise directly.
+ * The WHATWG Encoding spec covers most aliases; this handles the remainder.
+ */
+const CHARSET_ALIASES = {
+  // Japanese
+  'x-sjis': 'shift_jis',
+  'csshiftjis': 'shift_jis',
+  'ms932': 'shift_jis',
+  'x-euc-jp': 'euc-jp',
+  'cseucpkdfmtjapanese': 'euc-jp',
+  // Chinese
+  'csgb2312': 'gbk',
+  'gb_2312': 'gbk',
+  'chinese': 'gbk',
+  'hz-gb-2312': 'gbk',
+  // Korean
+  'ks_c_5601-1987': 'euc-kr',
+  'ks_c_5601-1989': 'euc-kr',
+  'ksc5601': 'euc-kr',
+  'ksc_5601': 'euc-kr',
+  'windows-949': 'euc-kr',
+  // Latin / Western
+  'latin1': 'iso-8859-1',
+  'latin-1': 'iso-8859-1',
+  'iso8859-1': 'iso-8859-1',
+  'unicode-1-1-utf-8': 'utf-8',
+};
+
+function normaliseCharset(raw) {
+  if (!raw) return 'utf-8';
+  const s = raw.toLowerCase().trim().replace(/\s/g, '');
+  return CHARSET_ALIASES[s] || s;
+}
+
+/**
+ * Detect page charset priority:
+ *   1. Content-Type header charset param
+ *   2. <meta charset="…">
+ *   3. <meta http-equiv="Content-Type" content="…charset=…">
+ *   4. <?xml …encoding="…"?>
+ * Falls back to 'utf-8'.
+ */
+function detectCharset(contentTypeHeader, buf) {
+  // 1. Content-Type header
+  const ctMatch = (contentTypeHeader || '').match(/charset=([^\s;,]+)/i);
+  if (ctMatch) return normaliseCharset(ctMatch[1]);
+
+  // 2. Peek at first 4 KB decoded as Latin-1 (safe for all ASCII-compatible encodings)
+  let preview = '';
+  try {
+    const slice = Buffer.isBuffer(buf) ? buf.slice(0, 4096) : Buffer.from(buf).slice(0, 4096);
+    preview = new TextDecoder('latin1').decode(slice);
+  } catch {
+    return 'utf-8';
+  }
+
+  // 3. <meta charset="...">
+  const m1 = preview.match(/<meta[^>]+charset=["']?\s*([^"'\s;>]+)/i);
+  if (m1) return normaliseCharset(m1[1]);
+
+  // 4. <meta http-equiv="Content-Type" content="...charset=...">
+  const m2 = preview.match(/content=["'][^"']*charset=([^"'\s;>]+)/i);
+  if (m2) return normaliseCharset(m2[1]);
+
+  // 5. XML encoding declaration
+  const m3 = preview.match(/<\?xml[^>]+encoding=["']([^"']+)["']/i);
+  if (m3) return normaliseCharset(m3[1]);
+
+  return 'utf-8';
+}
+
+/**
+ * Decode a Buffer/ArrayBuffer to a string using the detected charset.
+ * Falls back gracefully to UTF-8 if the charset label is not supported.
+ */
+function decodeBuffer(buf, charset) {
+  try {
+    return new TextDecoder(charset).decode(buf);
+  } catch {
+    return new TextDecoder('utf-8', { fatal: false }).decode(buf);
+  }
+}
 
 // High-value paths to seed for deep coverage (contact, about, portfolio, etc.)
 const PRIORITY_PATHS = [
@@ -45,6 +150,95 @@ function sameDomain(a, base) {
   } catch {
     return false;
   }
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function addDiscoveredUrl(href, base, rootUrl, seenUrls, urls) {
+  const loc = normalizeUrl(href, base);
+  if (loc && sameDomain(loc, rootUrl) && !seenUrls.has(loc)) {
+    seenUrls.add(loc);
+    urls.push(loc);
+  }
+}
+
+function shouldUseReaderFallback(err) {
+  const status = err?.response?.status;
+  return BOT_BLOCK_STATUSES.has(status);
+}
+
+function buildReaderFallbackUrl(url) {
+  return `${READER_FALLBACK_PREFIX}${url}`;
+}
+
+function extractLinksFromMarkdown(markdown, baseUrl) {
+  const urls = new Set();
+
+  for (const match of markdown.matchAll(/\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g)) {
+    const normalized = normalizeUrl(match[1], baseUrl);
+    if (normalized) urls.add(normalized);
+  }
+  for (const match of markdown.matchAll(/https?:\/\/[^\s)>\]]+/g)) {
+    const normalized = normalizeUrl(match[0], baseUrl);
+    if (normalized) urls.add(normalized);
+  }
+
+  return [...urls];
+}
+
+function extractReaderTitle(markdown, fallbackTitle) {
+  const explicitTitle = markdown.match(/^Title:\s*(.+)$/mi)?.[1]?.trim();
+  if (explicitTitle) return explicitTitle;
+
+  const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  return heading || fallbackTitle;
+}
+
+function stripReaderPreamble(markdown) {
+  const normalized = String(markdown || '').replace(/\r/g, '');
+  const marker = normalized.match(/\nMarkdown Content:\n/i);
+  let content = marker
+    ? normalized.slice(marker.index + marker[0].length)
+    : normalized;
+
+  content = content
+    .split('\n')
+    .filter((line) => !/^(Title:|URL Source:|Warning:)/i.test(line.trim()))
+    .join('\n')
+    .trim();
+
+  return content;
+}
+
+async function fetchReaderFallback(url) {
+  const res = await axios.get(buildReaderFallbackUrl(url), {
+    timeout: REQUEST_TIMEOUT,
+    responseType: 'text',
+    headers: {
+      ...BROWSER_HEADERS,
+      'Accept': 'text/plain,text/markdown;q=0.9,*/*;q=0.8',
+    },
+    maxRedirects: 5,
+    validateStatus: (s) => s >= 200 && s < 400,
+  });
+
+  const markdown = String(res.data || '');
+  const cleanText = stripReaderPreamble(markdown);
+  if (!cleanText) return null;
+
+  const title = extractReaderTitle(markdown, url);
+  return {
+    source: 'reader',
+    title,
+    rawHtml: `<html><head><title>${escapeHtml(title)}</title></head><body><main>${escapeHtml(cleanText)}</main></body></html>`,
+    discoveredUrls: extractLinksFromMarkdown(markdown, url),
+  };
 }
 
 // ─── Header/footer fingerprinting ────────────────────────────────────────────
@@ -155,17 +349,22 @@ async function fetchSitemapUrls(rootUrl) {
     try {
       const res = await axios.get(url, {
         timeout: REQUEST_TIMEOUT,
+        responseType: 'arraybuffer',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; AIChatBotScraper/1.0)',
-          Accept: 'application/xml,text/xml,*/*',
+          ...BROWSER_HEADERS,
+          'Accept': 'application/xml,text/xml,*/*',
         },
-        maxRedirects: 3,
+        maxRedirects: 5,
         validateStatus: (s) => s >= 200 && s < 400,
       });
       const ct = (res.headers['content-type'] || '').toLowerCase();
-      if (!ct.includes('xml')) return;
+      if (!ct.includes('xml') && !ct.includes('text')) return;
 
-      const $ = cheerio.load(res.data, { xmlMode: true });
+      // Decode the buffer — sitemaps are almost always UTF-8 but handle others
+      const charset = detectCharset(ct, res.data);
+      const xmlText = decodeBuffer(res.data, charset);
+
+      const $ = cheerio.load(xmlText, { xmlMode: true });
       const nestedSitemaps = [];
       $('sitemap loc').each((_, el) => {
         const loc = $(el).text().trim();
@@ -174,12 +373,15 @@ async function fetchSitemapUrls(rootUrl) {
       for (const loc of nestedSitemaps) {
         await parseSitemap(loc);
       }
-      $('url loc').each((_, el) => {
-        const loc = normalizeUrl($(el).text().trim(), url);
-        if (loc && sameDomain(loc, rootUrl) && !seenUrls.has(loc)) {
-          seenUrls.add(loc);
-          urls.push(loc);
-        }
+      $('url').each((_, urlEl) => {
+        const primaryLoc = $(urlEl).find('loc').first().text().trim();
+        addDiscoveredUrl(primaryLoc, url, rootUrl, seenUrls, urls);
+
+        $(urlEl)
+          .find('xhtml\\:link[rel="alternate"], link[rel="alternate"], *[hreflang]')
+          .each((__, altEl) => {
+            addDiscoveredUrl($(altEl).attr('href'), url, rootUrl, seenUrls, urls);
+          });
       });
     } catch { /* ignore */ }
   }
@@ -206,20 +408,34 @@ function buildSeedUrls(rootUrl) {
 // ─── HTTP fetch ───────────────────────────────────────────────────────────────
 
 async function fetchPage(url) {
-  const res = await axios.get(url, {
-    timeout: REQUEST_TIMEOUT,
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (compatible; AIChatBotScraper/1.0)',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    },
-    maxRedirects: 5,
-    validateStatus: (s) => s >= 200 && s < 400,
-  });
+  try {
+    const res = await axios.get(url, {
+      timeout: REQUEST_TIMEOUT,
+      responseType: 'arraybuffer', // raw bytes — allows proper charset decoding
+      headers: {
+        ...BROWSER_HEADERS,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      maxRedirects: 8,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
 
-  const ct = res.headers['content-type'] || '';
-  if (!ct.includes('text/html')) return null;
-  return res.data;
+    const ct = (res.headers['content-type'] || '').toLowerCase();
+    if (!ct.includes('text/html') && !ct.includes('application/xhtml+xml')) return null;
+
+    const charset = detectCharset(ct, res.data);
+    return {
+      source: 'direct',
+      rawHtml: decodeBuffer(res.data, charset),
+      discoveredUrls: [],
+    };
+  } catch (err) {
+    if (!shouldUseReaderFallback(err)) throw err;
+
+    const fallbackPage = await fetchReaderFallback(url);
+    if (fallbackPage) return fallbackPage;
+    throw err;
+  }
 }
 
 // ─── JSONL builder ────────────────────────────────────────────────────────────
@@ -359,7 +575,8 @@ async function runJob(jobId) {
 
       try {
         await new Promise((r) => setTimeout(r, REQUEST_DELAY));
-        const rawHtml = await fetchPage(url);
+        const pageData = await fetchPage(url);
+        const rawHtml = pageData?.rawHtml;
 
         if (!rawHtml) {
           log(`  → skipped (non-HTML or redirect)`);
@@ -368,6 +585,7 @@ async function runJob(jobId) {
 
         const $ = cheerio.load(rawHtml);
         const title =
+          pageData.title ||
           $('title').text().trim() ||
           $('h1').first().text().trim() ||
           url;
@@ -397,10 +615,19 @@ async function runJob(jobId) {
           discoverHref($(el).attr('data-link'));
         });
         $('[data-url]').each((_, el) => discoverHref($(el).attr('data-url')));
+        $('link[rel="alternate"][hreflang]').each((_, el) => discoverHref($(el).attr('href')));
+        $('[hreflang]').each((_, el) => {
+          discoverHref($(el).attr('href'));
+          discoverHref($(el).attr('data-href'));
+          discoverHref($(el).attr('data-link'));
+        });
+        for (const discoveredUrl of pageData.discoveredUrls || []) {
+          discoverHref(discoveredUrl);
+        }
 
         scraped.push({ url, title, rawHtml });
         job.pages.push({ url, title });
-        log(`  → OK: "${title}"`);
+        log(pageData.source === 'reader' ? `  → OK via reader fallback: "${title}"` : `  → OK: "${title}"`);
       } catch (err) {
         job.errors.push({ url, error: err.message });
         log(`  → error: ${err.message}`);
