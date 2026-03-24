@@ -134,3 +134,5 @@ export function buildCompanyThemeStyle(theme, mode = 'light') {
     '--chat-host-bg-base': '#F5F5FC',
   };
 }
+
+export default buildCompanyThemeStyle;

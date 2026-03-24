@@ -3,6 +3,25 @@ import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
 
 const RULE_TYPES = ['lead_threshold', 'conversation_spike', 'system_memory', 'error_rate', 'custom'];
+const EXAMPLE_RULE = {
+  name: 'High error rate in last 5 minutes',
+  description: 'Alert when application errors spike above acceptable threshold.',
+  rule_type: 'error_rate',
+  conditions: {
+    windowMinutes: 5,
+    minEvents: 50,
+    errorRatePercentGte: 8,
+    scope: 'global',
+  },
+  actions: {
+    notify: ['email', 'slack'],
+    emailTo: ['ops@yourcompany.com'],
+    slackWebhook: 'https://hooks.slack.com/services/XXX/YYY/ZZZ',
+    severity: 'high',
+    cooldownMinutes: 15,
+  },
+  enabled: true,
+};
 
 export default function AlertRules() {
   const { saFetch } = useSuperAuth();
@@ -79,11 +98,40 @@ export default function AlertRules() {
     }
   };
 
+  const applyExample = () => {
+    setForm({
+      name: EXAMPLE_RULE.name,
+      description: EXAMPLE_RULE.description,
+      rule_type: EXAMPLE_RULE.rule_type,
+      conditions: JSON.stringify(EXAMPLE_RULE.conditions, null, 2),
+      actions: JSON.stringify(EXAMPLE_RULE.actions, null, 2),
+      enabled: EXAMPLE_RULE.enabled,
+    });
+    setShowCreate(true);
+  };
+
   return (
     <div className="sa-page">
       <div className="sa-page-header">
         <h2 className="sa-page-title">Alert Rules</h2>
-        <button className="sa-btn sa-btn-primary sa-btn-sm" onClick={() => setShowCreate(true)}>+ New Rule</button>
+        <div className="d-flex align-items-center gap-2">
+          <button type="button" className="sa-btn sa-btn-ghost sa-btn-sm" onClick={applyExample}>
+            Use Example
+          </button>
+          <button className="sa-btn sa-btn-primary sa-btn-sm" onClick={() => setShowCreate(true)}>+ New Rule</button>
+        </div>
+      </div>
+
+      <div className="sa-panel sa-panel-compact" style={{ marginBottom: 12 }}>
+        <h4 className="sa-panel-title">How it works (example)</h4>
+        <div className="sa-text-muted sa-text-sm">
+          <strong>Example:</strong> Create a rule with <code className="sa-code">rule_type = error_rate</code>,
+          set <code className="sa-code">windowMinutes: 5</code> and <code className="sa-code">errorRatePercentGte: 8</code>.
+          When error rate crosses 8% within 5 minutes, actions run (email/slack), then cooldown prevents repeats.
+        </div>
+        <div className="sa-text-muted sa-text-sm" style={{ marginTop: 8 }}>
+          <strong>Conditions JSON</strong> = trigger logic (threshold/time window/scope). <strong>Actions JSON</strong> = what to do (notify channels, recipients, severity, cooldown).
+        </div>
       </div>
 
       {showCreate && (
