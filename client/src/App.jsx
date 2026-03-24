@@ -164,6 +164,7 @@ const WIDGET_BUTTON_POS_KEY = 'ai-chat-widget-button-position';
 const WIDGET_PANEL_SIDE_KEY = 'ai-chat-widget-panel-side';
 const WIDGET_BUTTON_DRAGGED_KEY = 'ai-chat-widget-button-dragged';
 const CHAT_STATE_KEY = 'ai-chat-state';
+const COMPANIES_CACHE_KEY = 'ai-chat-companies-cache-v1';
 const DEFAULT_COMPANY_ID = '_JP_Loft';
 const DEFAULT_COMPANY_NAME = 'JP Loft';
 
@@ -413,6 +414,19 @@ function readInitialChatState() {
   return readPersistedChatState();
 }
 
+function readCachedCompanies() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(COMPANIES_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((c) => c && typeof c === 'object' && c.id && c.id !== '_default');
+  } catch {
+    return [];
+  }
+}
+
 /** Same rules as initial chatViewMode state — single source for mount-time panel mode. */
 function resolveInitialChatViewMode(isWebsiteView, initialChatState) {
   const fallback = CHAT_VIEW_MODES.WIDGET_CLOSED;
@@ -569,9 +583,15 @@ export default function App() {
     }
   });
   const [isDraggingWidgetButton, setIsDraggingWidgetButton] = useState(false);
-  const [companyId, setCompanyId]   = useState(() => initialChatState?.companyId || DEFAULT_COMPANY_ID);
+  const cachedCompanies = useMemo(() => readCachedCompanies(), []);
+  const [companyId, setCompanyId]   = useState(() => {
+    const fromState = initialChatState?.companyId || DEFAULT_COMPANY_ID;
+    if (cachedCompanies.some((c) => c.id === fromState)) return fromState;
+    if (cachedCompanies.some((c) => c.id === DEFAULT_COMPANY_ID)) return DEFAULT_COMPANY_ID;
+    return cachedCompanies[0]?.id || fromState;
+  });
   const [widgetHeaderIconFailed, setWidgetHeaderIconFailed] = useState(false);
-  const [companies, setCompanies]   = useState([]);
+  const [companies, setCompanies]   = useState(() => cachedCompanies);
   const [messages, setMessages]     = useState(() => Array.isArray(initialChatState?.messages) ? initialChatState.messages : []);
   const [loading, setLoading]       = useState(false);
   const [sessionId, setSessionId]   = useState(() => initialChatState?.sessionId || null);
@@ -1018,6 +1038,7 @@ export default function App() {
           : [];
 
         setCompanies(list);
+        try { localStorage.setItem(COMPANIES_CACHE_KEY, JSON.stringify(list)); } catch {}
         setCompanyId((prev) => {
           if (list.some((c) => c.id === prev)) return prev;
           if (list.some((c) => c.id === DEFAULT_COMPANY_ID)) return DEFAULT_COMPANY_ID;
@@ -1025,10 +1046,12 @@ export default function App() {
         });
       })
       .catch(() => {
-        setCompanies([]);
-        setCompanyId(DEFAULT_COMPANY_ID);
+        if (!cachedCompanies.length) {
+          setCompanies([]);
+          setCompanyId(DEFAULT_COMPANY_ID);
+        }
       });
-  }, []);
+  }, [cachedCompanies.length]);
 
   useEffect(() => {
     if (!chatbotNameForOpening) return;
