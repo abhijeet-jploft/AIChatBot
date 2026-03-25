@@ -284,6 +284,9 @@
 .sa-table td { padding: 10px 14px; border-bottom: 1px solid rgba(42,48,80,0.5); color: var(--sa-text); vertical-align: middle; }
 .sa-table tbody tr:last-child td { border-bottom: none; }
 .sa-table tbody tr:hover td { background: rgba(108,99,255,0.05); }
+.sa-table-subtext { font-size: 11px; color: var(--sa-text-muted); margin-top: 4px; }
+.sa-selectable-row { cursor: pointer; }
+.sa-selectable-row.is-selected td { background: rgba(108,99,255,0.12); }
 
 /* ─── Buttons ─── */
 .sa-btn {
@@ -314,6 +317,14 @@
 .sa-btn-xs { padding: 4px 8px; font-size: 11.5px; }
 .sa-btn-full { width: 100%; justify-content: center; }
 .sa-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sa-panel-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 
 /* ─── Badges ─── */
 .sa-badge {
@@ -373,6 +384,31 @@
 .sa-inline-form { display: flex; gap: 10px; align-items: center; }
 .sa-inline-form input { flex: 1; }
 
+.sa-permission-grid { display: grid; gap: 10px; }
+.sa-permission-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--sa-border);
+  border-radius: var(--sa-radius-sm);
+  background: rgba(255,255,255,0.02);
+}
+.sa-permission-title { color: var(--sa-text-heading); font-weight: 600; }
+.sa-permission-meta { font-size: 12px; color: var(--sa-text-muted); margin-top: 4px; }
+
+.sa-inline-note {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(59,158,255,0.25);
+  border-radius: var(--sa-radius-sm);
+  background: rgba(59,158,255,0.08);
+  color: var(--sa-text-heading);
+}
+
 .sa-textarea { width: 100%; background: var(--sa-bg); border: 1px solid var(--sa-border); border-radius: var(--sa-radius-sm); color: var(--sa-text); padding: 9px 12px; font-size: 13px; resize: vertical; outline: none; box-sizing: border-box; }
 .sa-textarea:focus { border-color: var(--sa-accent); box-shadow: 0 0 0 3px var(--sa-accent-glow); }
 .sa-textarea-code { font-family: 'Fira Mono', 'Courier New', monospace; font-size: 12px; }
@@ -409,6 +445,7 @@
 .sa-profile-photo-note { font-size: 12px; margin-top: 8px; }
 .sa-profile-divider { border-color: var(--sa-border); margin: 20px 0; }
 .sa-profile-password-note { font-size: 13px; margin-top: 0; }
+.sa-profile-force { margin-bottom: -4px; }
 
 /* ─── Modal ─── */
 .sa-modal-overlay {
@@ -461,6 +498,30 @@
 .sa-check-list { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .sa-check-ok { color: var(--sa-success); font-size: 13px; }
 .sa-check-ok::before { content: '✓ '; font-weight: 700; }
+
+.sa-module-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.sa-module-card {
+  display: block;
+  text-decoration: none;
+  padding: 18px;
+  border: 1px solid var(--sa-border);
+  border-radius: var(--sa-radius);
+  background: linear-gradient(180deg, rgba(108,99,255,0.10), rgba(255,255,255,0.02));
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.sa-module-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--sa-border-light);
+}
+
+.sa-module-card-title { color: var(--sa-text-heading); font-weight: 700; margin-bottom: 6px; }
+.sa-module-card-meta { color: var(--sa-text-muted); font-size: 12px; }
 
 /* ─── Status banner ─── */
 .sa-status-banner {
@@ -533,6 +594,7 @@
 .sa-empty-sm { color: var(--sa-text-muted); font-size: 13px; padding: 10px 0; }
 .sa-setup-notice { background: rgba(59,158,255,0.1); border: 1px solid rgba(59,158,255,0.25); border-radius: var(--sa-radius-sm); padding: 10px 14px; font-size: 13px; color: var(--sa-info); margin-bottom: 16px; }
 .sa-spinner { width: 32px; height: 32px; border: 3px solid var(--sa-border); border-top-color: var(--sa-accent); border-radius: 50%; animation: sa-spin 0.7s linear infinite; }
+.sa-access-denied { max-width: 560px; }
 @keyframes sa-spin { to { transform: rotate(360deg); } }
 
 /* ─── Login page ─── */

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { hasPermission } from '../lib/permissions';
 
 const STATUS_BADGE = {
   pending:   { cls: 'sa-badge-cold', label: 'PENDING' },
@@ -26,20 +27,27 @@ function trainingFetchErrorMessage(err) {
 }
 
 const TABS = [
-  { id: 'scrape',        label: 'Website scraping' },
-  { id: 'conversational', label: 'Conversational' },
-  { id: 'documents',    label: 'Documents' },
-  { id: 'database',     label: 'Database / SQL' },
-  { id: 'media',        label: 'Media training' },
-  { id: 'structured',   label: 'Structured (CSV / Excel)' },
-  { id: 'manual',       label: 'Manual knowledge' },
+  { id: 'scrape', label: 'Website scraping', permission: 'training_scrape' },
+  { id: 'conversational', label: 'Conversational', permission: 'training_conversational' },
+  { id: 'documents', label: 'Documents', permission: 'training_documents' },
+  { id: 'database', label: 'Database / SQL', permission: 'training_database' },
+  { id: 'media', label: 'Media training', permission: 'training_media' },
+  { id: 'structured', label: 'Structured (CSV / Excel)', permission: 'training_structured' },
+  { id: 'manual', label: 'Manual knowledge', permission: 'training_manual' },
 ];
 
 export default function Training() {
   const { companyId } = useParams();
-  const { saFetch } = useSuperAuth();
+  const { saFetch, admin } = useSuperAuth();
   const { showToast } = useSuperToast();
-  const [activeTab, setActiveTab] = useState('scrape');
+  const canViewTab = useCallback((permissionKey) => (
+    hasPermission(admin, 'ai_configuration', 'view') || hasPermission(admin, permissionKey, 'view')
+  ), [admin]);
+  const canEditTab = useCallback((permissionKey) => (
+    hasPermission(admin, 'ai_configuration', 'edit') || hasPermission(admin, permissionKey, 'edit')
+  ), [admin]);
+  const availableTabs = TABS.filter((tab) => canViewTab(tab.permission));
+  const [activeTab, setActiveTab] = useState(availableTabs[0]?.id || 'scrape');
 
   // Website scrape
   const [url, setUrl] = useState('');
@@ -188,6 +196,12 @@ export default function Training() {
   useEffect(() => {
     if (activeTab === 'manual') loadManual();
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!availableTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(availableTabs[0]?.id || 'scrape');
+    }
+  }, [activeTab, availableTabs]);
 
   useEffect(() => {
     loadFiles();
@@ -569,7 +583,7 @@ export default function Training() {
 
       {/* Tabs */}
       <div className="sa-tabs" style={{ flexWrap: 'wrap' }}>
-        {TABS.map((t) => (
+        {availableTabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -582,7 +596,7 @@ export default function Training() {
       </div>
 
       {/* ─── Website scraping ─────────────────────────────────────────────── */}
-      {activeTab === 'scrape' && (
+      {activeTab === 'scrape' && canViewTab('training_scrape') && (
         <>
           <div className="sa-panel">
             <form onSubmit={handleScrapeSubmit}>
@@ -602,7 +616,7 @@ export default function Training() {
               <button
                 type="submit"
                 className="sa-btn sa-btn-primary"
-                disabled={!url.trim() || isScrapeRunning}
+                  disabled={!canEditTab('training_scrape') || !url.trim() || isScrapeRunning}
               >
                 {isScrapeRunning
                   ? (job?.status === 'running'
@@ -625,7 +639,7 @@ export default function Training() {
               </div>
               {job.status === 'completed' && (
                 <div style={{ marginBottom: 14 }}>
-                  <button type="button" className="sa-btn sa-btn-success sa-btn-sm" onClick={handleScrapeSave}>
+                  <button type="button" className="sa-btn sa-btn-success sa-btn-sm" onClick={handleScrapeSave} disabled={!canEditTab('training_scrape')}>
                     Save to training data
                   </button>
                 </div>
@@ -660,7 +674,7 @@ export default function Training() {
       )}
 
       {/* ─── Conversational ───────────────────────────────────────────────── */}
-      {activeTab === 'conversational' && (
+      {activeTab === 'conversational' && canViewTab('training_conversational') && (
         <div className="sa-panel">
           <p style={{ fontSize: 13, color: 'var(--sa-text-muted)', marginBottom: 14 }}>
             Append an instruction or a Q&amp;A pair. Appends to{' '}
@@ -698,7 +712,7 @@ export default function Training() {
             <button
               type="submit"
               className="sa-btn sa-btn-primary"
-              disabled={convSaving || (!convText.trim() && !convUser.trim() && !convAssistant.trim())}
+              disabled={!canEditTab('training_conversational') || convSaving || (!convText.trim() && !convUser.trim() && !convAssistant.trim())}
             >
               {convSaving ? 'Saving...' : 'Append to training'}
             </button>
@@ -707,7 +721,7 @@ export default function Training() {
       )}
 
       {/* ─── Documents ────────────────────────────────────────────────────── */}
-      {activeTab === 'documents' && (
+      {activeTab === 'documents' && canViewTab('training_documents') && (
         <div className="sa-panel">
           <p style={{ fontSize: 13, color: 'var(--sa-text-muted)', marginBottom: 14 }}>
             Upload PDF, DOCX, TXT/Markdown, or{' '}
@@ -729,7 +743,7 @@ export default function Training() {
                 onChange={(e) => setDocFiles(e.target.files)}
               />
             </div>
-            <button type="submit" className="sa-btn sa-btn-primary" disabled={docSaving || !docFiles?.length}>
+            <button type="submit" className="sa-btn sa-btn-primary" disabled={!canEditTab('training_documents') || docSaving || !docFiles?.length}>
               {docSaving ? 'Saving...' : `Save ${docFiles?.length || 0} file(s)`}
             </button>
           </form>
@@ -737,7 +751,7 @@ export default function Training() {
       )}
 
       {/* ─── Database / SQL ───────────────────────────────────────────────── */}
-      {activeTab === 'database' && (
+      {activeTab === 'database' && canViewTab('training_database') && (
         <div className="sa-panel">
           <p style={{ fontSize: 13, color: 'var(--sa-text-muted)', marginBottom: 14 }}>
             Teach the bot the{' '}
@@ -784,7 +798,7 @@ export default function Training() {
             <button
               type="submit"
               className="sa-btn sa-btn-primary"
-              disabled={dbSaving || (!dbContent.trim() && !dbFiles?.length)}
+              disabled={!canEditTab('training_database') || dbSaving || (!dbContent.trim() && !dbFiles?.length)}
             >
               {dbSaving ? 'Saving...' : 'Append database knowledge'}
             </button>
@@ -793,7 +807,7 @@ export default function Training() {
       )}
 
       {/* ─── Media training ───────────────────────────────────────────────── */}
-      {activeTab === 'media' && (
+      {activeTab === 'media' && canViewTab('training_media') && (
         <div className="sa-panel">
           <p style={{ fontSize: 13, color: 'var(--sa-text-muted)', marginBottom: 14 }}>
             Upload images, audio, or video. Optionally add caption/transcript text so AI can use
@@ -808,7 +822,7 @@ export default function Training() {
                 accept="image/*,audio/*,video/*"
                 multiple
                 onChange={(e) => handleMediaFileChange(e.target.files)}
-                disabled={mediaSaving || mediaTranscribing}
+                disabled={!canEditTab('training_media') || mediaSaving || mediaTranscribing}
               />
             </div>
             <div className="sa-field">
@@ -836,7 +850,7 @@ export default function Training() {
             <button
               type="submit"
               className="sa-btn sa-btn-primary"
-              disabled={mediaSaving || mediaTranscribing || !mediaFiles?.length || !mediaJsonl.trim()}
+              disabled={!canEditTab('training_media') || mediaSaving || mediaTranscribing || !mediaFiles?.length || !mediaJsonl.trim()}
             >
               {mediaTranscribing ? 'Transcribing...' : mediaSaving ? 'Saving...' : `Save ${mediaFiles?.length || 0} media file(s)`}
             </button>
@@ -845,7 +859,7 @@ export default function Training() {
       )}
 
       {/* ─── Structured ───────────────────────────────────────────────────── */}
-      {activeTab === 'structured' && (
+      {activeTab === 'structured' && canViewTab('training_structured') && (
         <div className="sa-panel">
           <p style={{ fontSize: 13, color: 'var(--sa-text-muted)', marginBottom: 14 }}>
             Paste a JSON array of objects, or upload CSV/Excel. Data is appended to{' '}
@@ -871,7 +885,7 @@ export default function Training() {
                 onChange={(e) => setStructuredFile(e.target.files?.[0] || null)}
               />
             </div>
-            <button type="submit" className="sa-btn sa-btn-primary" disabled={structuredSaving}>
+            <button type="submit" className="sa-btn sa-btn-primary" disabled={!canEditTab('training_structured') || structuredSaving}>
               {structuredSaving ? 'Saving...' : 'Append to training'}
             </button>
           </form>
@@ -879,7 +893,7 @@ export default function Training() {
       )}
 
       {/* ─── Manual knowledge ─────────────────────────────────────────────── */}
-      {activeTab === 'manual' && (
+      {activeTab === 'manual' && canViewTab('training_manual') && (
         <div className="sa-panel">
           <p style={{ fontSize: 13, color: 'var(--sa-text-muted)', marginBottom: 14 }}>
             FAQs, policies, business description. Stored in{' '}
@@ -901,7 +915,7 @@ export default function Training() {
                   <button
                     type="button"
                     onClick={handleManualMicClick}
-                    disabled={manualSaving}
+                    disabled={!canEditTab('training_manual') || manualSaving}
                     title={manualRecording ? 'Stop voice input' : 'Start voice input'}
                     style={{
                       width: 36, height: 36, borderRadius: '50%',

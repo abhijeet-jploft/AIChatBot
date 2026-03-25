@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { useSuperAuth } from './context/AuthContext';
 import { useSaTheme } from './context/ThemeContext';
@@ -21,6 +21,21 @@ import CompanyThemeSettings from './pages/CompanyThemeSettings';
 import CompanyModeSettings from './pages/CompanyModeSettings';
 import CompanyAdminSettingsAccess from './pages/CompanyAdminSettingsAccess';
 import SuperAdminProfile from './pages/SuperAdminProfile';
+import StaffWorkspace from './pages/StaffWorkspace';
+import StaffManagement from './pages/StaffManagement';
+import AccessDenied from './pages/AccessDenied';
+import { hasPermission } from './lib/permissions';
+
+const TRAINING_PERMISSION_CHECKS = [
+  ['ai_configuration', 'view'],
+  ['training_scrape', 'view'],
+  ['training_conversational', 'view'],
+  ['training_documents', 'view'],
+  ['training_database', 'view'],
+  ['training_media', 'view'],
+  ['training_structured', 'view'],
+  ['training_manual', 'view'],
+];
 import './index.css';
 
 function saAvatarSrc(url) {
@@ -38,36 +53,59 @@ function SuperAdminLayout({ children }) {
   const location = useLocation();
   const companyMatch = location.pathname.match(/^\/super-admin\/companies\/([^/]+)/);
   const currentCompanyId = companyMatch?.[1] ? decodeURIComponent(companyMatch[1]) : null;
+  const isForcedPasswordChange = admin?.type === 'staff' && admin?.mustChangePassword;
+  const canAccess = (moduleKey, minimumLevel = 'view') => hasPermission(admin, moduleKey, minimumLevel);
+  const canAccessCompanySelector =
+    canAccess('business_management')
+    || canAccess('ai_configuration')
+    || canAccess('training_scrape')
+    || canAccess('training_conversational')
+    || canAccess('training_documents')
+    || canAccess('training_database')
+    || canAccess('training_media')
+    || canAccess('training_structured')
+    || canAccess('training_manual')
+    || canAccess('voice_management')
+    || canAccess('api_management')
+    || canAccess('user_management');
 
   const navGroups = [
     {
       label: 'Platform',
       items: [
-        { to: '/super-admin', label: 'Dashboard', end: true },
-        { to: '/super-admin/companies', label: 'Companies', end: false },
-        { to: '/super-admin/reports', label: 'Reports' },
+        ...(admin?.type === 'staff' ? [{ to: '/super-admin/staff', label: 'My Workspace' }] : []),
+        ...(canAccess('dashboard') ? [{ to: '/super-admin', label: 'Dashboard', end: true }] : []),
+        ...(canAccessCompanySelector ? [{ to: '/super-admin/companies', label: 'Companies', end: false }] : []),
+        ...(canAccess('analytics') ? [{ to: '/super-admin/reports', label: 'Reports' }] : []),
+        ...(canAccess('user_management') ? [{ to: '/super-admin/staff-management', label: 'Staff Management' }] : []),
         { to: '/super-admin/profile', label: 'My profile' },
       ],
     },
     {
       label: 'System',
       items: [
-        { to: '/super-admin/monitoring', label: 'System Monitoring' },
-        { to: '/super-admin/support-tickets', label: 'Support Tickets' },
-        { to: '/super-admin/alert-rules', label: 'Alert Rules' },
+        ...(canAccess('system_settings') ? [{ to: '/super-admin/monitoring', label: 'System Monitoring' }] : []),
+        ...(canAccess('support_tickets') ? [{ to: '/super-admin/support-tickets', label: 'Support Tickets' }] : []),
+        ...(canAccess('system_settings') ? [{ to: '/super-admin/alert-rules', label: 'Alert Rules' }] : []),
       ],
     },
     ...(currentCompanyId ? [{
       label: 'Company',
       items: [
-        { to: `/super-admin/companies/${encodeURIComponent(currentCompanyId)}/admin-settings-access`, label: 'Admin Settings Access' },
-        { to: `/super-admin/companies/${encodeURIComponent(currentCompanyId)}/api-tracking`, label: 'API Tracking' },
+        ...(canAccess('user_management') ? [{ to: `/super-admin/companies/${encodeURIComponent(currentCompanyId)}/admin-settings-access`, label: 'Admin Settings Access' }] : []),
+        ...(canAccess('api_management') ? [{ to: `/super-admin/companies/${encodeURIComponent(currentCompanyId)}/api-tracking`, label: 'API Tracking' }] : []),
       ],
     }] : []),
-  ];
+  ]
+    .map((group) => ({ ...group, items: (group.items || []).filter(Boolean) }))
+    .filter((group) => group.items.length > 0);
+
+  const visibleNavGroups = isForcedPasswordChange
+    ? navGroups.map((group) => ({ ...group, items: group.items.filter((item) => item.to === '/super-admin/profile') })).filter((group) => group.items.length > 0)
+    : navGroups;
 
   const currentPageLabel =
-    navGroups
+    visibleNavGroups
       .flatMap((g) => g.items)
       .find((item) => item.end ? location.pathname === item.to : location.pathname.startsWith(item.to))
       ?.label || 'Super Admin';
@@ -96,7 +134,7 @@ function SuperAdminLayout({ children }) {
             </div>
           </div>
 
-          {navGroups.map((group) => (
+          {visibleNavGroups.map((group) => (
             <div key={group.label} className="sa-nav-group">
               <div className="sa-nav-group-title">{group.label}</div>
               <nav className="sa-nav">
@@ -120,12 +158,12 @@ function SuperAdminLayout({ children }) {
                 {admin?.avatarUrl ? (
                   <img src={saAvatarSrc(admin.avatarUrl)} alt="" />
                 ) : (
-                  admin?.username?.[0]?.toUpperCase() || 'S'
+                  admin?.name?.[0]?.toUpperCase() || admin?.username?.[0]?.toUpperCase() || 'S'
                 )}
               </div>
               <div>
-                <div className="sa-user-name">{admin?.username || 'Super Admin'}</div>
-                <div className="sa-user-role">{admin?.email || 'Platform Admin'}</div>
+                <div className="sa-user-name">{admin?.name || admin?.username || 'Super Admin'}</div>
+                <div className="sa-user-role">{admin?.roleName || admin?.email || 'Platform Admin'}</div>
               </div>
             </div>
             <button className="sa-logout-btn" onClick={handleLogout} title="Sign out">
@@ -190,6 +228,118 @@ function RequireSuperAuth({ children }) {
   return children;
 }
 
+function RequirePermission({ moduleKey, minimumLevel = 'view', children }) {
+  const { admin, loading, refreshAdmin } = useSuperAuth();
+  const location = useLocation();
+  const [refreshing, setRefreshing] = useState(false);
+  const [rechecked, setRechecked] = useState(false);
+
+  useEffect(() => {
+    setRechecked(false);
+    setRefreshing(false);
+  }, [location.pathname, moduleKey, minimumLevel, admin?.id]);
+
+  useEffect(() => {
+    if (loading || refreshing || rechecked) return;
+    if (admin?.type !== 'staff') return;
+    if (admin.mustChangePassword) return;
+    if (hasPermission(admin, moduleKey, minimumLevel)) return;
+
+    let cancelled = false;
+    setRefreshing(true);
+    Promise.resolve(refreshAdmin?.())
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        setRefreshing(false);
+        setRechecked(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [admin, loading, minimumLevel, moduleKey, refreshAdmin, refreshing, rechecked]);
+
+  if (loading || refreshing) {
+    return (
+      <div className="sa-shell sa-full-center">
+        <div className="sa-spinner" />
+      </div>
+    );
+  }
+  if (!admin) {
+    return <Navigate to="/super-admin/login" state={{ from: location }} replace />;
+  }
+  if (admin.type === 'staff' && admin.mustChangePassword && location.pathname !== '/super-admin/profile') {
+    return <Navigate to="/super-admin/profile" replace />;
+  }
+  if (!hasPermission(admin, moduleKey, minimumLevel)) {
+    return <Navigate to="/super-admin/access-denied" replace />;
+  }
+  return children;
+}
+
+function RequireAnyPermission({ checks, children }) {
+  const { admin, loading, refreshAdmin } = useSuperAuth();
+  const location = useLocation();
+  const [refreshing, setRefreshing] = useState(false);
+  const [rechecked, setRechecked] = useState(false);
+
+  useEffect(() => {
+    setRechecked(false);
+    setRefreshing(false);
+  }, [location.pathname, admin?.id, JSON.stringify(checks || [])]);
+
+  const allowed = (checks || []).some(([moduleKey, minimumLevel]) => hasPermission(admin, moduleKey, minimumLevel || 'view'));
+
+  useEffect(() => {
+    if (loading || refreshing || rechecked) return;
+    if (admin?.type !== 'staff') return;
+    if (admin.mustChangePassword) return;
+    if (allowed) return;
+
+    let cancelled = false;
+    setRefreshing(true);
+    Promise.resolve(refreshAdmin?.())
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        setRefreshing(false);
+        setRechecked(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [admin, allowed, loading, refreshAdmin, refreshing, rechecked]);
+
+  if (loading || refreshing) {
+    return (
+      <div className="sa-shell sa-full-center">
+        <div className="sa-spinner" />
+      </div>
+    );
+  }
+  if (!admin) {
+    return <Navigate to="/super-admin/login" state={{ from: location }} replace />;
+  }
+  if (admin.type === 'staff' && admin.mustChangePassword && location.pathname !== '/super-admin/profile') {
+    return <Navigate to="/super-admin/profile" replace />;
+  }
+  if (!allowed) {
+    return <Navigate to="/super-admin/access-denied" replace />;
+  }
+  return children;
+}
+
+function HomeRoute() {
+  const { admin } = useSuperAuth();
+  if (admin?.type === 'staff' && !hasPermission(admin, 'dashboard', 'view')) {
+    return <Navigate to="/super-admin/staff" replace />;
+  }
+  return <Dashboard />;
+}
+
 export default function SuperAdminApp() {
   return (
     <SuperToastProvider>
@@ -201,22 +351,43 @@ export default function SuperAdminApp() {
             <RequireSuperAuth>
               <SuperAdminLayout>
                 <Routes>
-                  <Route index element={<Dashboard />} />
-                  <Route path="companies" element={<Companies />} />
-                  <Route path="companies/:companyId/settings" element={<CompanySettings />} />
-                  <Route path="companies/:companyId/api-settings" element={<CompanyApiSettings />} />
-                  <Route path="companies/:companyId/api-tracking" element={<CompanyApiTracking />} />
-                  <Route path="companies/:companyId/configurations" element={<CompanyConfigurations />} />
-                  <Route path="companies/:companyId/admin-settings-access" element={<CompanyAdminSettingsAccess />} />
-                  <Route path="companies/:companyId/voice-settings" element={<CompanyVoiceSettings />} />
-                  <Route path="companies/:companyId/theme-settings" element={<CompanyThemeSettings />} />
-                  <Route path="companies/:companyId/mode-settings" element={<CompanyModeSettings />} />
-                  <Route path="companies/:companyId" element={<CompanyDetail />} />
-                  <Route path="training/:companyId" element={<Training />} />
-                  <Route path="monitoring" element={<SystemMonitoring />} />
-                  <Route path="support-tickets" element={<SupportTickets />} />
-                  <Route path="reports" element={<Reports />} />
-                  <Route path="alert-rules" element={<AlertRules />} />
+                  <Route index element={<HomeRoute />} />
+                  <Route path="staff" element={<StaffWorkspace />} />
+                  <Route path="access-denied" element={<AccessDenied />} />
+                  <Route path="staff-management" element={<RequirePermission moduleKey="user_management"><StaffManagement /></RequirePermission>} />
+                  <Route path="companies" element={<RequireAnyPermission checks={[
+                    ['business_management', 'view'],
+                    ['ai_configuration', 'view'],
+                    ['voice_management', 'view'],
+                    ['api_management', 'view'],
+                    ['user_management', 'view'],
+                  ]}><Companies /></RequireAnyPermission>} />
+                  <Route path="companies/:companyId/settings" element={<RequirePermission moduleKey="business_management"><CompanySettings /></RequirePermission>} />
+                  <Route path="companies/:companyId/api-settings" element={<RequirePermission moduleKey="api_management"><CompanyApiSettings /></RequirePermission>} />
+                  <Route path="companies/:companyId/api-tracking" element={<RequirePermission moduleKey="api_management"><CompanyApiTracking /></RequirePermission>} />
+                  <Route path="companies/:companyId/configurations" element={<RequireAnyPermission checks={[
+                    ['business_management', 'view'],
+                    ['ai_configuration', 'view'],
+                    ['voice_management', 'view'],
+                    ['api_management', 'view'],
+                    ['user_management', 'view'],
+                  ]}><CompanyConfigurations /></RequireAnyPermission>} />
+                  <Route path="companies/:companyId/admin-settings-access" element={<RequirePermission moduleKey="user_management"><CompanyAdminSettingsAccess /></RequirePermission>} />
+                  <Route path="companies/:companyId/voice-settings" element={<RequirePermission moduleKey="voice_management"><CompanyVoiceSettings /></RequirePermission>} />
+                  <Route path="companies/:companyId/theme-settings" element={<RequirePermission moduleKey="system_settings"><CompanyThemeSettings /></RequirePermission>} />
+                  <Route path="companies/:companyId/mode-settings" element={<RequirePermission moduleKey="ai_configuration"><CompanyModeSettings /></RequirePermission>} />
+                  <Route path="companies/:companyId" element={<RequireAnyPermission checks={[
+                    ['business_management', 'view'],
+                    ['ai_configuration', 'view'],
+                    ['voice_management', 'view'],
+                    ['api_management', 'view'],
+                    ['user_management', 'view'],
+                  ]}><CompanyDetail /></RequireAnyPermission>} />
+                  <Route path="training/:companyId" element={<RequireAnyPermission checks={TRAINING_PERMISSION_CHECKS}><Training /></RequireAnyPermission>} />
+                  <Route path="monitoring" element={<RequirePermission moduleKey="system_settings"><SystemMonitoring /></RequirePermission>} />
+                  <Route path="support-tickets" element={<RequirePermission moduleKey="support_tickets"><SupportTickets /></RequirePermission>} />
+                  <Route path="reports" element={<RequirePermission moduleKey="analytics"><Reports /></RequirePermission>} />
+                  <Route path="alert-rules" element={<RequirePermission moduleKey="system_settings"><AlertRules /></RequirePermission>} />
                   <Route path="profile" element={<SuperAdminProfile />} />
                   <Route path="*" element={<Navigate to="/super-admin" replace />} />
                 </Routes>

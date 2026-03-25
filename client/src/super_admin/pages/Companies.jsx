@@ -2,12 +2,60 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { hasAnyPermission, hasPermission } from '../lib/permissions';
 
 const DEFAULT_FILTERS = {
   search: '',
   agentStatus: 'all',
   adminLogin: 'all',
 };
+
+const TRAINING_PERMISSION_CHECKS = [
+  ['ai_configuration', 'view'],
+  ['training_scrape', 'view'],
+  ['training_conversational', 'view'],
+  ['training_documents', 'view'],
+  ['training_database', 'view'],
+  ['training_media', 'view'],
+  ['training_structured', 'view'],
+  ['training_manual', 'view'],
+];
+
+function buildCompanyActions(admin, companyId) {
+  const encodedCompanyId = encodeURIComponent(companyId);
+  const actions = [];
+
+  if (hasPermission(admin, 'business_management', 'view')) {
+    actions.push({ key: 'settings', label: 'Settings', to: `/super-admin/companies/${encodedCompanyId}/settings` });
+  }
+  if (hasPermission(admin, 'user_management', 'view')) {
+    actions.push({ key: 'users', label: 'Users', to: `/super-admin/companies/${encodedCompanyId}/admin-settings-access` });
+  }
+  if (hasPermission(admin, 'ai_configuration', 'view')) {
+    actions.push({ key: 'ai-mode', label: 'AI Mode', to: `/super-admin/companies/${encodedCompanyId}/mode-settings` });
+  }
+  if (hasAnyPermission(admin, TRAINING_PERMISSION_CHECKS)) {
+    actions.push({ key: 'training', label: 'Training', to: `/super-admin/training/${encodedCompanyId}` });
+  }
+  if (hasPermission(admin, 'voice_management', 'view')) {
+    actions.push({ key: 'voice', label: 'Voice', to: `/super-admin/companies/${encodedCompanyId}/voice-settings` });
+  }
+  if (hasPermission(admin, 'api_management', 'view')) {
+    actions.push({ key: 'api-settings', label: 'API Settings', to: `/super-admin/companies/${encodedCompanyId}/api-settings` });
+    actions.push({ key: 'api-tracking', label: 'API Tracking', to: `/super-admin/companies/${encodedCompanyId}/api-tracking` });
+  }
+  if (
+    hasPermission(admin, 'business_management', 'view')
+    || hasPermission(admin, 'user_management', 'view')
+    || hasPermission(admin, 'ai_configuration', 'view')
+    || hasPermission(admin, 'voice_management', 'view')
+    || hasPermission(admin, 'api_management', 'view')
+  ) {
+    actions.push({ key: 'configurations', label: 'Configurations', to: `/super-admin/companies/${encodedCompanyId}/configurations` });
+  }
+
+  return actions;
+}
 
 function getAdminLoginState(company) {
   if (!company?.admin_email) return 'no_email';
@@ -31,7 +79,7 @@ function matchesCompanySearch(company, rawSearch) {
 }
 
 export default function Companies() {
-  const { saFetch } = useSuperAuth();
+  const { admin, saFetch } = useSuperAuth();
   const { showToast } = useSuperToast();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,6 +182,9 @@ export default function Companies() {
     filters.search.trim() !== '' ||
     filters.agentStatus !== DEFAULT_FILTERS.agentStatus ||
     filters.adminLogin !== DEFAULT_FILTERS.adminLogin;
+  const canCreateCompany = hasPermission(admin, 'business_management', 'edit');
+  const canSuspendCompany = hasPermission(admin, 'business_management', 'edit');
+  const canDeleteCompany = hasPermission(admin, 'business_management', 'full');
 
   return (
     <div className="sa-page">
@@ -156,13 +207,15 @@ export default function Companies() {
               Clear filters
             </button>
           )}
-          <button className="sa-btn sa-btn-primary sa-btn-sm" onClick={() => setShowCreate(true)}>
-            + New Company
-          </button>
+          {canCreateCompany && (
+            <button className="sa-btn sa-btn-primary sa-btn-sm" onClick={() => setShowCreate(true)}>
+              + New Company
+            </button>
+          )}
         </div>
       </div>
 
-      {showCreate && (
+      {showCreate && canCreateCompany && (
         <div className="sa-modal-overlay">
           <div className="sa-modal">
             <div className="sa-modal-header">
@@ -311,14 +364,20 @@ export default function Companies() {
                 <tbody>
                   {filteredCompanies.map((company) => {
                     const adminLoginState = getAdminLoginState(company);
+                    const companyActions = buildCompanyActions(admin, company.company_id);
+                    const primaryLink = companyActions[0]?.to || (hasPermission(admin, 'business_management', 'view') ? `/super-admin/companies/${encodeURIComponent(company.company_id)}` : null);
 
                     return (
                       <tr key={company.company_id}>
                         <td><code className="sa-code">{company.company_id}</code></td>
                         <td>
-                          <Link to={`/super-admin/companies/${company.company_id}`} className="sa-link">
-                            {company.display_name || company.name}
-                          </Link>
+                          {primaryLink ? (
+                            <Link to={primaryLink} className="sa-link">
+                              {company.display_name || company.name}
+                            </Link>
+                          ) : (
+                            <span>{company.display_name || company.name}</span>
+                          )}
                         </td>
                         <td style={{ fontSize: 13 }}>
                           {company.admin_email || <span className="sa-text-muted">-</span>}
@@ -347,9 +406,12 @@ export default function Companies() {
                         <td>{new Date(company.created_at).toLocaleDateString()}</td>
                         <td>
                           <div className="sa-row-actions">
-                            <Link to={`/super-admin/companies/${company.company_id}`} className="sa-btn sa-btn-ghost sa-btn-xs">Manage</Link>
-                            <Link to={`/super-admin/training/${company.company_id}`} className="sa-btn sa-btn-ghost sa-btn-xs">Training</Link>
-                            {company.company_id !== '_default' && (
+                            {companyActions.map((action) => (
+                              <Link key={action.key} to={action.to} className="sa-btn sa-btn-ghost sa-btn-xs">
+                                {action.label}
+                              </Link>
+                            ))}
+                            {canSuspendCompany && company.company_id !== '_default' && (
                               <button
                                 type="button"
                                 className={`sa-btn ${company.is_suspended ? 'sa-btn-success' : 'sa-btn-warn'} sa-btn-xs`}
@@ -361,7 +423,7 @@ export default function Companies() {
                                   : (company.is_suspended ? 'Unsuspend' : 'Suspend')}
                               </button>
                             )}
-                            {company.company_id !== '_default' && (
+                            {canDeleteCompany && company.company_id !== '_default' && (
                               <button type="button" className="sa-btn sa-btn-danger sa-btn-xs" onClick={() => setDeleteTarget(company)}>Delete</button>
                             )}
                           </div>

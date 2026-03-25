@@ -33,9 +33,15 @@ function mapSuperAdminMe(d) {
   if (!d || typeof d !== 'object') return null;
   return {
     id: d.id,
+    type: d.type || 'super_admin',
     username: d.username,
+    name: d.name || d.username,
     email: d.email ?? null,
     avatarUrl: d.avatarUrl ?? null,
+    roleName: d.roleName || (d.type === 'staff' ? 'Staff' : 'Super Admin'),
+    permissions: d.permissions || {},
+    mustChangePassword: Boolean(d.mustChangePassword),
+    defaultRoute: d.defaultRoute || '/super-admin',
   };
 }
 
@@ -100,6 +106,9 @@ export function SuperAuthProvider({ children }) {
     if (!res.ok) throw new Error(data.error || 'Login failed');
     if (!data?.token) throw new Error(data.error || 'Login failed: missing token in server response');
     setToken(data.token);
+    const mapped = mapSuperAdminMe(data);
+    setAdmin(mapped);
+    return mapped;
   }, [setToken]);
 
   const logout = useCallback(async () => {

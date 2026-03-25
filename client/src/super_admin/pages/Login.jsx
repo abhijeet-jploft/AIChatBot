@@ -51,7 +51,9 @@ export default function Login() {
         if (!res.ok) throw new Error(data.error || 'Setup failed');
         await login(username.trim(), password);
       } else {
-        await login(username.trim(), password);
+        const account = await login(username.trim(), password);
+        navigate(account?.mustChangePassword ? '/super-admin/profile' : account?.defaultRoute || '/super-admin', { replace: true });
+        return;
       }
       navigate('/super-admin', { replace: true });
     } catch (err) {
@@ -81,12 +83,12 @@ export default function Login() {
           )}
 
           <div className="sa-field">
-            <label>Username</label>
+            <label>{needsSetup ? 'Username' : 'Username or email'}</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin"
+              placeholder={needsSetup ? 'admin' : 'admin or staff@company.com'}
               required
               autoComplete="username"
             />

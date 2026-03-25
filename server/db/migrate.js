@@ -496,12 +496,75 @@ CREATE TABLE IF NOT EXISTS super_admin_alert_rules (
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS super_admin_roles (
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        VARCHAR(120) NOT NULL UNIQUE,
+  description TEXT,
+  permissions JSONB        NOT NULL DEFAULT '{}',
+  is_system   BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS super_admin_staff_users (
+  id                     UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name              VARCHAR(160) NOT NULL,
+  email                  VARCHAR(255) NOT NULL UNIQUE,
+  password_hash          TEXT,
+  role_id                UUID         REFERENCES super_admin_roles(id) ON DELETE RESTRICT,
+  is_active              BOOLEAN      NOT NULL DEFAULT TRUE,
+  must_change_password   BOOLEAN      NOT NULL DEFAULT TRUE,
+  last_login_at          TIMESTAMPTZ,
+  last_password_change_at TIMESTAMPTZ,
+  created_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_super_admin_staff_role ON super_admin_staff_users(role_id);
+CREATE INDEX IF NOT EXISTS idx_super_admin_staff_active ON super_admin_staff_users(is_active, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS super_admin_staff_sessions (
+  id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_user_id  UUID         NOT NULL REFERENCES super_admin_staff_users(id) ON DELETE CASCADE,
+  token          VARCHAR(255) NOT NULL UNIQUE,
+  expires_at     TIMESTAMPTZ  NOT NULL,
+  last_active_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_super_admin_staff_sessions_token ON super_admin_staff_sessions(token);
+CREATE INDEX IF NOT EXISTS idx_super_admin_staff_sessions_staff ON super_admin_staff_sessions(staff_user_id);
+
+CREATE TABLE IF NOT EXISTS super_admin_audit_logs (
+  id           BIGSERIAL    PRIMARY KEY,
+  actor_type   VARCHAR(32)  NOT NULL,
+  actor_id     UUID,
+  actor_label  VARCHAR(255) NOT NULL,
+  action       VARCHAR(120) NOT NULL,
+  target_type  VARCHAR(64),
+  target_id    VARCHAR(255),
+  target_label VARCHAR(255),
+  metadata     JSONB,
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_super_admin_audit_logs_created ON super_admin_audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_super_admin_audit_logs_actor ON super_admin_audit_logs(actor_type, actor_id, created_at DESC);
 `;
 
 async function ensureSuperAdminTables(client) {
   await client.query(SUPER_ADMIN_SCHEMA);
   await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
   await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS full_name VARCHAR(160)`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES super_admin_roles(id) ON DELETE RESTRICT`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT TRUE`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS last_password_change_at TIMESTAMPTZ`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  await client.query(`ALTER TABLE super_admin_staff_sessions ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
 }
 
 /** Map legacy language labels to ISO 639-1 codes used by admin + ElevenLabs. */

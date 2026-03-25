@@ -30,7 +30,7 @@ export default function SuperAdminProfile() {
 
   useEffect(() => {
     if (!admin) return;
-    setUsername(admin.username || '');
+    setUsername(admin.type === 'staff' ? (admin.name || '') : (admin.username || ''));
     setEmail(admin.email || '');
   }, [admin]);
 
@@ -41,7 +41,9 @@ export default function SuperAdminProfile() {
       const res = await saFetch('/auth/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), email: email.trim() || null }),
+        body: JSON.stringify(admin?.type === 'staff'
+          ? { name: username.trim(), email: email.trim() || null }
+          : { username: username.trim(), email: email.trim() || null }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to update profile');
@@ -101,50 +103,64 @@ export default function SuperAdminProfile() {
   );
 
   const avatarSrc = resolveAvatarSrc(admin?.avatarUrl);
+  const isStaff = admin?.type === 'staff';
 
   return (
     <div className="sa-page sa-profile-page">
       <div className="sa-page-header">
         <h2 className="sa-page-title">Your profile</h2>
         <p className="sa-text-muted sa-profile-subtitle">
-          Update how you appear in the super admin console and manage your sign-in email.
+          Update how you appear in the super admin console and manage your sign-in credentials.
         </p>
       </div>
 
-      <div className="sa-panel sa-profile-panel">
-        <h4 className="sa-panel-title">Profile photo</h4>
-        <div className="sa-profile-photo-row">
-          <div className="sa-profile-avatar-preview">
-            {avatarSrc ? (
-              <img src={avatarSrc} alt="" className="sa-profile-avatar-image" />
-            ) : (
-              <span className="sa-profile-avatar-fallback">
-                {(admin?.username || '?').charAt(0).toUpperCase()}
-              </span>
-            )}
-          </div>
-          <div>
-            <label className="sa-btn sa-btn-ghost sa-btn-sm" style={{ cursor: avatarBusy ? 'wait' : 'pointer' }}>
-              {avatarBusy ? 'Uploading…' : 'Change photo'}
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={onAvatarSelected} disabled={avatarBusy} />
-            </label>
-            <div className="sa-text-muted sa-profile-photo-note">
-              JPEG, PNG, WebP, or GIF · max 2 MB
-            </div>
-          </div>
+      {admin?.mustChangePassword ? (
+        <div className="sa-panel sa-panel-info sa-profile-force">
+          <h4 className="sa-panel-title">Password change required</h4>
+          <p className="sa-text-muted sa-mb">
+            This staff account was created or reset with a temporary password. Update it now before using other modules.
+          </p>
         </div>
+      ) : null}
 
-        <hr className="sa-profile-divider" />
+      <div className="sa-panel sa-profile-panel">
+        {!isStaff ? (
+          <>
+            <h4 className="sa-panel-title">Profile photo</h4>
+            <div className="sa-profile-photo-row">
+              <div className="sa-profile-avatar-preview">
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="" className="sa-profile-avatar-image" />
+                ) : (
+                  <span className="sa-profile-avatar-fallback">
+                    {(admin?.username || '?').charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div>
+                <label className="sa-btn sa-btn-ghost sa-btn-sm" style={{ cursor: avatarBusy ? 'wait' : 'pointer' }}>
+                  {avatarBusy ? 'Uploading…' : 'Change photo'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={onAvatarSelected} disabled={avatarBusy} />
+                </label>
+                <div className="sa-text-muted sa-profile-photo-note">
+                  JPEG, PNG, WebP, or GIF · max 2 MB
+                </div>
+              </div>
+            </div>
+
+            <hr className="sa-profile-divider" />
+          </>
+        ) : null}
 
         <form onSubmit={handleSaveProfile}>
           <h4 className="sa-panel-title">Account</h4>
           <div className="sa-field">
-            <label>Username</label>
+            <label>{isStaff ? 'Name' : 'Username'}</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
+              autoComplete={isStaff ? 'name' : 'username'}
               required
             />
           </div>

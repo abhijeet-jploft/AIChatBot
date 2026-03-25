@@ -2,10 +2,22 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { hasAnyPermission, hasPermission } from '../lib/permissions';
+
+const TRAINING_PERMISSION_CHECKS = [
+  ['ai_configuration', 'view'],
+  ['training_scrape', 'view'],
+  ['training_conversational', 'view'],
+  ['training_documents', 'view'],
+  ['training_database', 'view'],
+  ['training_media', 'view'],
+  ['training_structured', 'view'],
+  ['training_manual', 'view'],
+];
 
 export default function CompanyDetail() {
   const { companyId } = useParams();
-  const { saFetch } = useSuperAuth();
+  const { admin, saFetch } = useSuperAuth();
   const { showToast } = useSuperToast();
   const [company, setCompany] = useState(null);
   const [stats, setStats] = useState(null);
@@ -16,6 +28,15 @@ export default function CompanyDetail() {
   const [editDesc, setEditDesc] = useState('');
   const [editAdminEmail, setEditAdminEmail] = useState('');
   const [editBusy, setEditBusy] = useState(false);
+  const canViewCompanyInfo = hasPermission(admin, 'business_management', 'view');
+  const canEditCompanyInfo = hasPermission(admin, 'business_management', 'edit');
+  const canViewAdminAccess = hasPermission(admin, 'user_management', 'view');
+  const canEditAdminAccess = hasPermission(admin, 'user_management', 'edit');
+  const canViewApi = hasPermission(admin, 'api_management', 'view');
+  const canViewVoice = hasPermission(admin, 'voice_management', 'view');
+  const canViewAi = hasPermission(admin, 'ai_configuration', 'view');
+  const canViewTraining = hasAnyPermission(admin, TRAINING_PERMISSION_CHECKS);
+  const canViewConfigurations = canViewCompanyInfo || canViewAdminAccess || canViewApi || canViewVoice || canViewAi;
 
   const load = async () => {
     setLoading(true);
@@ -138,24 +159,51 @@ export default function CompanyDetail() {
           <code className="sa-code-muted">{company.company_id}</code>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-btn sa-btn-primary sa-btn-sm">
-            All Configurations
-          </Link>
-          <Link to={`/super-admin/companies/${companyId}/settings`} className="sa-btn sa-btn-primary sa-btn-sm">
-            Settings
-          </Link>
-          <Link to={`/super-admin/companies/${companyId}/api-settings`} className="sa-btn sa-btn-primary sa-btn-sm">
-            API Settings
-          </Link>
-          <Link to={`/super-admin/companies/${companyId}/api-tracking`} className="sa-btn sa-btn-primary sa-btn-sm">
-            API Tracking
-          </Link>
-          <Link to={`/super-admin/training/${companyId}`} className="sa-btn sa-btn-primary sa-btn-sm">
-            Training
-          </Link>
-          <button type="button" className="sa-btn sa-btn-primary sa-btn-sm" onClick={handleOpenAsAdmin}>
-            Open as company admin
-          </button>
+          {canViewConfigurations && (
+            <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-btn sa-btn-primary sa-btn-sm">
+              Configurations
+            </Link>
+          )}
+          {canViewCompanyInfo && (
+            <Link to={`/super-admin/companies/${companyId}/settings`} className="sa-btn sa-btn-primary sa-btn-sm">
+              Settings
+            </Link>
+          )}
+          {canViewAi && (
+            <Link to={`/super-admin/companies/${companyId}/mode-settings`} className="sa-btn sa-btn-primary sa-btn-sm">
+              AI Mode
+            </Link>
+          )}
+          {canViewApi && (
+            <Link to={`/super-admin/companies/${companyId}/api-settings`} className="sa-btn sa-btn-primary sa-btn-sm">
+              API Settings
+            </Link>
+          )}
+          {canViewApi && (
+            <Link to={`/super-admin/companies/${companyId}/api-tracking`} className="sa-btn sa-btn-primary sa-btn-sm">
+              API Tracking
+            </Link>
+          )}
+          {canViewVoice && (
+            <Link to={`/super-admin/companies/${companyId}/voice-settings`} className="sa-btn sa-btn-primary sa-btn-sm">
+              Voice
+            </Link>
+          )}
+          {canViewAdminAccess && (
+            <Link to={`/super-admin/companies/${companyId}/admin-settings-access`} className="sa-btn sa-btn-primary sa-btn-sm">
+              Users
+            </Link>
+          )}
+          {canViewTraining && (
+            <Link to={`/super-admin/training/${companyId}`} className="sa-btn sa-btn-primary sa-btn-sm">
+              Training
+            </Link>
+          )}
+          {canEditAdminAccess && (
+            <button type="button" className="sa-btn sa-btn-primary sa-btn-sm" onClick={handleOpenAsAdmin}>
+              Open as company admin
+            </button>
+          )}
         </div>
       </div>
 
@@ -173,16 +221,17 @@ export default function CompanyDetail() {
 
       <div className="sa-detail-cols">
         {/* Company info */}
+        {canViewCompanyInfo && (
         <div className="sa-panel">
           <h3 className="sa-panel-title">Company Info</h3>
           <form onSubmit={handleEdit}>
             <div className="sa-field">
               <label>Name</label>
-              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required />
+              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required disabled={!canEditCompanyInfo} />
             </div>
             <div className="sa-field">
               <label>Description</label>
-              <textarea rows={3} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+              <textarea rows={3} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} disabled={!canEditCompanyInfo} />
             </div>
             <div className="sa-field">
               <label>Admin login email</label>
@@ -192,6 +241,7 @@ export default function CompanyDetail() {
                 onChange={(e) => setEditAdminEmail(e.target.value)}
                 placeholder="admin@company.com"
                 required
+                disabled={!canEditCompanyInfo}
               />
               <p className="sa-text-muted" style={{ fontSize: 12, marginTop: 6 }}>
                 Company admins sign in with this email and their password. Must be unique across companies.
@@ -207,7 +257,7 @@ export default function CompanyDetail() {
                 <label>Embed</label>
                 <div className="sa-text-muted" style={{ fontSize: 12 }}>
                   Slug: <code>{company.embed_slug}</code>
-                  {company.embed_secret && (
+                  {canEditCompanyInfo && company.embed_secret && (
                     <>
                       {' · '}
                       Secret <span title={company.embed_secret}>…{String(company.embed_secret).slice(-6)}</span>
@@ -227,9 +277,11 @@ export default function CompanyDetail() {
                     </>
                   )}
                 </div>
-                <button type="button" className="sa-btn sa-btn-ghost sa-btn-sm" style={{ marginTop: 6 }} onClick={handleRegenerateEmbed}>
-                  Regenerate embed secret
-                </button>
+                {canEditCompanyInfo && (
+                  <button type="button" className="sa-btn sa-btn-ghost sa-btn-sm" style={{ marginTop: 6 }} onClick={handleRegenerateEmbed}>
+                    Regenerate embed secret
+                  </button>
+                )}
               </div>
             )}
             {company.lead_notification_email != null && (
@@ -238,11 +290,15 @@ export default function CompanyDetail() {
                 <div style={{ fontSize: 13 }}>{company.lead_notification_email || '—'}</div>
               </div>
             )}
-            <button type="submit" className="sa-btn sa-btn-primary sa-btn-sm" disabled={editBusy}>{editBusy ? 'Saving…' : 'Save'}</button>
+            {canEditCompanyInfo && (
+              <button type="submit" className="sa-btn sa-btn-primary sa-btn-sm" disabled={editBusy}>{editBusy ? 'Saving…' : 'Save'}</button>
+            )}
           </form>
         </div>
+        )}
 
         {/* Reset admin password */}
+        {canViewAdminAccess && (
         <div className="sa-panel">
           <h3 className="sa-panel-title">Admin Access</h3>
           <p className="sa-text-muted sa-mb">
@@ -263,13 +319,17 @@ export default function CompanyDetail() {
                 placeholder="Min 8 characters"
                 minLength={8}
                 required
+                disabled={!canEditAdminAccess}
               />
             </div>
+            {canEditAdminAccess && (
             <button type="submit" className="sa-btn sa-btn-warning sa-btn-sm" disabled={resetBusy}>
               {resetBusy ? 'Resetting…' : company.admin_configured ? 'Reset Password' : 'Set Password'}
             </button>
+            )}
           </form>
         </div>
+        )}
       </div>
     </div>
   );
