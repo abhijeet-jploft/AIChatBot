@@ -14,9 +14,45 @@ const { normalizeVoiceGender, normalizeVoiceProfile, synthesizeTextResponse } = 
 const { parseLanguageExtraLocalesJson, resolveSpeechLanguageCode } = require('../services/supportedChatLanguages');
 const { detectNaturalLanguageFromText } = require('../services/chatRules');
 const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
+const pool = require('../db/index');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
+
+async function trackApiUsage({
+  companyId,
+  sessionId = null,
+  provider,
+  category,
+  model = null,
+  requestContext = null,
+  latencyMs = null,
+  success = true,
+  errorMessage = null,
+  metadata = null,
+}) {
+  try {
+    await pool.query(
+      `INSERT INTO api_usage_logs (
+         company_id, session_id, api_provider, api_category, model, request_context, latency_ms, success, error_message, metadata
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+      [
+        companyId,
+        sessionId,
+        String(provider || 'unknown'),
+        String(category || 'unknown'),
+        model ? String(model) : null,
+        requestContext ? String(requestContext) : null,
+        Number.isFinite(latencyMs) ? Math.max(0, Math.round(latencyMs)) : null,
+        Boolean(success),
+        errorMessage ? String(errorMessage).slice(0, 1000) : null,
+        metadata ? JSON.stringify(metadata) : null,
+      ]
+    );
+  } catch {
+    // Tracking must never block chat responses.
+  }
+}
 
 function buildLanguageConfig(chatbot = null) {
   return {
@@ -220,28 +256,57 @@ async function postMessage(req, res) {
     }
 
     const aiStartedAt = Date.now();
-    const response = aiConfig.provider === 'gemini'
-      ? await sendGeminiMessage(companyId, messages, {
-        modeId: selectedModeId,
-        safetyConfig,
+    let response = '';
+    try {
+      response = aiConfig.provider === 'gemini'
+        ? await sendGeminiMessage(companyId, messages, {
+          modeId: selectedModeId,
+          safetyConfig,
+          model: aiConfig.model,
+          apiKey: aiConfig.geminiApiKey,
+          assistantName: aiConfig.assistantName,
+          languageConfig: aiConfig.language,
+        })
+        : await sendAnthropicMessage(companyId, messages, {
+          modeId: selectedModeId,
+          safetyConfig,
+          model: aiConfig.model,
+          apiKey: aiConfig.anthropicApiKey,
+          assistantName: aiConfig.assistantName,
+          languageConfig: aiConfig.language,
+        });
+      await trackApiUsage({
+        companyId,
+        sessionId: sid,
+        provider: aiConfig.provider,
+        category: 'chat',
         model: aiConfig.model,
-        apiKey: aiConfig.geminiApiKey,
-        assistantName: aiConfig.assistantName,
-        languageConfig: aiConfig.language,
-      })
-      : await sendAnthropicMessage(companyId, messages, {
-        modeId: selectedModeId,
-        safetyConfig,
-        model: aiConfig.model,
-        apiKey: aiConfig.anthropicApiKey,
-        assistantName: aiConfig.assistantName,
-        languageConfig: aiConfig.language,
+        requestContext: 'training_loader_context',
+        latencyMs: Date.now() - aiStartedAt,
+        success: true,
+        metadata: { modeId: selectedModeId || null },
       });
+    } catch (aiErr) {
+      await trackApiUsage({
+        companyId,
+        sessionId: sid,
+        provider: aiConfig.provider,
+        category: 'chat',
+        model: aiConfig.model,
+        requestContext: 'training_loader_context',
+        latencyMs: Date.now() - aiStartedAt,
+        success: false,
+        errorMessage: aiErr?.message || 'AI call failed',
+        metadata: { modeId: selectedModeId || null },
+      });
+      throw aiErr;
+    }
     const aiResponseMs = Date.now() - aiStartedAt;
     let voice = null;
 
     if (voiceConfig.enabled && voiceConfig.responseEnabled) {
       try {
+        const voiceStartedAt = Date.now();
         voice = await synthesizeCompanyVoice({
           chatbot,
           aiLanguageConfig: aiConfig.language,
@@ -249,11 +314,33 @@ async function postMessage(req, res) {
           assistantText: response,
           userText: userMsg?.content || '',
         });
+        if (voice) {
+          await trackApiUsage({
+            companyId,
+            sessionId: sid,
+            provider: 'elevenlabs',
+            category: 'voice',
+            model: null,
+            requestContext: 'assistant_reply_tts',
+            latencyMs: Date.now() - voiceStartedAt,
+            success: true,
+            metadata: { profile: voice.profile || null, voiceId: voice.voiceId || null },
+          });
+        }
         if (!voice && process.env.ELEVENLABS_API_KEY) {
           appendChatLog('warn', 'Voice synthesis returned no audio (text may be empty after sanitization)', { sessionId: sid, companyId });
         }
       } catch (voiceErr) {
         console.error('[voice] response non-fatal:', voiceErr.message);
+        await trackApiUsage({
+          companyId,
+          sessionId: sid,
+          provider: 'elevenlabs',
+          category: 'voice',
+          requestContext: 'assistant_reply_tts',
+          success: false,
+          errorMessage: voiceErr?.message || 'Voice synthesis failed',
+        });
         appendChatLog('warn', `Voice synthesis failed: ${voiceErr.message}`, { sessionId: sid, companyId });
       }
     }

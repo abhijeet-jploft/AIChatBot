@@ -147,6 +147,9 @@ export default function CompanyDetail() {
           <Link to={`/super-admin/companies/${companyId}/api-settings`} className="sa-btn sa-btn-primary sa-btn-sm">
             API Settings
           </Link>
+          <Link to={`/super-admin/companies/${companyId}/api-tracking`} className="sa-btn sa-btn-primary sa-btn-sm">
+            API Tracking
+          </Link>
           <Link to={`/super-admin/training/${companyId}`} className="sa-btn sa-btn-primary sa-btn-sm">
             Training
           </Link>

@@ -7,6 +7,7 @@ const companySettingsController = require('../controllers/companySettingsControl
 const trainingController = require('../controllers/trainingController');
 const systemController = require('../controllers/systemController');
 const supportTicketsController = require('../controllers/supportTicketsController');
+const apiTrackingController = require('../controllers/apiTrackingController');
 const { requireSuperAuth } = require('../middleware/requireSuperAuth');
 
 const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -40,6 +41,7 @@ router.post('/companies/:companyId/reset-password', requireSuperAuth, companiesC
 router.post('/companies/:companyId/regenerate-embed-secret', requireSuperAuth, companiesController.regenerateEmbedSecret);
 router.post('/companies/:companyId/impersonate', requireSuperAuth, companiesController.impersonateCompanyAdmin);
 router.get('/companies/:companyId/stats', requireSuperAuth, companiesController.getCompanyStats);
+router.get('/companies/:companyId/api-tracking', requireSuperAuth, apiTrackingController.getCompanyApiTracking);
 router.get('/companies/:companyId/settings', requireSuperAuth, companySettingsController.getCompanySettings);
 router.get('/companies/:companyId/settings/admin-visibility', requireSuperAuth, companySettingsController.getCompanyAdminVisibility);
 router.patch('/companies/:companyId/settings/admin-visibility', requireSuperAuth, companySettingsController.patchCompanyAdminVisibility);

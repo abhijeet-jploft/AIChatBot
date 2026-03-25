@@ -157,6 +157,24 @@ CREATE TABLE IF NOT EXISTS support_ticket_messages (
   created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_support_ticket_messages_ticket_created ON support_ticket_messages(ticket_id, created_at ASC);
+
+-- Per-company third-party API usage telemetry (chat/voice/etc.)
+CREATE TABLE IF NOT EXISTS api_usage_logs (
+  id               BIGSERIAL    PRIMARY KEY,
+  company_id       VARCHAR(255) NOT NULL REFERENCES chatbots(company_id) ON DELETE CASCADE,
+  session_id       UUID         REFERENCES chat_sessions(id) ON DELETE SET NULL,
+  api_provider     VARCHAR(32)  NOT NULL,
+  api_category     VARCHAR(32)  NOT NULL,
+  model            VARCHAR(128),
+  request_context  VARCHAR(64),
+  latency_ms       INTEGER,
+  success          BOOLEAN      NOT NULL DEFAULT TRUE,
+  error_message    TEXT,
+  metadata         JSONB,
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_api_usage_company_created ON api_usage_logs(company_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_usage_provider_created ON api_usage_logs(api_provider, created_at DESC);
 `;
 
 // ─── Chatbot seeder ───────────────────────────────────────────────────────────

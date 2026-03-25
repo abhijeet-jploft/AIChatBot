@@ -14,6 +14,7 @@ import AlertRules from './pages/AlertRules';
 import SupportTickets from './pages/SupportTickets';
 import CompanySettings from './pages/CompanySettings';
 import CompanyApiSettings from './pages/CompanyApiSettings';
+import CompanyApiTracking from './pages/CompanyApiTracking';
 import CompanyConfigurations from './pages/CompanyConfigurations';
 import CompanyVoiceSettings from './pages/CompanyVoiceSettings';
 import CompanyThemeSettings from './pages/CompanyThemeSettings';
@@ -60,6 +61,7 @@ function SuperAdminLayout({ children }) {
       label: 'Company',
       items: [
         { to: `/super-admin/companies/${encodeURIComponent(currentCompanyId)}/admin-settings-access`, label: 'Admin Settings Access' },
+        { to: `/super-admin/companies/${encodeURIComponent(currentCompanyId)}/api-tracking`, label: 'API Tracking' },
       ],
     }] : []),
   ];
@@ -203,6 +205,7 @@ export default function SuperAdminApp() {
                   <Route path="companies" element={<Companies />} />
                   <Route path="companies/:companyId/settings" element={<CompanySettings />} />
                   <Route path="companies/:companyId/api-settings" element={<CompanyApiSettings />} />
+                  <Route path="companies/:companyId/api-tracking" element={<CompanyApiTracking />} />
                   <Route path="companies/:companyId/configurations" element={<CompanyConfigurations />} />
                   <Route path="companies/:companyId/admin-settings-access" element={<CompanyAdminSettingsAccess />} />
                   <Route path="companies/:companyId/voice-settings" element={<CompanyVoiceSettings />} />
