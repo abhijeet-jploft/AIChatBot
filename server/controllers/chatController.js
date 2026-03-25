@@ -54,6 +54,22 @@ async function trackApiUsage({
   }
 }
 
+function resolveEffectiveModel(provider, configuredModel) {
+  const normalizedProvider = String(provider || '').trim().toLowerCase();
+  const explicitModel = String(configuredModel || '').trim();
+  if (explicitModel) return explicitModel;
+  if (normalizedProvider === 'gemini') {
+    return String(process.env.GEMINI_MODEL || 'gemini-1.5-flash').trim();
+  }
+  if (normalizedProvider === 'anthropic') {
+    return String(process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514').trim();
+  }
+  if (normalizedProvider === 'elevenlabs') {
+    return String(process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2').trim();
+  }
+  return null;
+}
+
 function buildLanguageConfig(chatbot = null) {
   return {
     primary: chatbot?.language_primary || 'en',
@@ -256,6 +272,7 @@ async function postMessage(req, res) {
     }
 
     const aiStartedAt = Date.now();
+    const effectiveAiModel = resolveEffectiveModel(aiConfig.provider, aiConfig.model);
     let response = '';
     try {
       response = aiConfig.provider === 'gemini'
@@ -280,7 +297,7 @@ async function postMessage(req, res) {
         sessionId: sid,
         provider: aiConfig.provider,
         category: 'chat',
-        model: aiConfig.model,
+        model: effectiveAiModel,
         requestContext: 'training_loader_context',
         latencyMs: Date.now() - aiStartedAt,
         success: true,
@@ -292,7 +309,7 @@ async function postMessage(req, res) {
         sessionId: sid,
         provider: aiConfig.provider,
         category: 'chat',
-        model: aiConfig.model,
+        model: effectiveAiModel,
         requestContext: 'training_loader_context',
         latencyMs: Date.now() - aiStartedAt,
         success: false,
@@ -320,7 +337,7 @@ async function postMessage(req, res) {
             sessionId: sid,
             provider: 'elevenlabs',
             category: 'voice',
-            model: null,
+            model: resolveEffectiveModel('elevenlabs', null),
             requestContext: 'assistant_reply_tts',
             latencyMs: Date.now() - voiceStartedAt,
             success: true,
@@ -337,6 +354,7 @@ async function postMessage(req, res) {
           sessionId: sid,
           provider: 'elevenlabs',
           category: 'voice',
+          model: resolveEffectiveModel('elevenlabs', null),
           requestContext: 'assistant_reply_tts',
           success: false,
           errorMessage: voiceErr?.message || 'Voice synthesis failed',
