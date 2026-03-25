@@ -129,6 +129,34 @@ CREATE TABLE IF NOT EXISTS lead_activities (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_lead_activities_lead ON lead_activities(lead_id, created_at DESC);
+
+-- Support tickets raised by visitor triggers or admins, managed by super admin.
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id      VARCHAR(255) NOT NULL REFERENCES chatbots(company_id) ON DELETE CASCADE,
+  session_id      UUID         REFERENCES chat_sessions(id) ON DELETE SET NULL,
+  source          VARCHAR(32)  NOT NULL DEFAULT 'visitor',
+  message         TEXT         NOT NULL,
+  priority        VARCHAR(16)  NOT NULL DEFAULT 'normal',
+  status          VARCHAR(16)  NOT NULL DEFAULT 'pending',
+  requested_by    VARCHAR(255),
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  resolved_at     TIMESTAMPTZ,
+  closed_at       TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_company_created ON support_tickets(company_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status_created ON support_tickets(status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS support_ticket_messages (
+  id              BIGSERIAL    PRIMARY KEY,
+  ticket_id       UUID         NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+  sender_role     VARCHAR(32)  NOT NULL,
+  sender_name     VARCHAR(255),
+  message         TEXT         NOT NULL,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_support_ticket_messages_ticket_created ON support_ticket_messages(ticket_id, created_at ASC);
 `;
 
 // ─── Chatbot seeder ───────────────────────────────────────────────────────────

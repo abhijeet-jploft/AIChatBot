@@ -16,6 +16,13 @@ export default function SupportRequests() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [ticketMessage, setTicketMessage] = useState('');
+  const [ticketPriority, setTicketPriority] = useState('normal');
+  const [activeTicket, setActiveTicket] = useState(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadRows, setThreadRows] = useState([]);
+  const [reply, setReply] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,9 +50,74 @@ export default function SupportRequests() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      load();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [load]);
+
   const totalPages = Math.max(1, Math.ceil(data.total / data.limit));
   const fromRow = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
   const toRow = Math.min(data.page * data.limit, data.total);
+
+  const handleCreateTicket = async (e) => {
+    e.preventDefault();
+    if (!ticketMessage.trim()) return;
+    setCreating(true);
+    try {
+      const res = await authFetch('/support-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: ticketMessage.trim(), priority: ticketPriority }),
+      });
+      const dataJson = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(dataJson.error || 'Failed to raise support ticket');
+      setTicketMessage('');
+      setTicketPriority('normal');
+      setPage(1);
+      await load();
+    } catch {
+      // keep silent here to match current page behavior without toasts
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const openTicketThread = async (row) => {
+    setActiveTicket(row);
+    setReply('');
+    setThreadLoading(true);
+    try {
+      const res = await authFetch(`/support-requests/${row.id}/messages`);
+      const dataJson = await res.json();
+      if (!res.ok) throw new Error(dataJson.error || 'Failed to load ticket thread');
+      setThreadRows(Array.isArray(dataJson.rows) ? dataJson.rows : []);
+    } catch {
+      setThreadRows([]);
+    } finally {
+      setThreadLoading(false);
+    }
+  };
+
+  const sendReply = async (e) => {
+    e.preventDefault();
+    if (!activeTicket?.id || !reply.trim()) return;
+    try {
+      const res = await authFetch(`/support-requests/${activeTicket.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: reply.trim() }),
+      });
+      const dataJson = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(dataJson.error || 'Failed to send message');
+      setReply('');
+      openTicketThread(activeTicket);
+      load();
+    } catch {
+      // keep current UX silent
+    }
+  };
 
   return (
     <div className="p-4">
@@ -53,6 +125,36 @@ export default function SupportRequests() {
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
         Visitors who asked for a human or support. Open the chat to take over.
       </p>
+
+      <div className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
+        <div className="card-body">
+          <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Raise a support ticket to super admin</h6>
+          <form onSubmit={handleCreateTicket} className="row g-2">
+            <div className="col-md-8">
+              <input
+                className="form-control"
+                value={ticketMessage}
+                onChange={(e) => setTicketMessage(e.target.value)}
+                placeholder="Describe issue, error, or help needed..."
+                maxLength={500}
+              />
+            </div>
+            <div className="col-md-2">
+              <select className="form-select" value={ticketPriority} onChange={(e) => setTicketPriority(e.target.value)}>
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div className="col-md-2 d-grid">
+              <button type="submit" className="btn btn-primary" disabled={creating || !ticketMessage.trim()}>
+                {creating ? 'Submitting...' : 'Raise Ticket'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
 
       <div className="card" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
         <div className="card-body p-0">
@@ -69,6 +171,8 @@ export default function SupportRequests() {
                   <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
                     <tr>
                       <th className="border-0 py-2">Message / trigger</th>
+                      <th className="border-0 py-2">Source</th>
+                      <th className="border-0 py-2">Status</th>
                       <th className="border-0 py-2">Requested at</th>
                       <th className="border-0 py-2 text-end">Actions</th>
                     </tr>
@@ -86,23 +190,48 @@ export default function SupportRequests() {
                           </span>
                         </td>
                         <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
+                          {row.source === 'admin' ? (
+                            <span className="badge bg-warning text-dark">Admin Ticket</span>
+                          ) : (
+                            <span className="badge bg-secondary">Visitor</span>
+                          )}
+                        </td>
+                        <td className="align-middle small">
+                          <span className={`badge ${row.status === 'resolved' ? 'bg-success' : row.status === 'closed' ? 'bg-dark' : 'bg-info text-dark'}`}>
+                            {row.status || 'pending'}
+                          </span>
+                        </td>
+                        <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
                           {formatDateTime(row.requestedAt)}
                         </td>
                         <td className="align-middle text-end">
-                          <Link
-                            to={`/admin/chat/${row.sessionId}`}
-                            className="btn btn-sm btn-primary me-1"
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary me-1"
+                            onClick={() => openTicketThread(row)}
                           >
-                            Operator chat
-                          </Link>
-                          <a
-                            href={`/?sessionId=${encodeURIComponent(row.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-sm btn-outline-secondary"
-                          >
-                            Visitor preview
-                          </a>
+                            View ticket
+                          </button>
+                          {row.sessionId ? (
+                            <>
+                              <Link
+                                to={`/admin/chat/${row.sessionId}`}
+                                className="btn btn-sm btn-primary me-1"
+                              >
+                                Operator chat
+                              </Link>
+                              <a
+                                href={`/?sessionId=${encodeURIComponent(row.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-sm btn-outline-secondary"
+                              >
+                                Visitor preview
+                              </a>
+                            </>
+                          ) : (
+                            <span className="small text-muted">No live session</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -141,6 +270,51 @@ export default function SupportRequests() {
           )}
         </div>
       </div>
+
+      {activeTicket ? (
+        <div className="modal d-block" style={{ background: 'rgba(0,0,0,0.5)' }} aria-modal="true" role="dialog">
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content" style={{ background: 'var(--chat-surface)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}>
+              <div className="modal-header" style={{ borderColor: 'var(--chat-border)' }}>
+                <h5 className="modal-title">Ticket Thread — {activeTicket.status || 'pending'}</h5>
+                <button type="button" className="btn-close" onClick={() => setActiveTicket(null)} />
+              </div>
+              <div className="modal-body">
+                <div className="small mb-2" style={{ color: 'var(--chat-muted)' }}>
+                  <strong>Message:</strong> {activeTicket.message}
+                </div>
+                <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--chat-border)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+                  {threadLoading ? (
+                    <div className="small text-muted">Loading thread...</div>
+                  ) : threadRows.length === 0 ? (
+                    <div className="small text-muted">No messages yet.</div>
+                  ) : (
+                    threadRows.map((m) => (
+                      <div key={m.id} style={{ marginBottom: 10 }}>
+                        <div className="small" style={{ color: 'var(--chat-muted)' }}>
+                          {m.senderRole} {m.senderName ? `(${m.senderName})` : ''} • {formatDateTime(m.createdAt)}
+                        </div>
+                        <div>{m.message}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <form onSubmit={sendReply}>
+                  <div className="input-group">
+                    <input
+                      className="form-control"
+                      value={reply}
+                      onChange={(e) => setReply(e.target.value)}
+                      placeholder="Reply to super admin..."
+                    />
+                    <button className="btn btn-primary" type="submit" disabled={!reply.trim()}>Send</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

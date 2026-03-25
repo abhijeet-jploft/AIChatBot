@@ -11,6 +11,7 @@ import Training from './pages/Training';
 import SystemMonitoring from './pages/SystemMonitoring';
 import Reports from './pages/Reports';
 import AlertRules from './pages/AlertRules';
+import SupportTickets from './pages/SupportTickets';
 import CompanySettings from './pages/CompanySettings';
 import CompanyApiSettings from './pages/CompanyApiSettings';
 import CompanyConfigurations from './pages/CompanyConfigurations';
@@ -51,6 +52,7 @@ function SuperAdminLayout({ children }) {
       label: 'System',
       items: [
         { to: '/super-admin/monitoring', label: 'System Monitoring' },
+        { to: '/super-admin/support-tickets', label: 'Support Tickets' },
         { to: '/super-admin/alert-rules', label: 'Alert Rules' },
       ],
     },
@@ -209,6 +211,7 @@ export default function SuperAdminApp() {
                   <Route path="companies/:companyId" element={<CompanyDetail />} />
                   <Route path="training/:companyId" element={<Training />} />
                   <Route path="monitoring" element={<SystemMonitoring />} />
+                  <Route path="support-tickets" element={<SupportTickets />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="alert-rules" element={<AlertRules />} />
                   <Route path="profile" element={<SuperAdminProfile />} />

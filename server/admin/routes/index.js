@@ -53,6 +53,9 @@ router.post('/conversations/:sessionId/send', requireAuth, conversationsControll
 router.get('/logs', requireAuth, logsController.listLogs);
 router.get('/missed-conversations', requireAuth, missedConversationsController.listMissedConversations);
 router.get('/support-requests', requireAuth, supportRequestsController.listSupportRequestsHandler);
+router.post('/support-requests', requireAuth, supportRequestsController.createSupportRequestHandler);
+router.get('/support-requests/:ticketId/messages', requireAuth, supportRequestsController.listSupportRequestMessagesHandler);
+router.post('/support-requests/:ticketId/messages', requireAuth, supportRequestsController.createSupportRequestMessageHandler);
 router.get('/leads/summary', requireAuth, leadsController.getSummary);
 router.get('/leads/export.csv', requireAuth, leadsController.exportCsv);
 router.get('/leads/:leadId', requireAuth, leadsController.getLeadDetail);

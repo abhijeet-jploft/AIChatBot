@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
-import { Bar } from 'react-chartjs-2';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
+  ArcElement,
   BarElement,
   CategoryScale,
   Chart as ChartJS,
+  LineElement,
   Legend,
   LinearScale,
+  PointElement,
   Tooltip,
 } from 'chart.js';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend);
 
 export default function Dashboard() {
   const { saFetch } = useSuperAuth();
@@ -37,7 +40,7 @@ export default function Dashboard() {
   if (loading) return <div className="sa-loading">Loading…</div>;
   if (!data) return <div className="sa-empty">No data</div>;
 
-  const { stats, recentLeads, topCompanies, system } = data;
+  const { stats, recentLeads, topCompanies, charts, system } = data;
   const chartText = '#8a95b3';
   const chartGrid = 'rgba(138,149,179,0.18)';
   const topLabels = topCompanies.map((c) => c.name);
@@ -70,31 +73,90 @@ export default function Dashboard() {
       y: { beginAtZero: true, ticks: { color: chartText }, grid: { color: chartGrid } },
     },
   };
+  const leadsStatusLabels = (charts?.leadsByStatus || []).map((item) => item.status || 'unknown');
+  const leadsStatusValues = (charts?.leadsByStatus || []).map((item) => Number(item.n || 0));
+  const leadsStatusData = {
+    labels: leadsStatusLabels,
+    datasets: [{
+      data: leadsStatusValues,
+      backgroundColor: ['#6c63ff', '#3b9eff', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'],
+      borderWidth: 1,
+      borderColor: '#111827',
+    }],
+  };
+
+  const convTrendLabels = (charts?.conversationsByDay || []).map((item) =>
+    new Date(item.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  );
+  const convTrendValues = (charts?.conversationsByDay || []).map((item) => Number(item.conversations || 0));
+  const convTrendData = {
+    labels: convTrendLabels,
+    datasets: [{
+      label: 'Conversations',
+      data: convTrendValues,
+      borderColor: '#3b9eff',
+      backgroundColor: 'rgba(59, 158, 255, 0.2)',
+      tension: 0.3,
+      fill: true,
+    }],
+  };
+
+  const revenueTrendLabels = (charts?.revenueByMonth || []).map((item) =>
+    new Date(item.month).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+  );
+  const revenueTrendValues = (charts?.revenueByMonth || []).map((item) => Number(item.revenue || 0));
+  const revenueTrendData = {
+    labels: revenueTrendLabels,
+    datasets: [{
+      label: 'Revenue',
+      data: revenueTrendValues,
+      borderColor: '#22c55e',
+      backgroundColor: 'rgba(34, 197, 94, 0.18)',
+      tension: 0.35,
+      fill: true,
+    }],
+  };
 
   return (
     <div className="sa-page">
       <div className="sa-page-header">
-        <h2 className="sa-page-title">System Dashboard</h2>
+        <h2 className="sa-page-title">Super Admin Dashboard (Overview)</h2>
         <button className="sa-btn sa-btn-ghost sa-btn-sm" onClick={load}>Refresh</button>
       </div>
 
       {/* KPI Cards */}
       <div className="sa-kpi-grid">
         <div className="sa-kpi-card">
-          <div className="sa-kpi-label">Companies</div>
-          <div className="sa-kpi-value">{stats.totalCompanies}</div>
+          <div className="sa-kpi-label">Total Registered Businesses</div>
+          <div className="sa-kpi-value">{stats.totalBusinesses}</div>
         </div>
         <div className="sa-kpi-card">
-          <div className="sa-kpi-label">Total Conversations</div>
+          <div className="sa-kpi-label">Active Subscriptions</div>
+          <div className="sa-kpi-value">{stats.activeSubscriptions.toLocaleString()}</div>
+        </div>
+        <div className="sa-kpi-card">
+          <div className="sa-kpi-label">Total AI Conversations</div>
           <div className="sa-kpi-value">{stats.totalConversations.toLocaleString()}</div>
         </div>
         <div className="sa-kpi-card">
-          <div className="sa-kpi-label">Total Leads</div>
+          <div className="sa-kpi-label">Leads Generated (All Clients)</div>
           <div className="sa-kpi-value">{stats.totalLeads.toLocaleString()}</div>
         </div>
+        <div className="sa-kpi-card">
+          <div className="sa-kpi-label">Revenue (Monthly)</div>
+          <div className="sa-kpi-value">
+            {new Intl.NumberFormat('en-US', { style: 'currency', currency: stats.revenue?.currency || 'USD', maximumFractionDigits: 0 }).format(stats.revenue?.monthly || 0)}
+          </div>
+        </div>
+        <div className="sa-kpi-card">
+          <div className="sa-kpi-label">Revenue (Yearly)</div>
+          <div className="sa-kpi-value">
+            {new Intl.NumberFormat('en-US', { style: 'currency', currency: stats.revenue?.currency || 'USD', maximumFractionDigits: 0 }).format(stats.revenue?.yearly || 0)}
+          </div>
+        </div>
         <div className="sa-kpi-card sa-kpi-card-system">
-          <div className="sa-kpi-label">System Uptime</div>
-          <div className="sa-kpi-value">{system.uptime}</div>
+          <div className="sa-kpi-label">System Health Status</div>
+          <div className="sa-kpi-value">{stats.systemHealthStatus}</div>
         </div>
       </div>
 
@@ -118,9 +180,45 @@ export default function Dashboard() {
             <li><span>Node</span><strong>{system.nodeVersion}</strong></li>
             <li><span>Platform</span><strong>{system.platform}</strong></li>
             <li><span>CPUs</span><strong>{system.cpuCount}</strong></li>
+            <li><span>CPU Load (1m)</span><strong>{system.cpuLoadPercent1m}%</strong></li>
             <li><span>Memory (heap)</span><strong>{system.memoryUsedMB} MB used</strong></li>
+            <li><span>Uptime</span><strong>{system.uptime}</strong></li>
           </ul>
         </div>
+      </div>
+
+      <div className="sa-dashboard-cols">
+        <div className="sa-panel">
+          <h3 className="sa-panel-title">Conversations Trend (Last 14 Days)</h3>
+          {convTrendLabels.length === 0 ? (
+            <div className="sa-empty-sm">No trend data yet.</div>
+          ) : (
+            <div style={{ height: 280 }}>
+              <Line data={convTrendData} options={companyBarOptions} />
+            </div>
+          )}
+        </div>
+        <div className="sa-panel">
+          <h3 className="sa-panel-title">Leads by Status</h3>
+          {leadsStatusLabels.length === 0 ? (
+            <div className="sa-empty-sm">No lead status data yet.</div>
+          ) : (
+            <div style={{ height: 280 }}>
+              <Doughnut data={leadsStatusData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartText } } } }} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="sa-panel">
+        <h3 className="sa-panel-title">Revenue Trend (Last 12 Months)</h3>
+        {revenueTrendLabels.length === 0 ? (
+          <div className="sa-empty-sm">No revenue trend data yet.</div>
+        ) : (
+          <div style={{ height: 280 }}>
+            <Line data={revenueTrendData} options={companyBarOptions} />
+          </div>
+        )}
       </div>
 
       {/* Recent leads */}

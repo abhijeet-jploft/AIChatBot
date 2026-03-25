@@ -6,6 +6,7 @@ const companiesController = require('../controllers/companiesController');
 const companySettingsController = require('../controllers/companySettingsController');
 const trainingController = require('../controllers/trainingController');
 const systemController = require('../controllers/systemController');
+const supportTicketsController = require('../controllers/supportTicketsController');
 const { requireSuperAuth } = require('../middleware/requireSuperAuth');
 
 const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -65,6 +66,10 @@ router.get('/training/:companyId/files', requireSuperAuth, trainingController.li
 // System
 router.get('/system/status', requireSuperAuth, systemController.getSystemStatus);
 router.get('/system/logs', requireSuperAuth, systemController.getSystemLogs);
+router.get('/support-tickets', requireSuperAuth, supportTicketsController.listSupportTickets);
+router.patch('/support-tickets/:ticketId/status', requireSuperAuth, supportTicketsController.updateSupportTicketStatus);
+router.get('/support-tickets/:ticketId/messages', requireSuperAuth, supportTicketsController.listSupportTicketMessages);
+router.post('/support-tickets/:ticketId/messages', requireSuperAuth, supportTicketsController.createSupportTicketMessage);
 router.get('/reports', requireSuperAuth, systemController.getReports);
 router.get('/alert-rules', requireSuperAuth, systemController.listAlertRules);
 router.post('/alert-rules', requireSuperAuth, systemController.createAlertRule);
