@@ -114,10 +114,30 @@ export function SuperAuthProvider({ children }) {
   }, [setToken]);
 
   const saFetch = useCallback((path, options = {}) => {
+    const { timeoutMs, signal: outerSignal, ...rest } = options;
     const storedToken = localStorage.getItem(SA_TOKEN_KEY);
-    const headers = { ...(options.headers || {}) };
+    const headers = { ...(rest.headers || {}) };
     if (storedToken) headers.Authorization = `Bearer ${storedToken}`;
-    return fetch(`${API_BASE}/super-admin${path}`, { ...options, headers });
+
+    let timer;
+    let signal = outerSignal;
+    if (timeoutMs != null && Number(timeoutMs) > 0) {
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), Number(timeoutMs));
+      if (outerSignal) {
+        if (outerSignal.aborted) controller.abort();
+        else outerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+      signal = controller.signal;
+    }
+
+    return fetch(`${API_BASE}/super-admin${path}`, {
+      ...rest,
+      headers,
+      ...(signal ? { signal } : {}),
+    }).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
   }, []);
 
   return (

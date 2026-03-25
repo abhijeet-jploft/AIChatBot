@@ -26,6 +26,9 @@ export default defineConfig({
         target: 'http://localhost:7022',
         changeOrigin: true,
         ws: true,
+        /** Allow long-running super-admin training (scrape, transcribe, large uploads). */
+        timeout: 1_800_000,
+        proxyTimeout: 1_800_000,
         configure: (proxy) => {
           proxy.on('error', (err, req, res) => {
             const code = err.code || '';

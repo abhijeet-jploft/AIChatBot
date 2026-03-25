@@ -9,6 +9,21 @@ const STATUS_CLASS = {
   failed: 'bg-danger',
 };
 
+/** Scrape / transcribe / large uploads can run a long time — avoid client/proxy aborting early. */
+const TRAINING_LONG_FETCH_MS = 30 * 60 * 1000;
+const SCRAPE_POLL_INTERVAL_MS = 2500;
+
+function scrapeJobStorageKey(companyId) {
+  return `admin-training-scrape-job:${companyId}`;
+}
+
+function trainingFetchErrorMessage(err) {
+  if (err && typeof err === 'object' && err.name === 'AbortError') {
+    return 'Request timed out. If a scrape or upload was still running, check the server or try again with a smaller job.';
+  }
+  return err?.message || 'Network error.';
+}
+
 const TABS = [
   { id: 'scrape', label: 'Website scraping' },
   { id: 'conversational', label: 'Conversational' },
@@ -22,6 +37,7 @@ const TABS = [
 export default function Training() {
   const { authFetch, company } = useAuth();
   const { showToast } = useAdminToast();
+  const companyId = company?.companyId;
   const [activeTab, setActiveTab] = useState('scrape');
 
   // Website scrape
@@ -76,6 +92,46 @@ export default function Training() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [job?.log]);
 
+  // Restore in-progress scrape job after navigation/remount (does not reload the document).
+  useEffect(() => {
+    if (!companyId) return;
+    try {
+      const raw = sessionStorage.getItem(scrapeJobStorageKey(companyId));
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.jobId && typeof parsed.jobId === 'string') {
+        setJobId(parsed.jobId);
+        if (parsed.job && typeof parsed.job === 'object') setJob(parsed.job);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    try {
+      if (jobId) {
+        sessionStorage.setItem(scrapeJobStorageKey(companyId), JSON.stringify({ jobId, job }));
+      } else {
+        sessionStorage.removeItem(scrapeJobStorageKey(companyId));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [companyId, jobId, job]);
+
+  useEffect(() => {
+    const busy = submitting || job?.status === 'running';
+    if (!busy) return undefined;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [submitting, job?.status]);
+
   useEffect(() => () => {
     try {
       manualShouldBeRecordingRef.current = false;
@@ -97,7 +153,7 @@ export default function Training() {
       } catch {}
     };
     poll();
-    pollRef.current = setInterval(poll, 1500);
+    pollRef.current = setInterval(poll, SCRAPE_POLL_INTERVAL_MS);
     return () => clearInterval(pollRef.current);
   }, [jobId, authFetch]);
 
@@ -107,7 +163,7 @@ export default function Training() {
       const res = await authFetch('/training/manual');
       if (res.ok) {
         const data = await res.json();
-        setManualContent(data.content || '');
+        setManualContent(data.text || data.content || '');
       }
     } catch {
       showToast('Failed to load manual knowledge', 'error');
@@ -128,11 +184,11 @@ export default function Training() {
 
   useEffect(() => {
     if (activeTab === 'manual') loadManual();
-  }, [activeTab]);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadFiles();
-  }, [loadFiles, activeTab]);
+  }, [loadFiles]);
 
   const companyLabel = company?.displayName || company?.companyId || 'this company';
 
@@ -147,12 +203,13 @@ export default function Training() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url.trim() }),
+        timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to start scrape job');
       setJobId(data.jobId);
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -161,17 +218,20 @@ export default function Training() {
   const handleScrapeSave = async () => {
     if (!jobId) return;
     try {
-      const res = await authFetch(`/training/scrape/save/${jobId}`, { method: 'POST' });
+      const res = await authFetch(`/training/scrape/save/${jobId}`, {
+        method: 'POST',
+        timeoutMs: TRAINING_LONG_FETCH_MS,
+      });
       const data = await res.json();
-      if (data.saved) {
+      if (data.saved || data.ok) {
         const msg = data.linesAppended != null
           ? `Appended ${data.linesAppended} lines to scraped_website.jsonl${data.linesSkipped ? ` (${data.linesSkipped} already present)` : ''}. ${data.links ?? 0} links saved.`
           : `Saved ${data.lines ?? 0} lines and ${data.links ?? 0} links`;
         showToast(msg, 'success');
         loadFiles();
-      } else showToast('Save failed.', 'error');
-    } catch {
-      showToast('Network error while saving.', 'error');
+      } else showToast(data.error || 'Save failed.', 'error');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     }
   };
 
@@ -194,17 +254,18 @@ export default function Training() {
           userMessage: convUser.trim() || undefined,
           assistantMessage: convAssistant.trim() || undefined,
         }),
+        timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
-      if (data.saved) {
+      if (data.saved || data.ok) {
         showToast('Appended to conversational training.', 'success');
         setConvText('');
         setConvUser('');
         setConvAssistant('');
         loadFiles();
-      } else showToast('Save failed.', 'error');
-    } catch {
-      showToast('Network error.', 'error');
+      } else showToast(data.error || 'Save failed.', 'error');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setConvSaving(false);
     }
@@ -221,16 +282,20 @@ export default function Training() {
     try {
       const form = new FormData();
       Array.from(docFiles).forEach((f) => form.append('files', f));
-      const res = await authFetch('/training/documents', { method: 'POST', body: form });
+      const res = await authFetch('/training/documents', {
+        method: 'POST',
+        body: form,
+        timeoutMs: TRAINING_LONG_FETCH_MS,
+      });
       const data = await res.json();
-      if (data.saved) {
-        showToast(`Saved ${data.files?.length || 0} document(s).`, 'success');
+      if (data.saved || data.ok) {
+        showToast(`Saved ${data.files?.length || data.results?.length || 0} document(s).`, 'success');
         setDocFiles(null);
         document.getElementById('training-doc-input')?.form?.reset();
         loadFiles();
       } else showToast(data.error || 'Save failed.', 'error');
-    } catch {
-      showToast('Network error.', 'error');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setDocSaving(false);
     }
@@ -251,7 +316,11 @@ export default function Training() {
       if (dbFiles?.length) {
         Array.from(dbFiles).forEach((f) => form.append('files', f));
       }
-      const res = await authFetch('/training/database', { method: 'POST', body: form });
+      const res = await authFetch('/training/database', {
+        method: 'POST',
+        body: form,
+        timeoutMs: TRAINING_LONG_FETCH_MS,
+      });
       const data = await res.json();
       if (data.saved) {
         showToast(
@@ -262,8 +331,8 @@ export default function Training() {
         document.getElementById('training-db-files')?.form?.reset();
         loadFiles();
       } else showToast(data.error || 'Save failed.', 'error');
-    } catch {
-      showToast('Network error.', 'error');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setDbSaving(false);
     }
@@ -286,7 +355,11 @@ export default function Training() {
       Array.from(mediaFiles).forEach((f) => form.append('files', f));
       form.append('transcript', mediaTranscript.trim());
       form.append('jsonlContent', mediaJsonl.trim());
-      const res = await authFetch('/training/media', { method: 'POST', body: form });
+      const res = await authFetch('/training/media', {
+        method: 'POST',
+        body: form,
+        timeoutMs: TRAINING_LONG_FETCH_MS,
+      });
       const data = await res.json();
       if (data.saved) {
         showToast(
@@ -299,8 +372,8 @@ export default function Training() {
         document.getElementById('training-media-input')?.form?.reset();
         loadFiles();
       } else showToast(data.error || 'Save failed.', 'error');
-    } catch {
-      showToast('Network error.', 'error');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setMediaSaving(false);
     }
@@ -317,14 +390,20 @@ export default function Training() {
     try {
       const form = new FormData();
       Array.from(fileList).forEach((f) => form.append('files', f));
-      const res = await authFetch('/training/media/transcribe', { method: 'POST', body: form });
+      const res = await authFetch('/training/media/transcribe', {
+        method: 'POST',
+        body: form,
+        timeoutMs: TRAINING_LONG_FETCH_MS,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to transcribe media');
       setMediaTranscript(data.transcriptPreview || '');
       setMediaJsonl(data.jsonlContent || '');
       showToast('Media transcribed successfully.', 'success');
     } catch (err) {
-      showToast(err.message || 'Failed to transcribe media', 'error');
+      const msg =
+        err?.name === 'AbortError' ? trainingFetchErrorMessage(err) : err.message || 'Failed to transcribe media';
+      showToast(msg, 'error');
     } finally {
       setMediaTranscribing(false);
     }
@@ -339,7 +418,11 @@ export default function Training() {
       const form = new FormData();
       form.append('file', structuredFile);
       try {
-        const res = await authFetch('/training/structured/upload', { method: 'POST', body: form });
+        const res = await authFetch('/training/structured/upload', {
+          method: 'POST',
+          body: form,
+          timeoutMs: TRAINING_LONG_FETCH_MS,
+        });
         const data = await res.json();
         if (data.saved) {
           showToast(`Appended ${data.count} row(s).`, 'success');
@@ -348,8 +431,8 @@ export default function Training() {
           if (el) el.value = '';
           loadFiles();
         } else showToast(data.error || 'Save failed.', 'error');
-      } catch {
-        showToast('Network error.', 'error');
+      } catch (err) {
+        showToast(trainingFetchErrorMessage(err), 'error');
       } finally {
         setStructuredSaving(false);
       }
@@ -374,6 +457,7 @@ export default function Training() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows }),
+        timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
       if (data.saved) {
@@ -381,8 +465,8 @@ export default function Training() {
         setStructuredJson('');
         loadFiles();
       } else showToast(data.error || 'Save failed.', 'error');
-    } catch {
-      showToast('Network error.', 'error');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setStructuredSaving(false);
     }
@@ -397,14 +481,15 @@ export default function Training() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: manualContent }),
+        timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
-      if (data.saved) {
+      if (data.saved || data.ok) {
         showToast('Manual knowledge saved.', 'success');
         loadFiles();
-      } else showToast('Save failed.', 'error');
-    } catch {
-      showToast('Network error.', 'error');
+      } else showToast(data.error || 'Save failed.', 'error');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setManualSaving(false);
     }

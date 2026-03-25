@@ -91,6 +91,10 @@ app.use((err, _req, res, next) => {
 });
 
 const server = http.createServer(app);
+/** Training/scrape/transcribe can exceed Node defaults (e.g. 5m request timeout on newer Node). */
+server.timeout = 0;
+if (typeof server.requestTimeout === 'number') server.requestTimeout = 1_800_000;
+if (typeof server.headersTimeout === 'number') server.headersTimeout = 120_000;
 
 function start() {
   attachPresenceWs(server);

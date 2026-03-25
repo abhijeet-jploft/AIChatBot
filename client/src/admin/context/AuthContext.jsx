@@ -145,12 +145,28 @@ export function AuthProvider({ children }) {
   }, [token, setToken]);
 
   const authFetch = useCallback((path, options = {}) => {
+    const { timeoutMs, signal: outerSignal, ...rest } = options;
+    const headers = { ...(rest.headers || {}) };
+    headers.Authorization = `Bearer ${token}`;
+
+    let timer;
+    let signal = outerSignal;
+    if (timeoutMs != null && Number(timeoutMs) > 0) {
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), Number(timeoutMs));
+      if (outerSignal) {
+        if (outerSignal.aborted) controller.abort();
+        else outerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+      signal = controller.signal;
+    }
+
     return fetch(`${API_BASE}/admin${path}`, {
-      ...options,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${token}`,
-      },
+      ...rest,
+      headers,
+      ...(signal ? { signal } : {}),
+    }).finally(() => {
+      if (timer) clearTimeout(timer);
     });
   }, [token]);
 
