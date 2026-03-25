@@ -17,6 +17,7 @@ import CompanyConfigurations from './pages/CompanyConfigurations';
 import CompanyVoiceSettings from './pages/CompanyVoiceSettings';
 import CompanyThemeSettings from './pages/CompanyThemeSettings';
 import CompanyModeSettings from './pages/CompanyModeSettings';
+import CompanyAdminSettingsAccess from './pages/CompanyAdminSettingsAccess';
 import SuperAdminProfile from './pages/SuperAdminProfile';
 import './index.css';
 
@@ -33,6 +34,8 @@ function SuperAdminLayout({ children }) {
   const { theme, toggleTheme } = useSaTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const companyMatch = location.pathname.match(/^\/super-admin\/companies\/([^/]+)/);
+  const currentCompanyId = companyMatch?.[1] ? decodeURIComponent(companyMatch[1]) : null;
 
   const navGroups = [
     {
@@ -51,6 +54,12 @@ function SuperAdminLayout({ children }) {
         { to: '/super-admin/alert-rules', label: 'Alert Rules' },
       ],
     },
+    ...(currentCompanyId ? [{
+      label: 'Company',
+      items: [
+        { to: `/super-admin/companies/${encodeURIComponent(currentCompanyId)}/admin-settings-access`, label: 'Admin Settings Access' },
+      ],
+    }] : []),
   ];
 
   const currentPageLabel =
@@ -193,6 +202,7 @@ export default function SuperAdminApp() {
                   <Route path="companies/:companyId/settings" element={<CompanySettings />} />
                   <Route path="companies/:companyId/api-settings" element={<CompanyApiSettings />} />
                   <Route path="companies/:companyId/configurations" element={<CompanyConfigurations />} />
+                  <Route path="companies/:companyId/admin-settings-access" element={<CompanyAdminSettingsAccess />} />
                   <Route path="companies/:companyId/voice-settings" element={<CompanyVoiceSettings />} />
                   <Route path="companies/:companyId/theme-settings" element={<CompanyThemeSettings />} />
                   <Route path="companies/:companyId/mode-settings" element={<CompanyModeSettings />} />

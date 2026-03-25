@@ -124,7 +124,7 @@ export default function Dashboard() {
       </div>
 
       {/* Recent leads */}
-      <div className="sa-panel sa-panel-full">
+      {/* <div className="sa-panel sa-panel-full">
         <h3 className="sa-panel-title">Recent Leads (all companies)</h3>
         {recentLeads.length === 0 ? (
           <div className="sa-empty-sm">No leads yet.</div>
@@ -146,7 +146,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         )}
-      </div>
+      </div> */}
     </div>
   );
 }

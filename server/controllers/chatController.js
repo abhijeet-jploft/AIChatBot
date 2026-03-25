@@ -13,6 +13,7 @@ const { add: addSupportRequest, isSupportRequest } = require('../services/suppor
 const { normalizeVoiceGender, normalizeVoiceProfile, synthesizeTextResponse } = require('../services/elevenlabsService');
 const { parseLanguageExtraLocalesJson, resolveSpeechLanguageCode } = require('../services/supportedChatLanguages');
 const { detectNaturalLanguageFromText } = require('../services/chatRules');
+const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
@@ -28,16 +29,17 @@ function buildLanguageConfig(chatbot = null) {
 }
 
 function buildVoiceConfig(chatbot = null) {
+  const adminVisibility = buildAdminVisibilityPayload(chatbot);
   return {
-    enabled: Boolean(chatbot?.voice_mode_enabled),
+    enabled: Boolean(chatbot?.voice_mode_enabled) && Boolean(adminVisibility.voice.enableVoiceMode),
     elevenlabsApiKey: chatbot?.elevenlabs_api_key || null,
-    responseEnabled: Boolean(chatbot?.voice_response_enabled !== false),
+    responseEnabled: Boolean(chatbot?.voice_response_enabled !== false) && Boolean(adminVisibility.voice.enableVoiceResponse),
     gender: normalizeVoiceGender(chatbot?.voice_gender),
     profile: normalizeVoiceProfile(chatbot?.voice_profile) || 'professional',
     customVoiceId: chatbot?.voice_custom_id || null,
     customVoiceName: chatbot?.voice_custom_name || null,
     customVoiceGender: chatbot?.voice_custom_gender || null,
-    ignoreEmoji: Boolean(chatbot?.voice_ignore_emoji),
+    ignoreEmoji: Boolean(chatbot?.voice_ignore_emoji) && Boolean(adminVisibility.voice.ignoreEmoji),
   };
 }
 
@@ -166,8 +168,10 @@ async function postMessage(req, res) {
         await ChatSession.touch(sid);
       }
 
-      if (chatbot?.agent_paused) {
-        const pausedMessage = 'Our AI agent is currently paused. Please leave your name and contact details, and we will get back to you shortly.';
+      if (chatbot?.agent_paused || chatbot?.is_suspended) {
+        const pausedMessage = chatbot?.is_suspended
+          ? 'This chatbot is temporarily unavailable because the company is suspended. Please contact support for assistance.'
+          : 'Our AI agent is currently paused. Please leave your name and contact details, and we will get back to you shortly.';
         await ChatMessage.create(sid, 'assistant', pausedMessage);
 
         let pausedVoice = null;

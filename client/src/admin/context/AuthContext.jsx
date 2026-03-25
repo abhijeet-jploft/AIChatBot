@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { mergeAdminVisibility } from '../../constants/adminVisibility';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const ADMIN_TOKEN_KEY = 'admin_token';
@@ -103,6 +104,8 @@ export function AuthProvider({ children }) {
           companyId: d.companyId,
           displayName: d.companyName || d.name,
           adminEmail: d.adminEmail ?? null,
+          isSuspended: Boolean(d.isSuspended),
+          adminVisibility: mergeAdminVisibility(d.adminVisibility),
         })
       )
       .catch(() => setToken(null))
@@ -131,6 +134,8 @@ export function AuthProvider({ children }) {
       companyId: data.companyId,
       displayName: data.companyName,
       adminEmail: data.adminEmail ?? null,
+      isSuspended: Boolean(data.isSuspended),
+      adminVisibility: mergeAdminVisibility(data.adminVisibility),
     });
   }, [setToken]);
 

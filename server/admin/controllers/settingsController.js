@@ -25,6 +25,11 @@ const {
   normalizeVoiceProfile,
   synthesizeTextResponse,
 } = require('../../services/elevenlabsService');
+const {
+  buildAdminVisibilityPayload,
+  buildPresetVoiceAccessKey,
+  isPresetVoiceAllowed,
+} = require('../../services/adminSettingsAccess');
 
 function normalizeNotificationEmail(value) {
   if (value === undefined) return undefined;
@@ -113,6 +118,117 @@ function getCompanyCustomVoice(company) {
     voiceName: String(company?.voice_custom_name || 'My Voice').trim() || 'My Voice',
     gender: company?.voice_custom_gender === 'male' ? 'male' : 'female',
   };
+}
+
+function isSettingsAccessBypassed(req) {
+  return Boolean(req.adminSettingsAccessBypass);
+}
+
+function dedupeLabels(labels) {
+  return Array.from(new Set(labels.filter(Boolean)));
+}
+
+function collectRestrictedAdminUpdateFields(body, company, adminVisibility) {
+  const restricted = [];
+
+  if (body?.language !== undefined && !adminVisibility.settings.chatLanguages) {
+    restricted.push('Chat languages');
+  }
+  if (body?.autoTrigger !== undefined && !adminVisibility.settings.autoTrigger) {
+    restricted.push('Auto-Trigger Settings');
+  }
+  if (body?.escalation !== undefined && !adminVisibility.settings.escalation) {
+    restricted.push('Escalation');
+  }
+  if (body?.safety !== undefined && !adminVisibility.settings.safety) {
+    restricted.push('Safety & Compliance');
+  }
+  if (body?.aiMode !== undefined && !adminVisibility.aiMode) {
+    restricted.push('AI Mode');
+  }
+
+  if (body?.voice?.enabled !== undefined && !adminVisibility.voice.enableVoiceMode) {
+    restricted.push('Enable voice mode in chatbot');
+  }
+  if (body?.voice?.responseEnabled !== undefined && !adminVisibility.voice.enableVoiceResponse) {
+    restricted.push('Enable voice response');
+  }
+  if (body?.voice?.ignoreEmoji !== undefined && !adminVisibility.voice.ignoreEmoji) {
+    restricted.push('Ignore emojis when speaking');
+  }
+  if (body?.voice?.ttsLanguageCode !== undefined && !adminVisibility.voice.spokenLanguage) {
+    restricted.push('Spoken language');
+  }
+
+  const requestedProfile = normalizeVoiceProfile(body?.voice?.profile)
+    || normalizeVoiceProfile(company?.voice_profile)
+    || 'professional';
+  const requestedLanguageCode = body?.voice?.ttsLanguageCode !== undefined
+    ? String(body.voice.ttsLanguageCode || '').trim().toLowerCase()
+    : String(company?.voice_tts_language_code || '').trim().toLowerCase();
+  const requestedGender = body?.voice?.gender !== undefined
+    ? String(body.voice.gender || '').trim().toLowerCase()
+    : String(company?.voice_gender || '').trim().toLowerCase();
+  const requestedVoiceKey = buildPresetVoiceAccessKey(requestedProfile, requestedGender);
+  const isCustomProfileRequest = requestedProfile === 'custom';
+  const isVoiceSelectionChange = body?.voice?.profile !== undefined || body?.voice?.gender !== undefined;
+
+  if (isVoiceSelectionChange) {
+    if (isCustomProfileRequest) {
+      if (!adminVisibility.voice.trainCustomVoice) {
+        restricted.push('Train your own voice');
+      }
+    } else if (!adminVisibility.voice.presetVoices) {
+      restricted.push('Preset voices');
+    } else if (!isPresetVoiceAllowed(adminVisibility.voice.allowedPresetVoiceKeys, requestedProfile, requestedGender, requestedLanguageCode)) {
+      restricted.push(`Preset voice ${requestedVoiceKey}`);
+    }
+  }
+
+  return dedupeLabels(restricted);
+}
+
+function assertAdminModeAccess(req, res, company) {
+  if (isSettingsAccessBypassed(req)) return true;
+  const adminVisibility = buildAdminVisibilityPayload(company);
+  if (adminVisibility.aiMode) return true;
+  res.status(403).json({ error: 'AI mode is managed by the super admin for this company.' });
+  return false;
+}
+
+function assertAdminVoiceAccess(req, res, company, { profile, gender, languageCode, requiresTraining = false, requiresPresetList = false } = {}) {
+  if (isSettingsAccessBypassed(req)) return true;
+  const adminVisibility = buildAdminVisibilityPayload(company);
+
+  if (requiresTraining && !adminVisibility.voice.trainCustomVoice) {
+    res.status(403).json({ error: 'Custom voice training is managed by the super admin for this company.' });
+    return false;
+  }
+
+  if (requiresPresetList && !adminVisibility.voice.presetVoices) {
+    res.status(403).json({ error: 'Preset voices are managed by the super admin for this company.' });
+    return false;
+  }
+
+  if (profile === 'custom') {
+    if (!adminVisibility.voice.trainCustomVoice) {
+      res.status(403).json({ error: 'Custom voice selection is managed by the super admin for this company.' });
+      return false;
+    }
+    return true;
+  }
+
+  if (profile && !adminVisibility.voice.presetVoices) {
+    res.status(403).json({ error: 'Preset voices are managed by the super admin for this company.' });
+    return false;
+  }
+
+  if (profile && gender && !isPresetVoiceAllowed(adminVisibility.voice.allowedPresetVoiceKeys, profile, gender, languageCode)) {
+    res.status(403).json({ error: 'This preset voice is hidden from the admin for this company.' });
+    return false;
+  }
+
+  return true;
 }
 
 async function buildVoicePayload(company) {
@@ -258,6 +374,7 @@ async function serializeCompanySettings(company) {
       manualSwitchEnabled: Boolean(company.language_manual_switch_enabled),
       extraLocales: parseLanguageExtraLocalesJson(company.language_extra_locales),
     },
+    adminVisibility: buildAdminVisibilityPayload(company),
     theme: mergeCompanyTheme(company.company_id, {
       primaryColor: company.theme_primary_color,
       primaryDarkColor: company.theme_primary_dark_color,
@@ -363,6 +480,16 @@ async function updateSettings(req, res) {
     const companyBeforeUpdate = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
     if (!companyBeforeUpdate) {
       return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const adminVisibility = buildAdminVisibilityPayload(companyBeforeUpdate);
+    if (!isSettingsAccessBypassed(req)) {
+      const restrictedFields = collectRestrictedAdminUpdateFields(req.body, companyBeforeUpdate, adminVisibility);
+      if (restrictedFields.length) {
+        return res.status(403).json({
+          error: `You do not have permission to update: ${restrictedFields.join(', ')}`,
+        });
+      }
     }
 
     const companyCustomVoice = getCompanyCustomVoice(companyBeforeUpdate);
@@ -519,6 +646,7 @@ async function getModeSettings(req, res) {
     if (!company) {
       return res.status(404).json({ error: 'Company not found' });
     }
+    if (!assertAdminModeAccess(req, res, company)) return;
 
     res.json(getModeCatalog(company.ai_mode));
   } catch (err) {
@@ -555,6 +683,13 @@ async function previewVoice(req, res) {
     if (profile === 'custom' && customVoice) {
       gender = customVoice.gender;
     }
+    const requestedPreviewLang = String(req.body?.ttsLanguageCode || '').trim().toLowerCase();
+
+    if (!assertAdminVoiceAccess(req, res, company, {
+      profile,
+      gender,
+      languageCode: requestedPreviewLang || company.voice_tts_language_code || null,
+    })) return;
 
     const bodyText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
     const previewText = bodyText
@@ -566,7 +701,6 @@ async function previewVoice(req, res) {
       });
 
     const { detectNaturalLanguageFromText } = require('../../services/chatRules');
-    const requestedPreviewLang = String(req.body?.ttsLanguageCode || '').trim().toLowerCase();
     const speechLang = resolveSpeechLanguageCode({
       assistantText: previewText,
       userText: '',
@@ -617,6 +751,12 @@ async function listVoices(req, res) {
     const profile = req.query.profile || null;
     const search = req.query.search || null;
     const language = req.query.language || null;
+
+    if (!assertAdminVoiceAccess(req, res, company, {
+      requiresPresetList: true,
+      languageCode: language || company.voice_tts_language_code || null,
+    })) return;
+
     const voices = await getVoiceList(
       { gender, profile, search, language },
       {
@@ -624,7 +764,11 @@ async function listVoices(req, res) {
         apiKey: company?.elevenlabs_api_key || null,
       }
     );
-    res.json({ voices });
+    const adminVisibility = buildAdminVisibilityPayload(company);
+    const filteredVoices = isSettingsAccessBypassed(req)
+      ? voices
+      : voices.filter((row) => isPresetVoiceAllowed(adminVisibility.voice.allowedPresetVoiceKeys, row.profileId, row.gender, language || company.voice_tts_language_code || null));
+    res.json({ voices: filteredVoices });
   } catch (err) {
     console.error('[admin settings] list voices:', err);
     res.status(500).json({ error: err.message });
@@ -664,6 +808,8 @@ async function trainCustomVoice(req, res) {
     if (!company) {
       return res.status(404).json({ error: 'Company not found' });
     }
+
+    if (!assertAdminVoiceAccess(req, res, company, { requiresTraining: true, profile: 'custom' })) return;
 
     const voiceName = String(req.body?.name || '').trim();
     if (!voiceName) {

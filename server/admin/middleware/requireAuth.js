@@ -15,6 +15,16 @@ async function requireAuth(req, res, next) {
 
   req.adminCompanyId = session.company_id;
   req.adminCompanyName = session.name;
+  req.adminCompanySuspended = Boolean(session.is_suspended);
+
+  const isWriteMethod = !['GET', 'HEAD', 'OPTIONS'].includes(String(req.method || '').toUpperCase());
+  const isAllowedWhileSuspended = req.path === '/auth/logout';
+  if (req.adminCompanySuspended && isWriteMethod && !isAllowedWhileSuspended) {
+    return res.status(423).json({
+      error: 'This company is suspended. Changes are disabled until reactivated by super admin.',
+      code: 'COMPANY_SUSPENDED',
+    });
+  }
   next();
 }
 

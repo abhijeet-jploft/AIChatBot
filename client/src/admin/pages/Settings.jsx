@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import { hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../../constants/adminVisibility';
 
 /** Origin where the chat app + /embed/* is served (API host without /api). */
 function getEmbedAppOrigin() {
@@ -121,6 +122,7 @@ export default function Settings() {
     confirmPassword: '',
   });
   const [changingPassword, setChangingPassword] = useState(false);
+  const [adminVisibility, setAdminVisibility] = useState(() => mergeAdminVisibility());
 
   useEffect(() => {
     if (location.hash === '#chatbot-name' || location.hash === '#company-name') {
@@ -172,6 +174,7 @@ export default function Settings() {
           setLanguageCatalog(Array.isArray(d.language.catalog) ? d.language.catalog : []);
           setLanguageExtra(Array.isArray(d.language.extraLocales) ? d.language.extraLocales : []);
         }
+        setAdminVisibility(mergeAdminVisibility(d.adminVisibility));
       })
       .catch(() => showToast('Failed to load settings', 'error'));
   }, [authFetch, showToast]);
@@ -202,21 +205,19 @@ export default function Settings() {
     }
     setSaving(true);
     try {
-      const res = await authFetch('/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyName: coName,
-          chatbotName: chatbotName.trim(),
-          iconUrl: iconUrl.trim() || undefined,
-          greetingMessage: greetingMessage.trim() || undefined,
-          widget: {
-            position: widgetPosition,
-          },
-          leadNotifications: {
-            emailEnabled: leadEmailNotificationsEnabled,
-            email: leadNotificationEmail.trim() || null,
-          },
+      const payload = {
+        companyName: coName,
+        chatbotName: chatbotName.trim(),
+        iconUrl: iconUrl.trim() || undefined,
+        greetingMessage: greetingMessage.trim() || undefined,
+        widget: {
+          position: widgetPosition,
+        },
+        leadNotifications: {
+          emailEnabled: leadEmailNotificationsEnabled,
+          email: leadNotificationEmail.trim() || null,
+        },
+        ...(adminVisibility.settings.autoTrigger ? {
           autoTrigger: {
             enabled: autoTrigger.openMode === 'auto',
             openMode: normalizeAutoTriggerMode(autoTrigger.openMode),
@@ -227,11 +228,15 @@ export default function Settings() {
             onPortfolioPage: autoTrigger.onPortfolioPage,
             selectedPages: autoTrigger.selectedPages,
           },
+        } : {}),
+        ...(adminVisibility.settings.escalation ? {
           escalation: {
             triggers: escalation.triggers,
             actions: escalation.actions,
             highValueLeadScoreThreshold: escalation.highValueLeadScoreThreshold,
           },
+        } : {}),
+        ...(adminVisibility.settings.safety ? {
           safety: {
             blockTopicsEnabled: safety.blockTopicsEnabled,
             blockTopics: safety.blockTopics || '',
@@ -240,6 +245,8 @@ export default function Settings() {
             disableCompetitorComparisons: safety.disableCompetitorComparisons,
             restrictFileSharing: safety.restrictFileSharing,
           },
+        } : {}),
+        ...(adminVisibility.settings.chatLanguages ? {
           language: {
             primary: languagePrimary,
             multiEnabled: languageMulti,
@@ -247,7 +254,13 @@ export default function Settings() {
             manualSwitchEnabled: languageManual,
             extraLocales: languageExtra,
           },
-        }),
+        } : {}),
+      };
+
+      const res = await authFetch('/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Save failed');
       await res.json();
@@ -313,6 +326,7 @@ export default function Settings() {
     setSafety((s) => ({ ...s, [key]: value }));
   };
   const isAutoOpenMode = autoTrigger.openMode === 'auto';
+  const showVoiceSettingsCard = hasAnyVoiceSettingAccess(adminVisibility);
 
   return (
     <div className="p-4">
@@ -391,6 +405,7 @@ export default function Settings() {
               />
             </div>
 
+            {adminVisibility.settings.chatLanguages && (
             <div className="mb-4 p-3 rounded-3" style={cardStyle}>
               <div className="fw-semibold mb-2" style={headingStyle}>Chat languages</div>
               <p className="small mb-3" style={mutedStyle}>
@@ -479,6 +494,7 @@ export default function Settings() {
                 </>
               )}
             </div>
+            )}
 
             <div className="mb-3">
               <label className="form-label">Widget side</label>
@@ -611,6 +627,7 @@ export default function Settings() {
           </div>
 
           <div className="col-12 col-lg-4">
+            {showVoiceSettingsCard && (
             <div
               className="p-3 rounded-3"
               style={{
@@ -630,10 +647,12 @@ export default function Settings() {
                 Open voice settings
               </Link>
             </div>
+            )}
           </div>
         </div>
 
         {/* Auto-Trigger */}
+        {adminVisibility.settings.autoTrigger && (
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <div className="mb-3" style={headingStyle}>Auto-Trigger Settings</div>
           <p className="small mb-3" style={mutedStyle}>Define when the chatbot proactively opens for visitors.</p>
@@ -752,8 +771,10 @@ export default function Settings() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Escalation */}
+        {adminVisibility.settings.escalation && (
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <div className="mb-3" style={headingStyle}>Escalation</div>
           <p className="small mb-3" style={mutedStyle}>When to escalate to a human and which actions to take.</p>
@@ -826,8 +847,10 @@ export default function Settings() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Safety & Compliance */}
+        {adminVisibility.settings.safety && (
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <div className="mb-3" style={headingStyle}>Safety & Compliance</div>
           <p className="small mb-3" style={mutedStyle}>Control what the AI can say and what data it exposes.</p>
@@ -880,6 +903,7 @@ export default function Settings() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Sessions */}
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>

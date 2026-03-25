@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import {
+  getPresetVoiceOptions,
+  hasAnyVoiceSettingAccess,
+  isPresetVoiceAllowed,
+  mergeAdminVisibility,
+} from '../../constants/adminVisibility';
 
 const cardStyle = {
   background: 'var(--chat-surface)',
@@ -109,6 +116,7 @@ export default function VoiceSettings() {
   const [customVoiceName, setCustomVoiceName] = useState('');
   const [customVoiceGender, setCustomVoiceGender] = useState('');
   const [customVoiceSamples, setCustomVoiceSamples] = useState([]);
+  const [adminVisibility, setAdminVisibility] = useState(() => mergeAdminVisibility());
 
   const stopPreview = useCallback(() => {
     if (previewAudioRef.current) {
@@ -159,6 +167,7 @@ export default function VoiceSettings() {
         ? data.voice.ttsLanguageCatalog
         : [{ code: '', label: 'Auto — detect from message text' }]
     );
+    setAdminVisibility(mergeAdminVisibility(data.adminVisibility));
   }, [authFetch]);
 
   const loadVoiceList = useCallback(async () => {
@@ -210,15 +219,21 @@ export default function VoiceSettings() {
   }, [loadSettings, showToast]);
 
   const selectedVoiceKey = `${voiceProfile}:${voiceGender}`;
+  const hasVoiceAccess = hasAnyVoiceSettingAccess(adminVisibility);
 
   const hasCustomVoice = useMemo(
     () => voiceCatalog.some((profile) => profile.id === 'custom'),
     [voiceCatalog]
   );
 
+  const visiblePresetVoiceOptions = useMemo(
+    () => getPresetVoiceOptions(voiceCatalog).filter((row) => isPresetVoiceAllowed(adminVisibility.voice.allowedPresetVoiceKeys, row.profileId, row.gender, voiceTtsLanguage)),
+    [adminVisibility.voice.allowedPresetVoiceKeys, voiceCatalog, voiceTtsLanguage]
+  );
+
   const profileFilterOptions = useMemo(
-    () => [{ id: 'all', label: 'All types' }, ...voiceCatalog.map((profile) => ({ id: profile.id, label: profile.label }))],
-    [voiceCatalog]
+    () => [{ id: 'all', label: 'All types' }, ...Array.from(new Map(visiblePresetVoiceOptions.map((row) => [row.profileId, { id: row.profileId, label: row.profileLabel }])).values())],
+    [visiblePresetVoiceOptions]
   );
 
   useEffect(() => {
@@ -254,18 +269,25 @@ export default function VoiceSettings() {
     try {
       stopPreview();
 
+      const voicePayload = {
+        ...(adminVisibility.voice.enableVoiceMode ? { enabled: voiceEnabled } : {}),
+        ...(adminVisibility.voice.enableVoiceResponse ? { responseEnabled: voiceResponseEnabled } : {}),
+        ...(adminVisibility.voice.ignoreEmoji ? { ignoreEmoji: voiceIgnoreEmoji } : {}),
+        ...(adminVisibility.voice.spokenLanguage ? { ttsLanguageCode: voiceTtsLanguage.trim() || null } : {}),
+        ...((voiceProfile === 'custom' && adminVisibility.voice.trainCustomVoice)
+          || (voiceProfile !== 'custom' && adminVisibility.voice.presetVoices && isPresetVoiceAllowed(adminVisibility.voice.allowedPresetVoiceKeys, voiceProfile, voiceGender, voiceTtsLanguage))
+          ? {
+            gender: voiceGender,
+            profile: voiceProfile,
+          }
+          : {}),
+      };
+
       const res = await authFetch('/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          voice: {
-            enabled: voiceEnabled,
-            responseEnabled: voiceResponseEnabled,
-            gender: voiceGender,
-            profile: voiceProfile,
-            ignoreEmoji: voiceIgnoreEmoji,
-            ttsLanguageCode: voiceTtsLanguage.trim() || null,
-          },
+          voice: voicePayload,
         }),
       });
 
@@ -279,15 +301,14 @@ export default function VoiceSettings() {
     } finally {
       setSaving(false);
     }
-  }, [authFetch, showToast, stopPreview, voiceEnabled, voiceResponseEnabled, voiceGender, voiceProfile, voiceIgnoreEmoji, voiceTtsLanguage]);
+  }, [adminVisibility, authFetch, showToast, stopPreview, voiceEnabled, voiceResponseEnabled, voiceGender, voiceProfile, voiceIgnoreEmoji, voiceTtsLanguage]);
 
   const handleChooseVoice = useCallback((profileId, gender) => {
     setVoiceProfile(profileId);
     setVoiceGender(gender);
-    // Choosing a preset implies intent to use TTS responses.
-    setVoiceEnabled(true);
-    setVoiceResponseEnabled(true);
-  }, []);
+    if (adminVisibility.voice.enableVoiceMode) setVoiceEnabled(true);
+    if (adminVisibility.voice.enableVoiceResponse) setVoiceResponseEnabled(true);
+  }, [adminVisibility.voice.enableVoiceMode, adminVisibility.voice.enableVoiceResponse]);
 
   const handlePreviewVoice = useCallback(async (profileId, gender) => {
     const voiceKey = `${profileId}:${gender}`;
@@ -420,12 +441,23 @@ export default function VoiceSettings() {
     );
   }
 
+  if (!hasVoiceAccess) {
+    return (
+      <div className="p-4">
+        <div className="alert alert-secondary mb-0" role="alert">
+          Voice settings are managed by the super admin for this company. <Link to="/admin/settings">Return to settings</Link>.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4">
       <h5 className="mb-4" style={{ color: 'var(--chat-text-heading)' }}>Voice settings</h5>
 
       <form onSubmit={handleSubmit}>
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
+          {adminVisibility.voice.enableVoiceMode && (
           <div className="form-check form-switch mb-3">
             <input
               className="form-check-input"
@@ -439,11 +471,13 @@ export default function VoiceSettings() {
               Enable voice mode in chatbot
             </label>
           </div>
+          )}
 
           <p className="small mb-0" style={{ color: 'var(--chat-muted)' }}>
             When enabled, visitors can use microphone input and receive spoken AI responses.
           </p>
 
+          {adminVisibility.voice.enableVoiceResponse && (
           <div className="form-check form-switch mt-3 pt-3" style={{ borderTop: '1px solid var(--chat-border)' }}>
             <input
               className="form-check-input"
@@ -458,10 +492,12 @@ export default function VoiceSettings() {
               Enable voice response (AI speaks replies)
             </label>
           </div>
+          )}
           <p className="small mb-0 mt-1" style={{ color: 'var(--chat-muted)' }}>
             When off, the AI will not speak replies; visitors can still type and use the mic if voice mode is on.
           </p>
 
+          {adminVisibility.voice.ignoreEmoji && (
           <div className="form-check form-switch mt-3 pt-3" style={{ borderTop: '1px solid var(--chat-border)' }}>
             <input
               className="form-check-input"
@@ -475,10 +511,12 @@ export default function VoiceSettings() {
               Ignore emojis when speaking
             </label>
           </div>
+          )}
           <p className="small mb-0 mt-1" style={{ color: 'var(--chat-muted)' }}>
             When enabled, emojis are removed from the text before it is sent to voice (TTS). Response in chat still shows emojis.
           </p>
 
+          {adminVisibility.voice.spokenLanguage && (
           <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--chat-border)' }}>
             <label className="form-label" htmlFor="voice-tts-lang" style={{ color: 'var(--chat-text-heading)' }}>
               Spoken language (Text-to-Speech API)
@@ -499,8 +537,10 @@ export default function VoiceSettings() {
               Use a <strong>multilingual</strong> ElevenLabs model (e.g. <code>eleven_multilingual_v2</code> in server <code>.env</code>) — supported on free tier with monthly character credits.
             </p>
           </div>
+          )}
         </div>
 
+        {adminVisibility.voice.trainCustomVoice && (
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Train your own voice</h6>
           <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>
@@ -595,7 +635,9 @@ export default function VoiceSettings() {
             Tip: upload 3 to 8 clear clips (10 to 30 seconds each) for best custom voice quality.
           </div>
         </div>
+        )}
 
+        {adminVisibility.voice.presetVoices && (
         <div className="p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <h6 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Preset voices</h6>
           <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>
@@ -702,6 +744,10 @@ export default function VoiceSettings() {
 
           <div className="small mt-3" style={{ color: 'var(--chat-muted)' }}>
             {(() => {
+              const selectedPresetAllowed = isPresetVoiceAllowed(adminVisibility.voice.allowedPresetVoiceKeys, voiceProfile, voiceGender, voiceTtsLanguage);
+              if (voiceProfile !== 'custom' && !selectedPresetAllowed) {
+                return <span>Current preset voice is managed by the super admin.</span>;
+              }
               const sourceMeta = getVoiceSourceMeta(selectedVoiceMeta.source);
               return (
                 <span>
@@ -712,6 +758,7 @@ export default function VoiceSettings() {
             })()}
           </div>
         </div>
+        )}
 
         <div>
           <button type="submit" className="btn btn-primary" disabled={saving}>

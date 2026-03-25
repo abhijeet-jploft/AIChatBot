@@ -29,7 +29,7 @@ async function listCompanies(req, res) {
   try {
     const { rows } = await pool.query(
       `SELECT
-         c.company_id, c.name, c.description, c.created_at, c.admin_email,
+         c.company_id, c.name, c.description, c.created_at, c.admin_email, c.is_suspended,
          CASE WHEN c.password_hash IS NOT NULL THEN true ELSE false END AS admin_configured,
          ch.display_name, ch.agent_paused, ch.ai_mode,
          em.embed_slug,
@@ -150,7 +150,7 @@ async function getCompany(req, res) {
     const { companyId } = req.params;
     const { rows } = await pool.query(
       `SELECT
-         c.company_id, c.name, c.description, c.created_at, c.admin_email,
+         c.company_id, c.name, c.description, c.created_at, c.admin_email, c.is_suspended,
          CASE WHEN c.password_hash IS NOT NULL THEN true ELSE false END AS admin_configured,
          ch.display_name, ch.agent_paused, ch.ai_mode, ch.ai_provider, ch.ai_model,
          ch.greeting_message, ch.widget_position,
@@ -234,6 +234,45 @@ async function deleteCompany(req, res) {
     return res.json({ ok: true });
   } catch (err) {
     console.error('[super admin] deleteCompany:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// PATCH /super-admin/companies/:companyId/suspension
+async function setCompanySuspension(req, res) {
+  try {
+    const { companyId } = req.params;
+    const suspend = Boolean(req.body?.suspend);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rowCount } = await client.query(
+        `UPDATE chatbots
+         SET is_suspended = $1
+         WHERE company_id = $2`,
+        [suspend, companyId]
+      );
+      if (!rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Company not found' });
+      }
+      // While suspended, force chatbot to paused mode.
+      await client.query(
+        `UPDATE chat_settings
+         SET agent_paused = $1, updated_at = NOW()
+         WHERE company_id = $2`,
+        [suspend, companyId]
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    return res.json({ ok: true, isSuspended: suspend });
+  } catch (err) {
+    console.error('[super admin] setCompanySuspension:', err);
     return res.status(500).json({ error: err.message });
   }
 }
@@ -327,6 +366,7 @@ module.exports = {
   createCompany,
   getCompany,
   updateCompany,
+  setCompanySuspension,
   deleteCompany,
   resetAdminPassword,
   getCompanyStats,

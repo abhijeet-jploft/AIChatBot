@@ -22,7 +22,7 @@ async function findByAdminEmail(rawEmail) {
   const email = normalizeAdminEmail(rawEmail);
   if (!email) return null;
   const { rows } = await pool.query(
-    `SELECT company_id, name, password_hash, admin_email FROM chatbots WHERE admin_email = $1`,
+    `SELECT company_id, name, password_hash, admin_email, is_suspended FROM chatbots WHERE admin_email = $1`,
     [email]
   );
   return rows[0] || null;
@@ -36,7 +36,7 @@ async function setAdminEmail(companyId, rawEmail) {
 async function findByCompanyId(companyId) {
   await ensureSettingsRow(companyId);
   const { rows } = await pool.query(
-    `SELECT c.id, c.company_id, c.name, c.password_hash, c.admin_email,
+    `SELECT c.id, c.company_id, c.name, c.password_hash, c.admin_email, c.is_suspended,
             ch.display_name, ch.icon_url, ch.greeting_message,
             ch.widget_position,
             ch.auto_trigger_enabled,
@@ -65,6 +65,18 @@ async function findByCompanyId(companyId) {
             vo.voice_ignore_emoji,
             vo.voice_response_enabled,
             vo.voice_tts_language_code,
+            av.admin_visibility_language_settings,
+            av.admin_visibility_auto_trigger,
+            av.admin_visibility_escalation,
+            av.admin_visibility_safety,
+            av.admin_visibility_ai_mode,
+            av.admin_visibility_voice_mode_toggle,
+            av.admin_visibility_voice_response_toggle,
+            av.admin_visibility_voice_ignore_emoji,
+            av.admin_visibility_voice_spoken_language,
+            av.admin_visibility_voice_preset_voices,
+            av.admin_visibility_voice_custom_training,
+            av.admin_visibility_allowed_preset_voice_keys,
             esc.escalation_trigger_user_requests_human,
             esc.escalation_trigger_ai_confidence_low,
             esc.escalation_trigger_urgent_keywords,
@@ -92,6 +104,7 @@ async function findByCompanyId(companyId) {
      INNER JOIN theme_settings th ON th.company_id = c.company_id
      INNER JOIN lead_settings ld ON ld.company_id = c.company_id
      INNER JOIN voice_settings vo ON vo.company_id = c.company_id
+    INNER JOIN admin_visibility_settings av ON av.company_id = c.company_id
      INNER JOIN escalation_settings esc ON esc.company_id = c.company_id
      INNER JOIN safety_settings sf ON sf.company_id = c.company_id
      INNER JOIN language_settings lg ON lg.company_id = c.company_id
@@ -506,6 +519,78 @@ async function updateThemeSettings(companyId, {
   await flushTableUpdate('theme_settings', companyId, updates, values);
 }
 
+async function updateAdminVisibility(companyId, {
+  admin_visibility_language_settings,
+  admin_visibility_auto_trigger,
+  admin_visibility_escalation,
+  admin_visibility_safety,
+  admin_visibility_ai_mode,
+  admin_visibility_voice_mode_toggle,
+  admin_visibility_voice_response_toggle,
+  admin_visibility_voice_ignore_emoji,
+  admin_visibility_voice_spoken_language,
+  admin_visibility_voice_preset_voices,
+  admin_visibility_voice_custom_training,
+  admin_visibility_allowed_preset_voice_keys,
+}) {
+  const updates = [];
+  const values = [];
+  let i = 1;
+
+  if (admin_visibility_language_settings !== undefined) {
+    updates.push(`admin_visibility_language_settings = $${i++}`);
+    values.push(Boolean(admin_visibility_language_settings));
+  }
+  if (admin_visibility_auto_trigger !== undefined) {
+    updates.push(`admin_visibility_auto_trigger = $${i++}`);
+    values.push(Boolean(admin_visibility_auto_trigger));
+  }
+  if (admin_visibility_escalation !== undefined) {
+    updates.push(`admin_visibility_escalation = $${i++}`);
+    values.push(Boolean(admin_visibility_escalation));
+  }
+  if (admin_visibility_safety !== undefined) {
+    updates.push(`admin_visibility_safety = $${i++}`);
+    values.push(Boolean(admin_visibility_safety));
+  }
+  if (admin_visibility_ai_mode !== undefined) {
+    updates.push(`admin_visibility_ai_mode = $${i++}`);
+    values.push(Boolean(admin_visibility_ai_mode));
+  }
+  if (admin_visibility_voice_mode_toggle !== undefined) {
+    updates.push(`admin_visibility_voice_mode_toggle = $${i++}`);
+    values.push(Boolean(admin_visibility_voice_mode_toggle));
+  }
+  if (admin_visibility_voice_response_toggle !== undefined) {
+    updates.push(`admin_visibility_voice_response_toggle = $${i++}`);
+    values.push(Boolean(admin_visibility_voice_response_toggle));
+  }
+  if (admin_visibility_voice_ignore_emoji !== undefined) {
+    updates.push(`admin_visibility_voice_ignore_emoji = $${i++}`);
+    values.push(Boolean(admin_visibility_voice_ignore_emoji));
+  }
+  if (admin_visibility_voice_spoken_language !== undefined) {
+    updates.push(`admin_visibility_voice_spoken_language = $${i++}`);
+    values.push(Boolean(admin_visibility_voice_spoken_language));
+  }
+  if (admin_visibility_voice_preset_voices !== undefined) {
+    updates.push(`admin_visibility_voice_preset_voices = $${i++}`);
+    values.push(Boolean(admin_visibility_voice_preset_voices));
+  }
+  if (admin_visibility_voice_custom_training !== undefined) {
+    updates.push(`admin_visibility_voice_custom_training = $${i++}`);
+    values.push(Boolean(admin_visibility_voice_custom_training));
+  }
+  if (admin_visibility_allowed_preset_voice_keys !== undefined) {
+    updates.push(`admin_visibility_allowed_preset_voice_keys = $${i++}`);
+    values.push(admin_visibility_allowed_preset_voice_keys || null);
+  }
+
+  if (!updates.length) return;
+  await ensureSettingsRow(companyId);
+  await flushTableUpdate('admin_visibility_settings', companyId, updates, values);
+}
+
 async function createSession(companyId, token, expiresAt) {
   await pool.query(
     `INSERT INTO admin_sessions (company_id, token, expires_at) VALUES ($1, $2, $3)`,
@@ -515,7 +600,7 @@ async function createSession(companyId, token, expiresAt) {
 
 async function findSessionByToken(token) {
   const { rows } = await pool.query(
-    `SELECT s.company_id, c.name
+    `SELECT s.company_id, c.name, c.is_suspended
      FROM admin_sessions s
      JOIN chatbots c ON c.company_id = s.company_id
      WHERE s.token = $1 AND s.expires_at > NOW()`,
@@ -560,6 +645,7 @@ module.exports = {
   setPassword,
   updateSettings,
   updateThemeSettings,
+  updateAdminVisibility,
   setAgentPaused,
   createSession,
   findSessionByToken,

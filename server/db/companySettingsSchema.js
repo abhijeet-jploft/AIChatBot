@@ -9,6 +9,7 @@ module.exports.MODULE_SETTINGS_TABLE_NAMES = [
   'theme_settings',
   'lead_settings',
   'voice_settings',
+  'admin_visibility_settings',
   'escalation_settings',
   'safety_settings',
   'language_settings',
@@ -74,6 +75,23 @@ CREATE TABLE IF NOT EXISTS voice_settings (
   voice_ignore_emoji BOOLEAN NOT NULL DEFAULT FALSE,
   voice_response_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   voice_tts_language_code VARCHAR(12)
+);
+
+CREATE TABLE IF NOT EXISTS admin_visibility_settings (
+  company_id VARCHAR(255) PRIMARY KEY REFERENCES chatbots(company_id) ON DELETE CASCADE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  admin_visibility_language_settings BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_auto_trigger BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_escalation BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_safety BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_ai_mode BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_voice_mode_toggle BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_voice_response_toggle BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_voice_ignore_emoji BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_voice_spoken_language BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_voice_preset_voices BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_voice_custom_training BOOLEAN NOT NULL DEFAULT TRUE,
+  admin_visibility_allowed_preset_voice_keys TEXT
 );
 
 CREATE TABLE IF NOT EXISTS escalation_settings (

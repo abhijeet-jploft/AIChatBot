@@ -49,6 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_session   ON chat_messages(session_id, c
 -- Admin: login only on chatbots; config lives in module *settings tables
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS admin_email VARCHAR(320);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chatbots_admin_email_unique
   ON chatbots (admin_email)
   WHERE admin_email IS NOT NULL AND admin_email <> '';

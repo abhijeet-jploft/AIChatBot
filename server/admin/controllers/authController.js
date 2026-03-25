@@ -1,5 +1,6 @@
 const CompanyAdmin = require('../models/CompanyAdmin');
 const { hashPassword, verifyPassword, generateToken, getSessionExpiry } = require('../utils/auth');
+const { buildAdminVisibilityPayload } = require('../../services/adminSettingsAccess');
 
 function validatePasswordStrength(password) {
   const value = String(password || '');
@@ -33,11 +34,15 @@ async function login(req, res) {
     if (!verifyPassword(password, company.password_hash)) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+    if (company.is_suspended) {
+      return res.status(403).json({ error: 'This company is currently suspended. Contact your super admin.' });
+    }
 
     const cid = company.company_id;
     const token = generateToken();
     const expiresAt = getSessionExpiry();
     await CompanyAdmin.createSession(cid, token, expiresAt);
+    const companySettings = await CompanyAdmin.findByCompanyId(cid);
 
     res.json({
       token,
@@ -45,6 +50,7 @@ async function login(req, res) {
       companyId: cid,
       companyName: company.name,
       adminEmail: company.admin_email || null,
+      adminVisibility: buildAdminVisibilityPayload(companySettings),
     });
   } catch (err) {
     console.error('[admin auth] login:', err);
@@ -85,8 +91,10 @@ async function me(req, res) {
       chatbotName: company.display_name || '',
       displayName: company.name,
       adminEmail: company.admin_email || null,
+      isSuspended: Boolean(company.is_suspended),
       iconUrl: company.icon_url || null,
       greetingMessage: company.greeting_message || null,
+      adminVisibility: buildAdminVisibilityPayload(company),
     });
   } catch (err) {
     console.error('[admin auth] me:', err);

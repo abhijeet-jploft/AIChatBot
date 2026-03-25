@@ -7,6 +7,7 @@ const {
   normalizeLanguagePrimaryToCode,
   parseLanguageExtraLocalesJson,
 } = require('../services/supportedChatLanguages');
+const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
 
 function resolveAutoTriggerOpenMode(dbRow) {
   const enabled = dbRow?.auto_trigger_enabled !== false;
@@ -61,6 +62,13 @@ async function getCompaniesList(req, res) {
               vo.voice_ignore_emoji,
                   vo.voice_response_enabled,
                   vo.voice_tts_language_code,
+                  av.admin_visibility_voice_mode_toggle,
+                  av.admin_visibility_voice_response_toggle,
+                  av.admin_visibility_voice_ignore_emoji,
+                  av.admin_visibility_voice_spoken_language,
+                  av.admin_visibility_voice_preset_voices,
+                  av.admin_visibility_voice_custom_training,
+                  av.admin_visibility_allowed_preset_voice_keys,
                   lg.language_primary,
                   lg.language_multi_enabled,
                   lg.language_auto_detect_enabled,
@@ -70,6 +78,7 @@ async function getCompaniesList(req, res) {
          INNER JOIN chat_settings ch ON ch.company_id = c.company_id
          INNER JOIN theme_settings th ON th.company_id = c.company_id
          INNER JOIN voice_settings vo ON vo.company_id = c.company_id
+                INNER JOIN admin_visibility_settings av ON av.company_id = c.company_id
                 INNER JOIN language_settings lg ON lg.company_id = c.company_id
        WHERE c.company_id = ANY($1::text[])`,
       [companyIds]
@@ -90,6 +99,7 @@ async function getCompaniesList(req, res) {
       const trainingContext = loadCompanyContext(c.id);
       const businessProfile = inferCompanyProfile({ context: trainingContext });
       const contentLocaleHint = inferTrainingContentLanguageHint(trainingContext);
+      const adminVisibility = buildAdminVisibilityPayload(dbRow);
 
       return {
         id: c.id,
@@ -111,14 +121,15 @@ async function getCompaniesList(req, res) {
           selectedPages: String(dbRow.auto_trigger_selected_pages || ''),
         },
         voice: {
-          enabled: Boolean(dbRow.voice_mode_enabled),
-          responseEnabled: Boolean(dbRow.voice_response_enabled !== false),
+          enabled: Boolean(dbRow.voice_mode_enabled) && Boolean(adminVisibility.voice.enableVoiceMode),
+          responseEnabled: Boolean(dbRow.voice_response_enabled !== false) && Boolean(adminVisibility.voice.enableVoiceResponse),
           gender: resolvedGender,
           profile: resolvedProfile,
           customAvailable,
-          ignoreEmoji: Boolean(dbRow.voice_ignore_emoji),
+          ignoreEmoji: Boolean(dbRow.voice_ignore_emoji) && Boolean(adminVisibility.voice.ignoreEmoji),
           ttsLanguageCode: String(dbRow.voice_tts_language_code || '').trim().toLowerCase() || null,
         },
+        adminVisibility,
         language: {
           primary: normalizeLanguagePrimaryToCode(dbRow.language_primary || 'en'),
           catalog: getLanguageCatalogForClient(),

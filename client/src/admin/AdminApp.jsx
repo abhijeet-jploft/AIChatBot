@@ -19,12 +19,16 @@ import SupportRequests from './pages/SupportRequests';
 import TakeOver from './pages/TakeOver';
 import AdminOperatorChat from './pages/AdminOperatorChat';
 import './index.css';
+import { hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../constants/adminVisibility';
 
 function AdminLayout({ children }) {
   const { company, logout, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const companyName = company?.displayName || 'Admin';
+  const adminVisibility = mergeAdminVisibility(company?.adminVisibility);
+  const canAccessVoiceSettings = hasAnyVoiceSettingAccess(adminVisibility);
+  const canAccessAiMode = Boolean(adminVisibility.aiMode);
 
   const navGroups = [
     {
@@ -45,9 +49,9 @@ function AdminLayout({ children }) {
       label: 'Configuration',
       items: [
         { to: '/admin/settings', label: 'Settings' },
-        { to: '/admin/voice-settings', label: 'Voice Settings' },
+        ...(canAccessVoiceSettings ? [{ to: '/admin/voice-settings', label: 'Voice Settings' }] : []),
         { to: '/admin/theme', label: 'Theme' },
-        { to: '/admin/modes', label: 'AI Mode' },
+        ...(canAccessAiMode ? [{ to: '/admin/modes', label: 'AI Mode' }] : []),
       ],
     },
   ];
@@ -127,6 +131,23 @@ function AdminLayout({ children }) {
         </aside>
 
         <main className="admin-main">
+          {company?.isSuspended ? (
+            <div
+              role="alert"
+              style={{
+                margin: '14px 20px 0',
+                border: '1px solid #fca5a5',
+                background: '#7f1d1d',
+                color: '#fee2e2',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              This company is suspended. Any changes in admin have no effect, and the chatbot is paused until issue resolve's.
+            </div>
+          ) : null}
           <header className="admin-topbar">
             <div>
               <p className="admin-welcome mb-1">Welcome,</p>
@@ -149,7 +170,10 @@ function AdminLayout({ children }) {
 }
 
 export default function AdminApp() {
-  const { token } = useAuth();
+  const { token, company } = useAuth();
+  const adminVisibility = mergeAdminVisibility(company?.adminVisibility);
+  const canAccessVoiceSettings = hasAnyVoiceSettingAccess(adminVisibility);
+  const canAccessAiMode = Boolean(adminVisibility.aiMode);
 
   return (
     <AdminToastProvider>
@@ -243,9 +267,13 @@ export default function AdminApp() {
           path="voice-settings"
           element={
             token ? (
-              <AdminLayout>
-                <VoiceSettings />
-              </AdminLayout>
+              canAccessVoiceSettings ? (
+                <AdminLayout>
+                  <VoiceSettings />
+                </AdminLayout>
+              ) : (
+                <Navigate to="/admin/settings" replace />
+              )
             ) : (
               <Navigate to="/admin/login" replace />
             )
@@ -255,9 +283,13 @@ export default function AdminApp() {
           path="modes"
           element={
             token ? (
-              <AdminLayout>
-                <ConversationMode />
-              </AdminLayout>
+              canAccessAiMode ? (
+                <AdminLayout>
+                  <ConversationMode />
+                </AdminLayout>
+              ) : (
+                <Navigate to="/admin/settings" replace />
+              )
             ) : (
               <Navigate to="/admin/login" replace />
             )

@@ -4,6 +4,7 @@ import ChatSidebar from './components/ChatSidebar';
 import ChatMain from './components/ChatMain';
 import Landing from './pages/Landing';
 import { ISO_TO_OPENING_LANG, resolveBrowserSpeechBCp47 } from './constants/chatLanguages';
+import { mergeAdminVisibility } from './constants/adminVisibility';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -1531,12 +1532,13 @@ export default function App() {
 
   const companyName = currentCompany?.displayName || currentCompany?.name || DEFAULT_COMPANY_NAME;
   const companyIconUrl = resolvePublicMediaUrl(currentCompany?.iconUrl);
+  const publicAdminVisibility = mergeAdminVisibility(currentCompany?.adminVisibility);
   const widgetSide = currentCompany?.widgetPosition === 'left'
     ? 'left'
     : (currentCompany?.widgetPosition === 'right' ? 'right' : widgetSideOverride);
   const greetingMessage = currentCompany?.greetingMessage || null;
-  const voiceEnabled = Boolean(currentCompany?.voice?.enabled);
-  const voiceResponseEnabled = currentCompany?.voice?.responseEnabled !== false;
+  const voiceEnabled = Boolean(currentCompany?.voice?.enabled) && Boolean(publicAdminVisibility.voice.enableVoiceMode);
+  const voiceResponseEnabled = currentCompany?.voice?.responseEnabled !== false && Boolean(publicAdminVisibility.voice.enableVoiceResponse);
   const voiceGender = currentCompany?.voice?.gender === 'male' ? 'male' : 'female';
   const handlePlayBrowserVoice = useCallback(async (content, messageIndex) => {
     if (!content || messageIndex == null) return;
@@ -1579,12 +1581,12 @@ export default function App() {
       speakWithBrowserVoice(
         content,
         voiceGender,
-        Boolean(currentCompany?.voice?.ignoreEmoji),
+        Boolean(currentCompany?.voice?.ignoreEmoji) && Boolean(publicAdminVisibility.voice.ignoreEmoji),
         () => setPlayingMessageIndex(null),
         browserVoiceLocaleOpts
       );
     }
-  }, [pauseAssistantVoice, sessionId, companyId, playAssistantVoice, speakWithBrowserVoice, voiceGender, currentCompany?.voice?.ignoreEmoji, browserVoiceLocaleOpts]);
+  }, [pauseAssistantVoice, sessionId, companyId, playAssistantVoice, speakWithBrowserVoice, voiceGender, currentCompany?.voice?.ignoreEmoji, publicAdminVisibility.voice.ignoreEmoji, browserVoiceLocaleOpts]);
   const companyThemeStyle = buildCompanyThemeStyle(currentCompany?.theme, theme);
   const isFullPage = chatViewMode === CHAT_VIEW_MODES.FULL_PAGE;
   const isWidgetOpen = chatViewMode === CHAT_VIEW_MODES.WIDGET_OPEN;

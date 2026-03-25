@@ -20,6 +20,12 @@ const CONFIG_MODULES = [
     path: 'voice-settings',
   },
   {
+    id: 'admin-settings-access',
+    title: 'Admin Settings Access',
+    description: 'Control which configuration sections and preset voices the company admin can see.',
+    path: 'admin-settings-access',
+  },
+  {
     id: 'theme',
     title: 'Theme',
     description: 'Widget colors, visual brand identity, and style personalization.',

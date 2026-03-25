@@ -27,6 +27,7 @@ async function findByCompanyId(companyId) {
     `SELECT
       c.company_id,
       c.name AS company_name,
+      c.is_suspended,
       ch.display_name,
       ch.ai_mode,
       ch.ai_provider,
@@ -44,6 +45,13 @@ async function findByCompanyId(companyId) {
       vo.voice_ignore_emoji,
       vo.voice_response_enabled,
       vo.voice_tts_language_code,
+      av.admin_visibility_voice_mode_toggle,
+      av.admin_visibility_voice_response_toggle,
+      av.admin_visibility_voice_ignore_emoji,
+      av.admin_visibility_voice_spoken_language,
+      av.admin_visibility_voice_preset_voices,
+      av.admin_visibility_voice_custom_training,
+      av.admin_visibility_allowed_preset_voice_keys,
       esc.escalation_trigger_user_requests_human,
       esc.escalation_trigger_ai_confidence_low,
       esc.escalation_trigger_urgent_keywords,
@@ -67,6 +75,7 @@ async function findByCompanyId(companyId) {
     FROM chatbots c
     INNER JOIN chat_settings ch ON ch.company_id = c.company_id
     INNER JOIN voice_settings vo ON vo.company_id = c.company_id
+    INNER JOIN admin_visibility_settings av ON av.company_id = c.company_id
     INNER JOIN escalation_settings esc ON esc.company_id = c.company_id
     INNER JOIN safety_settings sf ON sf.company_id = c.company_id
     INNER JOIN language_settings lg ON lg.company_id = c.company_id

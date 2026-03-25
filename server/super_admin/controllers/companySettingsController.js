@@ -5,6 +5,11 @@ const {
   previewVoice,
   listVoices,
 } = require('../../admin/controllers/settingsController');
+const CompanyAdmin = require('../../admin/models/CompanyAdmin');
+const {
+  buildAdminVisibilityPayload,
+  normalizeAdminVisibilityPatchInput,
+} = require('../../services/adminSettingsAccess');
 
 /**
  * GET /super-admin/companies/:companyId/settings
@@ -27,11 +32,14 @@ async function getCompanySettings(req, res) {
  */
 async function patchCompanySettings(req, res) {
   const prev = req.adminCompanyId;
+  const prevBypass = req.adminSettingsAccessBypass;
   req.adminCompanyId = req.params.companyId;
+  req.adminSettingsAccessBypass = true;
   try {
     await updateSettings(req, res);
   } finally {
     req.adminCompanyId = prev;
+    req.adminSettingsAccessBypass = prevBypass;
   }
 }
 
@@ -41,11 +49,14 @@ async function patchCompanySettings(req, res) {
  */
 async function getCompanyModeSettings(req, res) {
   const prev = req.adminCompanyId;
+  const prevBypass = req.adminSettingsAccessBypass;
   req.adminCompanyId = req.params.companyId;
+  req.adminSettingsAccessBypass = true;
   try {
     await getModeSettings(req, res);
   } finally {
     req.adminCompanyId = prev;
+    req.adminSettingsAccessBypass = prevBypass;
   }
 }
 
@@ -55,11 +66,14 @@ async function getCompanyModeSettings(req, res) {
  */
 async function getCompanyVoices(req, res) {
   const prev = req.adminCompanyId;
+  const prevBypass = req.adminSettingsAccessBypass;
   req.adminCompanyId = req.params.companyId;
+  req.adminSettingsAccessBypass = true;
   try {
     await listVoices(req, res);
   } finally {
     req.adminCompanyId = prev;
+    req.adminSettingsAccessBypass = prevBypass;
   }
 }
 
@@ -69,11 +83,42 @@ async function getCompanyVoices(req, res) {
  */
 async function previewCompanyVoice(req, res) {
   const prev = req.adminCompanyId;
+  const prevBypass = req.adminSettingsAccessBypass;
   req.adminCompanyId = req.params.companyId;
+  req.adminSettingsAccessBypass = true;
   try {
     await previewVoice(req, res);
   } finally {
     req.adminCompanyId = prev;
+    req.adminSettingsAccessBypass = prevBypass;
+  }
+}
+
+async function getCompanyAdminVisibility(req, res) {
+  try {
+    const company = await CompanyAdmin.findByCompanyId(req.params.companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    return res.json({ adminVisibility: buildAdminVisibilityPayload(company) });
+  } catch (err) {
+    console.error('[super admin] getCompanyAdminVisibility:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+async function patchCompanyAdminVisibility(req, res) {
+  try {
+    const company = await CompanyAdmin.findByCompanyId(req.params.companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    const { updates, error } = normalizeAdminVisibilityPatchInput(req.body);
+    if (error) return res.status(400).json({ error });
+
+    await CompanyAdmin.updateAdminVisibility(req.params.companyId, updates);
+    const updatedCompany = await CompanyAdmin.findByCompanyId(req.params.companyId);
+    return res.json({ adminVisibility: buildAdminVisibilityPayload(updatedCompany) });
+  } catch (err) {
+    console.error('[super admin] patchCompanyAdminVisibility:', err);
+    return res.status(500).json({ error: err.message });
   }
 }
 
@@ -83,4 +128,6 @@ module.exports = {
   getCompanyModeSettings,
   getCompanyVoices,
   previewCompanyVoice,
+  getCompanyAdminVisibility,
+  patchCompanyAdminVisibility,
 };
