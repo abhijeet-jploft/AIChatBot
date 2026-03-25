@@ -1,4 +1,23 @@
 const pool = require('../../db/index');
+const { getLogs } = require('../../services/adminLogStore');
+
+function percentile(values, p) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[idx];
+}
+
+function inferLogCategory(row) {
+  const explicit = String(row?.meta?.category || '').trim().toLowerCase();
+  if (explicit === 'notification' || explicit === 'warning' || explicit === 'error_report' || explicit === 'log') {
+    return explicit;
+  }
+  const level = String(row?.level || '').toLowerCase();
+  if (level === 'error') return 'error_report';
+  if (level === 'warn' || level === 'warning') return 'warning';
+  return 'log';
+}
 
 // GET /super-admin/alert-rules
 async function listAlertRules(req, res) {
@@ -141,20 +160,55 @@ async function getReports(req, res) {
 async function getSystemStatus(req, res) {
   try {
     const os = require('os');
-    const pool = require('../../db/index');
+    const db = require('../../db/index');
 
     let dbOk = false;
+    let apiLatencyMs = null;
+    const latencyStart = process.hrtime.bigint();
     try {
-      await pool.query('SELECT 1');
+      await db.query('SELECT 1');
       dbOk = true;
     } catch {}
+    apiLatencyMs = Math.round(Number(process.hrtime.bigint() - latencyStart) / 1e6);
 
     const mem = process.memoryUsage();
+    const cpus = Math.max(1, os.cpus().length);
+    const loadAvg = os.loadavg();
+    const loadPct = Math.round((loadAvg[0] / cpus) * 100);
+
+    const { rows: allLogRows } = getLogs({ type: 'all', limit: 400, offset: 0 });
+    const aiSamples = allLogRows
+      .filter((r) => typeof r?.meta?.aiResponseMs === 'number')
+      .map((r) => Number(r.meta.aiResponseMs))
+      .filter((v) => Number.isFinite(v) && v >= 0);
+    const errorCount = allLogRows.filter((r) => String(r.level || '').toLowerCase() === 'error').length;
+    const warningCount = allLogRows.filter((r) => ['warn', 'warning'].includes(String(r.level || '').toLowerCase())).length;
+
     return res.json({
       status: 'running',
       dbConnected: dbOk,
+      generatedAt: new Date().toISOString(),
       uptime: Math.round(process.uptime()),
       nodeVersion: process.version,
+      metrics: {
+        serverLoad: {
+          avg1m: Number(loadAvg[0].toFixed(2)),
+          avg5m: Number(loadAvg[1].toFixed(2)),
+          avg15m: Number(loadAvg[2].toFixed(2)),
+          cpuLoadPercent1m: loadPct,
+        },
+        apiLatencyMs,
+        aiResponseTime: {
+          samples: aiSamples.length,
+          avgMs: aiSamples.length ? Math.round(aiSamples.reduce((a, b) => a + b, 0) / aiSamples.length) : null,
+          p95Ms: percentile(aiSamples, 95),
+          maxMs: aiSamples.length ? Math.max(...aiSamples) : null,
+        },
+        errors: {
+          recentErrors: errorCount,
+          recentWarnings: warningCount,
+        },
+      },
       memory: {
         heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
         heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
@@ -163,13 +217,49 @@ async function getSystemStatus(req, res) {
       os: {
         platform: os.platform(),
         arch: os.arch(),
-        cpus: os.cpus().length,
+        cpus,
         freeMemMB: Math.round(os.freemem() / 1024 / 1024),
         totalMemMB: Math.round(os.totalmem() / 1024 / 1024),
       },
     });
   } catch (err) {
     console.error('[super admin] getSystemStatus:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// GET /super-admin/system/logs?tab=all|error_reports|warnings|notifications|logs&limit=100&offset=0
+async function getSystemLogs(req, res) {
+  try {
+    const tab = String(req.query.tab || 'all').trim().toLowerCase();
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 100));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    const { rows, total } = getLogs({ type: 'all', limit: 1000, offset: 0 });
+    const mapped = rows.map((row) => ({
+      ...row,
+      category: inferLogCategory(row),
+    }));
+
+    const filtered = mapped.filter((row) => {
+      if (tab === 'all') return true;
+      if (tab === 'error_reports') return row.category === 'error_report';
+      if (tab === 'warnings') return row.category === 'warning';
+      if (tab === 'notifications') return row.category === 'notification';
+      if (tab === 'logs') return row.category === 'log';
+      return true;
+    });
+
+    return res.json({
+      rows: filtered.slice(offset, offset + limit),
+      total: filtered.length,
+      overallTotal: total,
+      limit,
+      offset,
+      tab,
+    });
+  } catch (err) {
+    console.error('[super admin] getSystemLogs:', err);
     return res.status(500).json({ error: err.message });
   }
 }
@@ -181,4 +271,5 @@ module.exports = {
   deleteAlertRule,
   getReports,
   getSystemStatus,
+  getSystemLogs,
 };

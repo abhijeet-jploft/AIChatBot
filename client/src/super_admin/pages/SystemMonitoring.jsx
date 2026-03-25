@@ -2,13 +2,23 @@ import { useState, useEffect } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
 
+const LOG_TABS = [
+  { id: 'error_reports', label: 'Error Reports' },
+  { id: 'warnings', label: 'Warnings' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'logs', label: 'Logs' },
+];
+
 export default function SystemMonitoring() {
   const { saFetch } = useSuperAuth();
   const { showToast } = useSuperToast();
   const [status, setStatus] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [activeTab, setActiveTab] = useState('error_reports');
+  const [logsLoading, setLogsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const loadStatus = async () => {
     setLoading(true);
     try {
       const res = await saFetch('/system/status');
@@ -21,7 +31,33 @@ export default function SystemMonitoring() {
     }
   };
 
-  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, []);
+  const loadLogs = async (tab = activeTab) => {
+    setLogsLoading(true);
+    try {
+      const res = await saFetch(`/system/logs?tab=${encodeURIComponent(tab)}&limit=120`);
+      if (!res.ok) throw new Error('Failed to load logs');
+      const data = await res.json();
+      setEntries(Array.isArray(data.rows) ? data.rows : []);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+    loadLogs(activeTab);
+    const id = setInterval(() => {
+      loadStatus();
+      loadLogs(activeTab);
+    }, 30000);
+    return () => clearInterval(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadLogs(activeTab);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fmtUptime = (s) => {
     const h = Math.floor(s / 3600);
@@ -34,7 +70,9 @@ export default function SystemMonitoring() {
     <div className="sa-page">
       <div className="sa-page-header">
         <h2 className="sa-page-title">System Monitoring</h2>
-        <button className="sa-btn sa-btn-ghost sa-btn-sm" onClick={load}>Refresh</button>
+        <button className="sa-btn sa-btn-ghost sa-btn-sm" onClick={() => { loadStatus(); loadLogs(activeTab); }}>
+          Refresh
+        </button>
       </div>
 
       {loading && !status ? (
@@ -45,6 +83,88 @@ export default function SystemMonitoring() {
           <div className="sa-status-banner sa-status-ok">
             <span className="sa-status-dot" />
             System is <strong>{status.status}</strong> — DB {status.dbConnected ? 'connected' : 'DISCONNECTED'}
+          </div>
+
+          <div className="sa-detail-cols" style={{ marginBottom: 16 }}>
+            <div className="sa-panel">
+              <h3 className="sa-panel-title">Server Load</h3>
+              <ul className="sa-info-list">
+                <li><span>CPU Load (1m)</span><strong>{status.metrics?.serverLoad?.cpuLoadPercent1m ?? '-'}%</strong></li>
+                <li><span>Load Avg 1m</span><strong>{status.metrics?.serverLoad?.avg1m ?? '-'}</strong></li>
+                <li><span>Load Avg 5m</span><strong>{status.metrics?.serverLoad?.avg5m ?? '-'}</strong></li>
+                <li><span>Load Avg 15m</span><strong>{status.metrics?.serverLoad?.avg15m ?? '-'}</strong></li>
+              </ul>
+            </div>
+            <div className="sa-panel">
+              <h3 className="sa-panel-title">Latency</h3>
+              <ul className="sa-info-list">
+                <li><span>API latency</span><strong>{status.metrics?.apiLatencyMs ?? '-'} ms</strong></li>
+                <li><span>AI avg response</span><strong>{status.metrics?.aiResponseTime?.avgMs ?? '-'} ms</strong></li>
+                <li><span>AI p95 response</span><strong>{status.metrics?.aiResponseTime?.p95Ms ?? '-'} ms</strong></li>
+                <li><span>AI max response</span><strong>{status.metrics?.aiResponseTime?.maxMs ?? '-'} ms</strong></li>
+              </ul>
+            </div>
+            <div className="sa-panel">
+              <h3 className="sa-panel-title">Error Logs</h3>
+              <ul className="sa-info-list">
+                <li><span>Recent errors</span><strong className="sa-text-err">{status.metrics?.errors?.recentErrors ?? 0}</strong></li>
+                <li><span>Recent warnings</span><strong>{status.metrics?.errors?.recentWarnings ?? 0}</strong></li>
+                <li><span>Generated</span><strong>{status.generatedAt ? new Date(status.generatedAt).toLocaleTimeString() : '-'}</strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="sa-tabs" style={{ marginBottom: 12 }}>
+            {LOG_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`sa-tab ${activeTab === tab.id ? 'sa-tab-active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="sa-panel">
+            <h3 className="sa-panel-title" style={{ marginTop: 0 }}>
+              {LOG_TABS.find((t) => t.id === activeTab)?.label || 'Logs'}
+            </h3>
+            {logsLoading ? (
+              <div className="sa-loading">Loading entries…</div>
+            ) : entries.length === 0 ? (
+              <div className="sa-empty">No entries in this tab.</div>
+            ) : (
+              <div className="sa-table-wrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Level</th>
+                      <th>Type</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((entry) => (
+                      <tr key={`${entry.type}-${entry.id}-${entry.ts}`}>
+                        <td>{new Date(entry.ts).toLocaleString()}</td>
+                        <td><span className={`sa-badge ${entry.level === 'error' ? 'sa-badge-hot' : entry.level === 'warn' ? 'sa-badge-warn' : 'sa-badge-cold'}`}>{entry.level}</span></td>
+                        <td>{entry.type}</td>
+                        <td>
+                          <div>{entry.message}</div>
+                          {entry.meta ? (
+                            <pre style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap', color: 'var(--sa-text-muted)', fontSize: 12 }}>
+                              {JSON.stringify(entry.meta, null, 2)}
+                            </pre>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="sa-detail-cols">

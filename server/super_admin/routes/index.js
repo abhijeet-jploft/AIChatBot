@@ -64,6 +64,7 @@ router.get('/training/:companyId/files', requireSuperAuth, trainingController.li
 
 // System
 router.get('/system/status', requireSuperAuth, systemController.getSystemStatus);
+router.get('/system/logs', requireSuperAuth, systemController.getSystemLogs);
 router.get('/reports', requireSuperAuth, systemController.getReports);
 router.get('/alert-rules', requireSuperAuth, systemController.listAlertRules);
 router.post('/alert-rules', requireSuperAuth, systemController.createAlertRule);

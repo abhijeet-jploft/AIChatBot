@@ -75,6 +75,7 @@ async function synthesizeCompanyVoice({ chatbot, aiLanguageConfig, voiceConfig, 
  */
 async function postMessage(req, res) {
   let companyId = '_default';
+  const requestStartedAt = Date.now();
   try {
     const { messages, companyId: requestCompanyId = '_default', sessionId } = req.body;
     companyId = requestCompanyId;
@@ -218,6 +219,7 @@ async function postMessage(req, res) {
       appendChatLog('error', `Chat DB pre-write: ${dbErr.message}`, { sessionId: sid, companyId });
     }
 
+    const aiStartedAt = Date.now();
     const response = aiConfig.provider === 'gemini'
       ? await sendGeminiMessage(companyId, messages, {
         modeId: selectedModeId,
@@ -235,6 +237,7 @@ async function postMessage(req, res) {
         assistantName: aiConfig.assistantName,
         languageConfig: aiConfig.language,
       });
+    const aiResponseMs = Date.now() - aiStartedAt;
     let voice = null;
 
     if (voiceConfig.enabled && voiceConfig.responseEnabled) {
@@ -328,6 +331,14 @@ async function postMessage(req, res) {
       }
     }
 
+    appendChatLog('info', 'AI response generated', {
+      category: 'notification',
+      companyId,
+      sessionId: sid,
+      aiProvider: aiConfig.provider,
+      aiResponseMs,
+      totalRequestMs: Date.now() - requestStartedAt,
+    });
     res.json({ content: response, sessionId: sid, voice });
   } catch (err) {
     console.error('[chat] error:', err);
