@@ -324,6 +324,7 @@ async function transcribeMedia(req, res) {
     const entries = await transcribeMediaFiles(files, {
       apiKey,
       model: modelName,
+      keySource: company?.gemini_api_key ? 'company settings' : 'server environment',
     });
     const jsonlContent = entries.map((e) => JSON.stringify(e)).join('\n');
 

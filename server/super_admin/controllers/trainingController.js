@@ -21,6 +21,7 @@ const {
 } = require('../../services/trainingDataService');
 const { extractFromBuffer, isDatabaseKnowledgeFile } = require('../../services/documentExtractor');
 const { transcribeMediaFiles } = require('../../services/mediaTranscriptionService');
+const Chatbot = require('../../models/Chatbot');
 const pool = require('../../db/index');
 const path = require('path');
 const fs = require('fs');
@@ -169,22 +170,22 @@ async function transcribeMedia(req, res) {
     const files = req.files || [];
     if (!files.length) return res.status(400).json({ error: 'No media files uploaded' });
 
-    const { rows } = await pool.query(
-      `SELECT gemini_api_key, ai_model FROM chatbots WHERE company_id = $1`,
-      [companyId]
-    );
-    const settings = rows[0] || {};
-    const apiKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
+    const chatbot = await Chatbot.findByCompanyId(companyId);
+    const apiKey = String(chatbot?.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
     if (!apiKey) {
       return res.status(400).json({ error: 'Gemini API key is required for auto media transcription' });
     }
 
-    let modelName = settings.ai_model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    let modelName = chatbot?.ai_model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     if (String(modelName).toLowerCase().includes('claude')) {
       modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     }
 
-    const entries = await transcribeMediaFiles(files, { apiKey, model: modelName });
+    const entries = await transcribeMediaFiles(files, {
+      apiKey,
+      model: modelName,
+      keySource: chatbot?.gemini_api_key ? 'company settings' : 'server environment',
+    });
     const jsonlContent = entries.map((e) => JSON.stringify(e)).join('\n');
 
     return res.json({

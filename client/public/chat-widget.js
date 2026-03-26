@@ -232,6 +232,7 @@
   var voiceResponseEnabled = true;
   var voiceGender = 'female';
   var voiceIgnoreEmoji = false;
+  var leadCaptureDraft = { name: '', phone: '', email: '' };
 
   var root = null;
   var launcher = null;
@@ -718,6 +719,7 @@
     requestGeneration++;
     loading = false;
     sessionId = null;
+    leadCaptureDraft = { name: '', phone: '', email: '' };
     sendPresenceRegister(undefined);
     messages = [];
     openingMessageShown = false;
@@ -840,16 +842,34 @@
       '#jploft-chat-root .jploft-msg{display:flex;margin-bottom:16px}',
       '#jploft-chat-root .jploft-msg.user{justify-content:flex-end}',
       '#jploft-chat-root .jploft-msg.assistant{justify-content:flex-start}',
-      '#jploft-chat-root .jploft-bubble{position:relative;max-width:min(85%,780px);padding:8px 12px;border:1px solid var(--chat-border);box-shadow:0 12px 26px -22px rgba(0,0,0,.55);font-size:14px;line-height:1.45;word-break:break-word}',
+      '#jploft-chat-root .jploft-bubble{position:relative;max-width:min(85%,780px);padding:8px 12px;border:1px solid var(--chat-border);box-shadow:0 12px 26px -22px rgba(0,0,0,.55);font-size:13.5px;line-height:1.45;word-break:break-word}',
       '#jploft-chat-root .jploft-bubble.user{background:var(--user-bubble,var(--chat-accent));color:var(--user-bubble-text,#fff);border-color:transparent;border-radius:16px 16px 0 16px}',
       '#jploft-chat-root .jploft-bubble.assistant{background:var(--assistant-bubble,var(--chat-surface));color:var(--chat-text);border-radius:16px 16px 16px 0}',
       '#jploft-chat-root .jploft-content.user{white-space:pre-wrap}',
       '#jploft-chat-root .jploft-content.assistant p{margin:0 0 .45em;line-height:1.55}',
       '#jploft-chat-root .jploft-content.assistant p:last-child{margin-bottom:0}',
+      '#jploft-chat-root .jploft-content.assistant ul,#jploft-chat-root .jploft-content.assistant ol{margin:.35em 0 .5em;padding-left:1.15em;list-style:disc}',
+      '#jploft-chat-root .jploft-content.assistant ol{list-style:decimal;padding-left:1.25em}',
+      '#jploft-chat-root .jploft-content.assistant li{margin-bottom:.22em;line-height:1.5}',
+      '#jploft-chat-root .jploft-content.assistant .jploft-heading{margin:.1rem 0 .45rem;font-weight:700;line-height:1.2;color:var(--chat-text-heading)}',
+      '#jploft-chat-root .jploft-content.assistant .jploft-heading-1,#jploft-chat-root .jploft-content.assistant .jploft-heading-2{font-size:1.18rem}',
+      '#jploft-chat-root .jploft-content.assistant .jploft-heading-3,#jploft-chat-root .jploft-content.assistant .jploft-heading-4{font-size:1.04rem}',
+      '#jploft-chat-root .jploft-content.assistant .jploft-heading-5,#jploft-chat-root .jploft-content.assistant .jploft-heading-6{font-size:.98rem}',
       '#jploft-chat-root .jploft-content.assistant pre{margin:.5em 0;padding:.75rem 1rem;border-radius:6px;background:var(--chat-bg);overflow:auto}',
       '#jploft-chat-root .jploft-content.assistant code{padding:.15em .35em;border-radius:4px;background:var(--chat-bg);font-size:.9em}',
       '#jploft-chat-root .jploft-content.assistant pre code{padding:0;background:transparent}',
-      '#jploft-chat-root .jploft-content.assistant a{color:var(--chat-accent);text-decoration:underline}',
+      '#jploft-chat-root .jploft-content.assistant a{color:var(--chat-accent);text-decoration:underline;text-underline-offset:.12em;word-break:break-word}',
+      '#jploft-chat-root .jploft-lead-form{margin-top:.85rem;padding-top:.75rem;border-top:1px solid rgba(0,0,0,.08)}',
+      '#jploft-chat-root .jploft-lead-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}',
+      '#jploft-chat-root .jploft-lead-field{display:flex;flex-direction:column;gap:.3rem}',
+      '#jploft-chat-root .jploft-lead-field span{font-size:.76rem;font-weight:600;color:var(--chat-text-heading)}',
+      '#jploft-chat-root .jploft-lead-field-full{grid-column:1 / -1}',
+      '#jploft-chat-root .jploft-lead-field input{width:100%;min-width:0;border:1px solid var(--chat-border);border-radius:10px;background:var(--chat-surface);color:var(--chat-text);padding:.62rem .72rem;font-size:.9rem;outline:none}',
+      '#jploft-chat-root .jploft-lead-field input:focus{border-color:var(--chat-accent);box-shadow:0 0 0 3px rgba(224,47,58,.14)}',
+      '#jploft-chat-root .jploft-lead-actions{display:flex;justify-content:flex-end;margin-top:.7rem}',
+      '#jploft-chat-root .jploft-lead-submit{border:0;border-radius:10px;padding:.6rem .9rem;font-size:.88rem;font-weight:600;color:#fff;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));box-shadow:0 12px 26px -18px var(--chat-launcher-shadow);cursor:pointer}',
+      '#jploft-chat-root .jploft-lead-submit:disabled{opacity:.65;cursor:not-allowed}',
+      '#jploft-chat-root .jploft-lead-error{margin-top:.55rem;color:#b42318;font-size:.8rem;min-height:1em}',
       '#jploft-chat-root .jploft-typing-dots span{animation:jploft-blink 1.4s infinite}',
       '#jploft-chat-root .jploft-typing-dots span:nth-child(2){animation-delay:.2s}',
       '#jploft-chat-root .jploft-typing-dots span:nth-child(3){animation-delay:.4s}',
@@ -880,7 +900,7 @@
 
       '@keyframes jploft-mic-bars{0%,100%{transform:scaleY(.6);opacity:.6}50%{transform:scaleY(1.2);opacity:1}}',
       '@keyframes jploft-blink{0%,60%,100%{opacity:.3}30%{opacity:1}}',
-      '@media(max-width:1024px){#jploft-chat-root .jploft-panel{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}#jploft-chat-root .jploft-close-fab{display:none !important}#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{right:14px;bottom:14px}}'
+      '@media(max-width:1024px){#jploft-chat-root .jploft-panel{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}#jploft-chat-root .jploft-lead-grid{grid-template-columns:minmax(0,1fr)}#jploft-chat-root .jploft-close-fab{display:none !important}#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{right:14px;bottom:14px}}'
     ].join('\n');
 
     var style = document.createElement('style');
@@ -974,9 +994,27 @@
     return textarea.value;
   }
 
-  function toSafeHttpUrl(rawUrl) {
+  function escapeAttr(s) {
+    return escapeHtml(String(s || '')).replace(/"/g, '&quot;');
+  }
+
+  function normalizePhoneForHref(rawPhone) {
+    var source = String(rawPhone || '').trim();
+    if (!source) return '';
+    var startsWithPlus = /^\+/.test(source);
+    var digits = source.replace(/\D/g, '');
+    if (digits.length < 8 || digits.length > 15) return '';
+    return (startsWithPlus ? '+' : '') + digits;
+  }
+
+  function toSafeHref(rawUrl) {
     var url = decodeHtmlEntities(rawUrl || '').trim();
     if (!url) return '';
+    if (/^mailto:/i.test(url)) return url;
+    if (/^tel:/i.test(url)) {
+      var phoneHref = normalizePhoneForHref(url.replace(/^tel:/i, ''));
+      return phoneHref ? 'tel:' + phoneHref : '';
+    }
     try {
       var parsed = new URL(url, window.location.href);
       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
@@ -986,8 +1024,76 @@
     return '';
   }
 
+  function renderSafeLink(label, href) {
+    var safeHref = toSafeHref(href);
+    if (!safeHref) return escapeHtml(label);
+    var attrs = 'href="' + escapeAttr(safeHref) + '"';
+    if (/^https?:/i.test(safeHref)) attrs += ' target="_blank" rel="noopener noreferrer"';
+    return '<a ' + attrs + '>' + escapeHtml(label) + '</a>';
+  }
+
+  function shouldConvertEmojiLineToBullet(text) {
+    var source = String(text || '').trim();
+    if (!source) return false;
+    if (/[:：]\s*$/.test(source)) return false;
+    if (/[:：]\s*\S/.test(source)) return true;
+    if (/[?!]$/.test(source)) return true;
+    return /^(please|kindly|share|provide|send|connect|best|time|preferred|no|you('| a)?ll|they('| wi)?ll|get|major|proven|industry|experienced|client|global|fuel|secure|real-time|driver|fleet|customer|push)\b/i.test(source);
+  }
+
+  function normalizeBulletLines(content) {
+    return String(content || '')
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map(function (line) {
+        if (/^([ \t]*)[•●▪◦‣⁃]\s+/.test(line)) {
+          return line.replace(/^([ \t]*)[•●▪◦‣⁃]\s+/, '$1- ');
+        }
+        var emojiMatch = line.match(/^([ \t]*)([\p{Extended_Pictographic}\u2600-\u27BF][\p{Extended_Pictographic}\u2600-\u27BF\uFE0F\u200D]*)\s+(.*)$/u);
+        if (!emojiMatch) return line;
+        if (!shouldConvertEmojiLineToBullet(emojiMatch[3])) return line;
+        return emojiMatch[1] + '- ' + emojiMatch[2] + ' ' + emojiMatch[3].trim();
+      })
+      .join('\n');
+  }
+
+  function renderInlineAssistantText(source) {
+    var tokens = [];
+    var text = String(source || '').replace(/\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`/g, function (_match, label, url, inlineCode) {
+      var token = '@@JPLOFT_INLINE_' + tokens.length + '@@';
+      if (inlineCode != null) {
+        tokens.push('<code>' + escapeHtml(inlineCode) + '</code>');
+      } else {
+        tokens.push(renderSafeLink(label, url));
+      }
+      return token;
+    });
+
+    var html = escapeHtml(text)
+      .replace(/https?:\/\/[^\s<]+/g, function (url) {
+        return renderSafeLink(url, url);
+      })
+      .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, function (email) {
+        return renderSafeLink(email, 'mailto:' + email);
+      })
+      .replace(/(^|[^\w])((?:\+|00)?\d[\d\s().-]{6,}\d)(?=$|[^\w])/g, function (fullMatch, prefix, phoneText) {
+        var safePhone = normalizePhoneForHref(phoneText);
+        if (!safePhone) return fullMatch;
+        return prefix + renderSafeLink(phoneText.trim(), 'tel:' + safePhone);
+      })
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+    html = html.replace(/@@JPLOFT_INLINE_(\d+)@@/g, function (_match, indexText) {
+      var index = Number(indexText);
+      return tokens[index] || '';
+    });
+
+    return html;
+  }
+
   function renderAssistantContent(content) {
-    var source = String(content || '');
+    var source = normalizeBulletLines(content);
     var codeBlocks = [];
     var tokenPrefix = '%%JPLOFT_CODE_';
 
@@ -996,17 +1102,63 @@
       return tokenPrefix + idx + '%%';
     });
 
-    var html = escapeHtml(source)
-      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (_m, label, url) {
-        var safeHref = toSafeHttpUrl(url);
-        if (!safeHref) return escapeHtml(label);
-        return '<a href="' + escapeHtml(safeHref) + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
-      })
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
-      .replace(/\n/g, '<br>');
+    var lines = source.split('\n');
+    var htmlParts = [];
+    var paragraphLines = [];
+    var listItems = [];
 
+    function flushParagraph() {
+      if (!paragraphLines.length) return;
+      htmlParts.push('<p>' + paragraphLines.map(renderInlineAssistantText).join('<br>') + '</p>');
+      paragraphLines = [];
+    }
+
+    function flushList() {
+      if (!listItems.length) return;
+      htmlParts.push('<ul>' + listItems.map(function (item) {
+        return '<li>' + renderInlineAssistantText(item) + '</li>';
+      }).join('') + '</ul>');
+      listItems = [];
+    }
+
+    lines.forEach(function (line) {
+      var trimmed = String(line || '').trim();
+      if (!trimmed) {
+        flushParagraph();
+        flushList();
+        return;
+      }
+
+      if (new RegExp('^' + tokenPrefix + '\\d+%%$').test(trimmed)) {
+        flushParagraph();
+        flushList();
+        htmlParts.push(trimmed);
+        return;
+      }
+
+      var headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+      if (headingMatch) {
+        flushParagraph();
+        flushList();
+        htmlParts.push('<div class="jploft-heading jploft-heading-' + headingMatch[1].length + '">' + renderInlineAssistantText(headingMatch[2]) + '</div>');
+        return;
+      }
+
+      var listMatch = trimmed.match(/^[-*]\s+(.*)$/);
+      if (listMatch) {
+        flushParagraph();
+        listItems.push(listMatch[1]);
+        return;
+      }
+
+      flushList();
+      paragraphLines.push(trimmed);
+    });
+
+    flushParagraph();
+    flushList();
+
+    var html = htmlParts.join('');
     html = html.replace(new RegExp(tokenPrefix + '(\\d+)%%', 'g'), function (_m, indexText) {
       var idx = Number(indexText);
       var code = idx >= 0 && idx < codeBlocks.length ? codeBlocks[idx] : '';
@@ -1014,6 +1166,87 @@
     });
 
     return html;
+  }
+
+  function extractLeadDraftFromMessages(list) {
+    var userText = (Array.isArray(list) ? list : [])
+      .filter(function (message) { return message && message.role === 'user'; })
+      .map(function (message) { return String(message.content || ''); })
+      .join('\n');
+    var name = '';
+    var phone = '';
+    var email = '';
+    [
+      /\bmy name is\s+([a-z][a-z\s.'-]{1,60})/i,
+      /\bi am\s+([a-z][a-z\s.'-]{1,60})/i,
+      /\bthis is\s+([a-z][a-z\s.'-]{1,60})/i,
+      /\bname\s*[:=-]\s*([a-z][a-z\s.'-]{1,60})/i,
+    ].some(function (pattern) {
+      var match = userText.match(pattern);
+      if (match && match[1]) {
+        name = match[1].trim().replace(/\s+/g, ' ').slice(0, 80);
+        return true;
+      }
+      return false;
+    });
+    var phoneMatch = userText.match(/(?:^|[^\w])((?:\+|00)?\d[\d\s().-]{6,}\d)(?=$|[^\w])/);
+    if (phoneMatch && phoneMatch[1]) phone = phoneMatch[1].trim();
+    var emailMatch = userText.match(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i);
+    if (emailMatch && emailMatch[0]) email = emailMatch[0].trim();
+    return { name: name, phone: phone, email: email };
+  }
+
+  function hasLeadContactInMessages(list) {
+    var draft = extractLeadDraftFromMessages(list);
+    return Boolean(normalizePhoneForHref(draft.phone) || draft.email);
+  }
+
+  function detectLeadCapturePrompt(content) {
+    var source = String(content || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!source) return false;
+    var fieldMentions = [
+      /\b(your name|full name|my name|name\s*[:?])\b/i,
+      /\b(phone|phone number|mobile|mobile number|whatsapp|country code|best time to reach)\b/i,
+      /\b(email|email address|e-mail)\b/i,
+    ].filter(function (pattern) { return pattern.test(source); }).length;
+    if (fieldMentions < 2) return false;
+    return /\b(contact information|please share|please provide|provide these details|share these details|let me know|reach you|preferred contact method|time zone|what are you looking to build|specific technologies|technical discussion|scheduling)\b/i.test(source);
+  }
+
+  function buildLeadCaptureMessage(fields) {
+    var lines = [];
+    if (fields.name) lines.push('Name: ' + String(fields.name).trim());
+    if (fields.phone) lines.push('Phone: ' + String(fields.phone).trim());
+    if (fields.email) lines.push('Email: ' + String(fields.email).trim());
+    return lines.join('\n');
+  }
+
+  function findLeadPromptIndex(list) {
+    if (hasLeadContactInMessages(list)) return -1;
+    for (var index = list.length - 1; index >= 0; index -= 1) {
+      var message = list[index];
+      if (message && message.role === 'assistant' && detectLeadCapturePrompt(message.content)) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  function renderLeadCaptureForm(draft) {
+    return '<form class="jploft-lead-form">' +
+      '<div class="jploft-lead-grid">' +
+        '<label class="jploft-lead-field"><span>Name</span><input type="text" name="name" placeholder="Your name" value="' + escapeAttr(draft.name || '') + '"></label>' +
+        '<label class="jploft-lead-field"><span>Phone</span><input type="tel" name="phone" placeholder="+1 555 123 4567" value="' + escapeAttr(draft.phone || '') + '"></label>' +
+        '<label class="jploft-lead-field jploft-lead-field-full"><span>Email</span><input type="email" name="email" placeholder="you@example.com" value="' + escapeAttr(draft.email || '') + '"></label>' +
+      '</div>' +
+      '<div class="jploft-lead-error" aria-live="polite"></div>' +
+      '<div class="jploft-lead-actions"><button type="submit" class="jploft-lead-submit"' + (loading ? ' disabled' : '') + '>Send details</button></div>' +
+    '</form>';
   }
 
   function stripEmoji(text) {
@@ -1330,11 +1563,22 @@
   function renderMessages() {
     if (!messagesEl) return;
 
+    var leadPromptIndex = findLeadPromptIndex(messages);
+    var conversationDraft = extractLeadDraftFromMessages(messages);
+    var leadDraft = {
+      name: leadCaptureDraft.name || conversationDraft.name || '',
+      phone: leadCaptureDraft.phone || conversationDraft.phone || '',
+      email: leadCaptureDraft.email || conversationDraft.email || '',
+    };
+
     var html = messages.map(function (m, i) {
       var cls = m.role === 'user' ? 'user' : 'assistant';
       var contentHtml = cls === 'assistant'
         ? renderAssistantContent(m.content)
         : escapeHtml(m.content).replace(/\n/g, '<br>');
+      var leadFormHtml = cls === 'assistant' && i === leadPromptIndex
+        ? renderLeadCaptureForm(leadDraft)
+        : '';
       var voiceHtml = '';
       if (cls === 'assistant' && m.content && voiceResponseEnabled) {
         var isPlaying = playingMessageIndex === i;
@@ -1350,7 +1594,7 @@
           '</button>' + waveHtml + '</div>';
       }
       return '<div class="jploft-msg ' + cls + '"><div class="jploft-bubble ' + cls + '">' +
-        '<div class="jploft-content ' + cls + '">' + contentHtml + '</div>' + voiceHtml +
+        '<div class="jploft-content ' + cls + '">' + contentHtml + '</div>' + leadFormHtml + voiceHtml +
         '</div></div>';
     }).join('');
 
@@ -1368,6 +1612,40 @@
           return;
         }
         playMessageVoice(index);
+      };
+    });
+    messagesEl.querySelectorAll('.jploft-lead-form').forEach(function (form) {
+      var errorEl = form.querySelector('.jploft-lead-error');
+      ['name', 'phone', 'email'].forEach(function (field) {
+        var input = form.querySelector('[name="' + field + '"]');
+        if (!input) return;
+        input.addEventListener('input', function () {
+          leadCaptureDraft[field] = input.value;
+          if (errorEl) errorEl.textContent = '';
+        });
+      });
+      form.onsubmit = function (event) {
+        event.preventDefault();
+        if (loading) return;
+
+        var next = {
+          name: String((form.querySelector('[name="name"]') || {}).value || '').trim(),
+          phone: String((form.querySelector('[name="phone"]') || {}).value || '').trim(),
+          email: String((form.querySelector('[name="email"]') || {}).value || '').trim(),
+        };
+
+        if (!next.name) {
+          if (errorEl) errorEl.textContent = 'Name is required.';
+          return;
+        }
+
+        if (!normalizePhoneForHref(next.phone) && !next.email) {
+          if (errorEl) errorEl.textContent = 'Add a phone number or email address.';
+          return;
+        }
+
+        leadCaptureDraft = { name: '', phone: '', email: '' };
+        sendToApi(buildLeadCaptureMessage(next));
       };
     });
     messagesEl.scrollTop = messagesEl.scrollHeight;

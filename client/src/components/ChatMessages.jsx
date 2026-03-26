@@ -1,20 +1,105 @@
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import {
+  buildLeadCaptureMessage,
+  detectLeadCapturePrompt,
+  extractLeadDraftFromMessages,
+  hasLeadContactInMessages,
+  hasUsableLeadContact,
+  preprocessAssistantMarkdown,
+  sanitizeAssistantHref,
+} from '../lib/chatMessageFormatting';
+
+function InlineLeadForm({ draft, disabled, onSubmit }) {
+  const [form, setForm] = useState(draft);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setForm(draft);
+    setError('');
+  }, [draft]);
+
+  const handleChange = (field) => (event) => {
+    const value = event.target.value;
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (error) setError('');
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    const next = {
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+    };
+
+    if (!next.name) {
+      setError('Name is required.');
+      return;
+    }
+
+    if (!hasUsableLeadContact(next)) {
+      setError('Add a phone number or email address.');
+      return;
+    }
+
+    onSubmit(buildLeadCaptureMessage(next));
+  };
+
+  return (
+    <form className="chat-inline-lead-form mt-3" onSubmit={handleSubmit}>
+      <div className="chat-inline-lead-grid">
+        <label className="chat-inline-lead-field">
+          <span>Name</span>
+          <input type="text" value={form.name} onChange={handleChange('name')} placeholder="Your name" disabled={disabled} />
+        </label>
+        <label className="chat-inline-lead-field">
+          <span>Phone</span>
+          <input type="tel" value={form.phone} onChange={handleChange('phone')} placeholder="+1 555 123 4567" disabled={disabled} />
+        </label>
+        <label className="chat-inline-lead-field chat-inline-lead-field-full">
+          <span>Email</span>
+          <input type="email" value={form.email} onChange={handleChange('email')} placeholder="you@example.com" disabled={disabled} />
+        </label>
+      </div>
+      {error ? <div className="chat-inline-lead-error">{error}</div> : null}
+      <div className="chat-inline-lead-actions">
+        <button type="submit" className="chat-inline-lead-submit" disabled={disabled}>Send details</button>
+      </div>
+    </form>
+  );
+}
 
 function MessageContent({ content, isUser }) {
   if (isUser) return <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</span>;
+
+  const markdown = preprocessAssistantMarkdown(content);
+
   return (
     <div className="message-markdown" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ href, children, ...props }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-              {children}
-            </a>
-          ),
+          a: ({ href, children, ...props }) => {
+            const safeHref = sanitizeAssistantHref(href);
+            if (!safeHref) return <>{children}</>;
+            const isExternal = /^https?:/i.test(safeHref);
+            return (
+              <a href={safeHref} target={isExternal ? '_blank' : undefined} rel={isExternal ? 'noopener noreferrer' : undefined} {...props}>
+                {children}
+              </a>
+            );
+          },
           strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
           em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+          h1: ({ children }) => <h1 className="message-heading message-heading-h1">{children}</h1>,
+          h2: ({ children }) => <h2 className="message-heading message-heading-h2">{children}</h2>,
+          h3: ({ children }) => <h3 className="message-heading message-heading-h3">{children}</h3>,
+          h4: ({ children }) => <h4 className="message-heading message-heading-h4">{children}</h4>,
+          h5: ({ children }) => <h5 className="message-heading message-heading-h5">{children}</h5>,
+          h6: ({ children }) => <h6 className="message-heading message-heading-h6">{children}</h6>,
           code: ({ className, children, ...props }) => {
             const isBlock = Boolean(className);
             return isBlock ? (
@@ -37,19 +122,33 @@ function MessageContent({ content, isUser }) {
             );
           },
           pre: ({ children }) => <pre style={{ margin: '0.4em 0', overflow: 'auto' }}>{children}</pre>,
-          p: ({ children }) => <p style={{ margin: '0 0 0.4em 0', lineHeight: 1.55 }}>{children}</p>,
-          ul: ({ children }) => <ul style={{ margin: '0.35em 0 0.45em', paddingLeft: '1.2em' }}>{children}</ul>,
-          ol: ({ children }) => <ol style={{ margin: '0.35em 0 0.45em', paddingLeft: '1.2em' }}>{children}</ol>,
-          li: ({ children }) => <li style={{ marginBottom: '0.2em', lineHeight: 1.55 }}>{children}</li>,
+          p: ({ children }) => <p style={{ margin: '0 0 0.45em 0', lineHeight: 1.55 }}>{children}</p>,
+          ul: ({ children }) => <ul style={{ margin: '0.35em 0 0.5em', paddingLeft: '1.15em' }}>{children}</ul>,
+          ol: ({ children }) => <ol style={{ margin: '0.35em 0 0.5em', paddingLeft: '1.2em' }}>{children}</ol>,
+          li: ({ children }) => <li style={{ marginBottom: '0.22em', lineHeight: 1.5 }}>{children}</li>,
         }}
       >
-        {content}
+        {markdown}
       </ReactMarkdown>
     </div>
   );
 }
 
-export default function ChatMessages({ messages, loading, greetingMessage, onPlayVoice, onPauseVoice, playingMessageIndex, voiceEnabled, voiceResponseEnabled = true, onPlayBrowserVoice }) {
+export default function ChatMessages({ messages, loading, greetingMessage, onPlayVoice, onPauseVoice, playingMessageIndex, voiceEnabled, voiceResponseEnabled = true, onPlayBrowserVoice, onSend }) {
+  const leadDraft = extractLeadDraftFromMessages(messages);
+  const hasLeadContact = hasLeadContactInMessages(messages);
+  let leadPromptIndex = -1;
+
+  if (!hasLeadContact) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role === 'assistant' && detectLeadCapturePrompt(message.content)) {
+        leadPromptIndex = index;
+        break;
+      }
+    }
+  }
+
   if (!messages.length && !loading) {
     const hasCustom = greetingMessage?.trim();
     const title = hasCustom?.split('\n')[0]?.trim() || 'How can I help you today?';
@@ -97,6 +196,9 @@ export default function ChatMessages({ messages, loading, greetingMessage, onPla
             <div className="message-content">
               <MessageContent content={msg.content} isUser={msg.role === 'user'} />
             </div>
+            {msg.role === 'assistant' && i === leadPromptIndex && typeof onSend === 'function' ? (
+              <InlineLeadForm draft={leadDraft} disabled={loading} onSubmit={onSend} />
+            ) : null}
             {msg.role === 'assistant' && msg.content && voiceResponseEnabled && (Boolean(msg.voiceUrl) || typeof onPlayBrowserVoice === 'function') && (
               <div className="mt-2 d-inline-flex align-items-center gap-2">
                 {playingMessageIndex === i ? (

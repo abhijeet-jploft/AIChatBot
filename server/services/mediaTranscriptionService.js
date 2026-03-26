@@ -1,9 +1,22 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const GEMINI_MODEL_FALLBACKS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
+const GEMINI_MODEL_FALLBACKS = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 
 function isModelNotFoundError(err) {
   const msg = String(err?.message || '').toLowerCase();
   return msg.includes('404') && (msg.includes('not found') || msg.includes('not supported'));
+}
+
+function isQuotaExceededError(err) {
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('429') || msg.includes('quota exceeded') || msg.includes('too many requests');
+}
+
+function buildQuotaExceededMessage(err, options = {}) {
+  const requestedModel = String(options.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash');
+  const keySource = String(options.keySource || 'server configuration');
+  const retryMatch = String(err?.message || '').match(/Please retry in\s+([^\.\s]+s?)/i);
+  const retryHint = retryMatch?.[1] ? ` Retry after ${retryMatch[1]}.` : '';
+  return `Gemini media transcription quota exceeded for ${requestedModel} using ${keySource}. Verify the deployed server is using the intended Gemini API key and that billing/quota are enabled.${retryHint}`;
 }
 
 function inferMediaType(mime = '', originalName = '') {
@@ -43,6 +56,7 @@ async function transcribeMediaFiles(files, options = {}) {
     }
 
     let content = '';
+    let lastQuotaError = null;
     for (let i = 0; i < modelCandidates.length; i += 1) {
       const candidate = modelCandidates[i];
       try {
@@ -54,9 +68,19 @@ async function transcribeMediaFiles(files, options = {}) {
         content = String(result?.response?.text?.() || '').trim();
         if (content) break;
       } catch (err) {
+        if (isQuotaExceededError(err)) {
+          const quotaErr = new Error(buildQuotaExceededMessage(err, { ...options, model: candidate }));
+          quotaErr.cause = err;
+          lastQuotaError = quotaErr;
+          if (i < modelCandidates.length - 1) continue;
+          throw quotaErr;
+        }
         if (isModelNotFoundError(err) && i < modelCandidates.length - 1) continue;
         throw err;
       }
+    }
+    if (!content && lastQuotaError) {
+      throw lastQuotaError;
     }
     if (!content) {
       throw new Error(`No transcription returned for ${file?.originalname || 'unknown file'}`);
