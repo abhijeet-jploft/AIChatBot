@@ -149,10 +149,12 @@ function buildModeDebugLine(modeId = DEFAULT_CONVERSATION_MODE, modeContext = nu
 
 module.exports = {
   DEFAULT_CONVERSATION_MODE,
+  MODE_OPTIONS,
   buildConversationModePrompt,
   buildModeContext,
   buildModeDebugLine,
   getModeCatalog,
+  getModeOption,
   isValidConversationModeId,
   normalizeConversationModeId,
 };

@@ -19,7 +19,7 @@ import SupportRequests from './pages/SupportRequests';
 import TakeOver from './pages/TakeOver';
 import AdminOperatorChat from './pages/AdminOperatorChat';
 import './index.css';
-import { hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../constants/adminVisibility';
+import { hasAnyTrainingModuleAccess, hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../constants/adminVisibility';
 
 function AdminLayout({ children }) {
   const { company, logout, loading } = useAuth();
@@ -29,6 +29,7 @@ function AdminLayout({ children }) {
   const adminVisibility = mergeAdminVisibility(company?.adminVisibility);
   const canAccessVoiceSettings = hasAnyVoiceSettingAccess(adminVisibility);
   const canAccessAiMode = Boolean(adminVisibility.aiMode);
+  const canAccessTraining = hasAnyTrainingModuleAccess(adminVisibility);
 
   const navGroups = [
     {
@@ -41,7 +42,7 @@ function AdminLayout({ children }) {
         { to: '/admin/missed-conversations', label: 'Missed conversations' },
         { to: '/admin/support-requests', label: 'Support requests' },
         { to: '/admin/take-over', label: 'Take over' },
-        { to: '/admin/training', label: 'Training' },
+        ...(canAccessTraining ? [{ to: '/admin/training', label: 'Training' }] : []),
         { to: '/admin/logs', label: 'Logs' },
       ],
     },
@@ -174,6 +175,7 @@ export default function AdminApp() {
   const adminVisibility = mergeAdminVisibility(company?.adminVisibility);
   const canAccessVoiceSettings = hasAnyVoiceSettingAccess(adminVisibility);
   const canAccessAiMode = Boolean(adminVisibility.aiMode);
+  const canAccessTraining = hasAnyTrainingModuleAccess(adminVisibility);
 
   return (
     <AdminToastProvider>
@@ -299,9 +301,13 @@ export default function AdminApp() {
           path="training"
           element={
             token ? (
-              <AdminLayout>
-                <Training />
-              </AdminLayout>
+              canAccessTraining ? (
+                <AdminLayout>
+                  <Training />
+                </AdminLayout>
+              ) : (
+                <Navigate to="/admin/" replace />
+              )
             ) : (
               <Navigate to="/admin/login" replace />
             )

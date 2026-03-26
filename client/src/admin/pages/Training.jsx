@@ -1,6 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import {
+  TRAINING_MODULES,
+  isTrainingModuleAllowed,
+  mergeAdminVisibility,
+} from '../../constants/adminVisibility';
 
 const STATUS_CLASS = {
   pending: 'bg-secondary',
@@ -24,21 +29,24 @@ function trainingFetchErrorMessage(err) {
   return err?.message || 'Network error.';
 }
 
-const TABS = [
-  { id: 'scrape', label: 'Website scraping' },
-  { id: 'conversational', label: 'Conversational' },
-  { id: 'documents', label: 'Documents' },
-  { id: 'database', label: 'Database / SQL' },
-  { id: 'media', label: 'Media training' },
-  { id: 'structured', label: 'Structured (CSV / Excel)' },
-  { id: 'manual', label: 'Manual knowledge' },
-];
-
 export default function Training() {
   const { authFetch, company } = useAuth();
   const { showToast } = useAdminToast();
   const companyId = company?.companyId;
   const [activeTab, setActiveTab] = useState('scrape');
+
+  const adminVisibility = useMemo(() => mergeAdminVisibility(company?.adminVisibility), [company?.adminVisibility]);
+  const visibleTabs = useMemo(
+    () => TRAINING_MODULES.filter((t) => isTrainingModuleAllowed(adminVisibility, t.id)),
+    [adminVisibility]
+  );
+
+  useEffect(() => {
+    if (!visibleTabs.length) return;
+    if (!visibleTabs.some((t) => t.id === activeTab)) {
+      setActiveTab(visibleTabs[0].id);
+    }
+  }, [visibleTabs, activeTab]);
 
   // Website scrape
   const [url, setUrl] = useState('');
@@ -569,6 +577,17 @@ export default function Training() {
   };
 
   const isScrapeRunning = job?.status === 'running' || submitting;
+
+  if (!visibleTabs.length) {
+    return (
+      <div className="flex-grow-1 overflow-auto p-4" style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)' }}>
+        <p className="text-muted mb-0" style={{ fontSize: 14 }}>
+          Training is not enabled for your workspace. Contact your administrator if you need access.
+        </p>
+      </div>
+    );
+  }
+
   const manualMicButtonStyle = {
     width: 36,
     height: 36,
@@ -594,7 +613,7 @@ export default function Training() {
 
         {/* Tabs */}
         <ul className="nav nav-tabs mb-4 flex-wrap" style={{ borderColor: 'var(--chat-border)' }}>
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <li key={t.id} className="nav-item">
               <button
                 type="button"

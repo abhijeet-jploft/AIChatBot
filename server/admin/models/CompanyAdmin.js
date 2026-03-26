@@ -77,6 +77,9 @@ async function findByCompanyId(companyId) {
             av.admin_visibility_voice_preset_voices,
             av.admin_visibility_voice_custom_training,
             av.admin_visibility_allowed_preset_voice_keys,
+            av.admin_visibility_allowed_ai_mode_ids,
+            av.admin_visibility_training_modules,
+            av.admin_visibility_allowed_chat_language_codes,
             esc.escalation_trigger_user_requests_human,
             esc.escalation_trigger_ai_confidence_low,
             esc.escalation_trigger_urgent_keywords,
@@ -532,6 +535,9 @@ async function updateAdminVisibility(companyId, {
   admin_visibility_voice_preset_voices,
   admin_visibility_voice_custom_training,
   admin_visibility_allowed_preset_voice_keys,
+  admin_visibility_allowed_ai_mode_ids,
+  admin_visibility_training_modules,
+  admin_visibility_allowed_chat_language_codes,
 }) {
   const updates = [];
   const values = [];
@@ -584,6 +590,18 @@ async function updateAdminVisibility(companyId, {
   if (admin_visibility_allowed_preset_voice_keys !== undefined) {
     updates.push(`admin_visibility_allowed_preset_voice_keys = $${i++}`);
     values.push(admin_visibility_allowed_preset_voice_keys || null);
+  }
+  if (admin_visibility_allowed_ai_mode_ids !== undefined) {
+    updates.push(`admin_visibility_allowed_ai_mode_ids = $${i++}`);
+    values.push(admin_visibility_allowed_ai_mode_ids || null);
+  }
+  if (admin_visibility_training_modules !== undefined) {
+    updates.push(`admin_visibility_training_modules = $${i++}`);
+    values.push(admin_visibility_training_modules || null);
+  }
+  if (admin_visibility_allowed_chat_language_codes !== undefined) {
+    updates.push(`admin_visibility_allowed_chat_language_codes = $${i++}`);
+    values.push(admin_visibility_allowed_chat_language_codes || null);
   }
 
   if (!updates.length) return;

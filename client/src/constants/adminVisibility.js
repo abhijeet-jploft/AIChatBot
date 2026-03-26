@@ -1,3 +1,34 @@
+import { CHAT_LANGUAGE_OPTIONS } from './chatLanguages';
+
+/** Matches server conversationModes MODE_OPTIONS ids */
+export const AI_MODE_OPTIONS = Object.freeze([
+  { id: 'lead_generation', label: 'Lead Generation' },
+  { id: 'meeting_booking', label: 'Meeting Booking' },
+  { id: 'product_recommendation', label: 'Product Recommendation' },
+  { id: 'customer_support', label: 'Customer Support' },
+  { id: 'mixed_mode', label: 'Mixed Mode' },
+]);
+
+const ALL_AI_MODE_IDS = AI_MODE_OPTIONS.map((m) => m.id);
+
+const ALL_CHAT_LANG_CODES = CHAT_LANGUAGE_OPTIONS.map((o) => o.code);
+
+/** Matches server trainingController / admin Training tabs */
+export const TRAINING_MODULES = Object.freeze([
+  { id: 'scrape', label: 'Website scraping' },
+  { id: 'conversational', label: 'Conversational' },
+  { id: 'documents', label: 'Documents' },
+  { id: 'database', label: 'Database / SQL' },
+  { id: 'media', label: 'Media training' },
+  { id: 'structured', label: 'Structured (CSV / Excel)' },
+  { id: 'manual', label: 'Manual knowledge' },
+]);
+
+const DEFAULT_TRAINING_MODULES = TRAINING_MODULES.reduce((acc, m) => {
+  acc[m.id] = true;
+  return acc;
+}, {});
+
 const DEFAULT_ADMIN_VISIBILITY = Object.freeze({
   fixed: {
     basicCompanySettings: true,
@@ -5,11 +36,14 @@ const DEFAULT_ADMIN_VISIBILITY = Object.freeze({
   },
   settings: {
     chatLanguages: true,
+    chatLanguageAllowedCodes: null,
     autoTrigger: true,
     escalation: true,
     safety: true,
   },
   aiMode: true,
+  aiModeAllowedIds: null,
+  training: { ...DEFAULT_TRAINING_MODULES },
   voice: {
     enableVoiceMode: true,
     enableVoiceResponse: true,
@@ -80,8 +114,18 @@ export function mergeAdminVisibility(rawVisibility) {
     settings: {
       ...DEFAULT_ADMIN_VISIBILITY.settings,
       ...(rawVisibility?.settings || {}),
+      chatLanguageAllowedCodes: rawVisibility?.settings?.chatLanguageAllowedCodes !== undefined
+        ? rawVisibility.settings.chatLanguageAllowedCodes
+        : DEFAULT_ADMIN_VISIBILITY.settings.chatLanguageAllowedCodes,
     },
     aiMode: rawVisibility?.aiMode ?? DEFAULT_ADMIN_VISIBILITY.aiMode,
+    aiModeAllowedIds: rawVisibility?.aiModeAllowedIds !== undefined
+      ? rawVisibility.aiModeAllowedIds
+      : DEFAULT_ADMIN_VISIBILITY.aiModeAllowedIds,
+    training: {
+      ...DEFAULT_TRAINING_MODULES,
+      ...(rawVisibility?.training || {}),
+    },
     voice: {
       ...DEFAULT_ADMIN_VISIBILITY.voice,
       ...(rawVisibility?.voice || {}),
@@ -100,6 +144,48 @@ export function hasAnyVoiceSettingAccess(adminVisibility) {
     || merged.voice.presetVoices
     || merged.voice.trainCustomVoice
   );
+}
+
+export function hasAnyTrainingModuleAccess(adminVisibility) {
+  const merged = mergeAdminVisibility(adminVisibility);
+  return TRAINING_MODULES.some((m) => merged.training[m.id]);
+}
+
+export function isTrainingModuleAllowed(adminVisibility, moduleId) {
+  const merged = mergeAdminVisibility(adminVisibility);
+  return Boolean(merged.training[moduleId]);
+}
+
+export function toggleChatLanguageAllowedCode(prevAccess, code, checked) {
+  const ALL = ALL_CHAT_LANG_CODES;
+  let nextIds = prevAccess.settings.chatLanguageAllowedCodes;
+  if (nextIds == null) nextIds = [...ALL];
+  const set = new Set(nextIds);
+  if (checked) set.add(code);
+  else set.delete(code);
+  const arr = ALL.filter((id) => set.has(id));
+  if (arr.length === ALL.length) {
+    return {
+      ...prevAccess,
+      settings: { ...prevAccess.settings, chatLanguageAllowedCodes: null },
+    };
+  }
+  return {
+    ...prevAccess,
+    settings: { ...prevAccess.settings, chatLanguageAllowedCodes: arr },
+  };
+}
+
+export function toggleAiModeAllowedId(prevAccess, modeId, checked) {
+  const ALL = ALL_AI_MODE_IDS;
+  let nextIds = prevAccess.aiModeAllowedIds;
+  if (nextIds == null) nextIds = [...ALL];
+  const set = new Set(nextIds);
+  if (checked) set.add(modeId);
+  else set.delete(modeId);
+  const arr = ALL.filter((id) => set.has(id));
+  if (arr.length === ALL.length) return { ...prevAccess, aiModeAllowedIds: null };
+  return { ...prevAccess, aiModeAllowedIds: arr };
 }
 
 export function getPresetVoiceOptions(catalog) {

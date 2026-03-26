@@ -9,6 +9,7 @@ const systemController = require('../controllers/systemController');
 const supportTicketsController = require('../controllers/supportTicketsController');
 const apiTrackingController = require('../controllers/apiTrackingController');
 const staffController = require('../controllers/staffController');
+const { buildAiModePermissionChecks } = require('../permissions');
 const {
 	requireSuperAuth,
 	requirePermission,
@@ -39,7 +40,7 @@ router.get('/dashboard', requireSuperAuth, requirePermission('dashboard', 'view'
 // Companies
 router.get('/companies', requireSuperAuth, requireAnyPermission([
 	['business_management', 'view'],
-	['ai_configuration', 'view'],
+	...buildAiModePermissionChecks('view'),
 	['voice_management', 'view'],
 	['api_management', 'view'],
 	['user_management', 'view'],
@@ -47,7 +48,7 @@ router.get('/companies', requireSuperAuth, requireAnyPermission([
 router.post('/companies', requireSuperAuth, requirePermission('business_management', 'edit'), companiesController.createCompany);
 router.get('/companies/:companyId', requireSuperAuth, requireAnyPermission([
 	['business_management', 'view'],
-	['ai_configuration', 'view'],
+	...buildAiModePermissionChecks('view'),
 	['voice_management', 'view'],
 	['api_management', 'view'],
 	['user_management', 'view'],
@@ -60,7 +61,7 @@ router.post('/companies/:companyId/regenerate-embed-secret', requireSuperAuth, r
 router.post('/companies/:companyId/impersonate', requireSuperAuth, requirePermission('user_management', 'full'), companiesController.impersonateCompanyAdmin);
 router.get('/companies/:companyId/stats', requireSuperAuth, requireAnyPermission([
 	['business_management', 'view'],
-	['ai_configuration', 'view'],
+	...buildAiModePermissionChecks('view'),
 	['voice_management', 'view'],
 	['api_management', 'view'],
 	['user_management', 'view'],
@@ -68,14 +69,14 @@ router.get('/companies/:companyId/stats', requireSuperAuth, requireAnyPermission
 router.get('/companies/:companyId/api-tracking', requireSuperAuth, requirePermission('api_management', 'view'), apiTrackingController.getCompanyApiTracking);
 router.get('/companies/:companyId/settings', requireSuperAuth, requireAnyPermission([
 	['business_management', 'view'],
-	['ai_configuration', 'view'],
+	...buildAiModePermissionChecks('view'),
 	['voice_management', 'view'],
 	['api_management', 'view'],
 	['system_settings', 'view'],
 ]), companySettingsController.getCompanySettings);
 router.get('/companies/:companyId/settings/admin-visibility', requireSuperAuth, requirePermission('user_management', 'view'), companySettingsController.getCompanyAdminVisibility);
 router.patch('/companies/:companyId/settings/admin-visibility', requireSuperAuth, requirePermission('user_management', 'edit'), companySettingsController.patchCompanyAdminVisibility);
-router.get('/companies/:companyId/settings/modes', requireSuperAuth, requirePermission('ai_configuration', 'view'), companySettingsController.getCompanyModeSettings);
+router.get('/companies/:companyId/settings/modes', requireSuperAuth, requireAnyPermission(buildAiModePermissionChecks('view')), companySettingsController.getCompanyModeSettings);
 router.get('/companies/:companyId/settings/voices', requireSuperAuth, requirePermission('voice_management', 'view'), companySettingsController.getCompanyVoices);
 router.post('/companies/:companyId/settings/voice-preview', requireSuperAuth, requirePermission('voice_management', 'view'), companySettingsController.previewCompanyVoice);
 router.patch('/companies/:companyId/settings', requireSuperAuth, requireCompanySettingsMutation, companySettingsController.patchCompanySettings);

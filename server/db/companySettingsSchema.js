@@ -91,7 +91,10 @@ CREATE TABLE IF NOT EXISTS admin_visibility_settings (
   admin_visibility_voice_spoken_language BOOLEAN NOT NULL DEFAULT TRUE,
   admin_visibility_voice_preset_voices BOOLEAN NOT NULL DEFAULT TRUE,
   admin_visibility_voice_custom_training BOOLEAN NOT NULL DEFAULT TRUE,
-  admin_visibility_allowed_preset_voice_keys TEXT
+  admin_visibility_allowed_preset_voice_keys TEXT,
+  admin_visibility_allowed_ai_mode_ids TEXT,
+  admin_visibility_training_modules TEXT,
+  admin_visibility_allowed_chat_language_codes TEXT
 );
 
 CREATE TABLE IF NOT EXISTS escalation_settings (

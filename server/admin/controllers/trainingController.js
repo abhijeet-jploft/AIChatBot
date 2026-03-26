@@ -17,14 +17,36 @@ const {
 const { extractFromBuffer, isDatabaseKnowledgeFile } = require('../../services/documentExtractor');
 const { transcribeMediaFiles } = require('../../services/mediaTranscriptionService');
 const CompanyAdmin = require('../models/CompanyAdmin');
+const {
+  buildAdminVisibilityPayload,
+  hasAnyTrainingModuleAccess,
+  isTrainingModuleAllowed,
+} = require('../../services/adminSettingsAccess');
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
+
+function assertTrainingModule(req, res, company, moduleKey) {
+  const av = buildAdminVisibilityPayload(company);
+  if (isTrainingModuleAllowed(av, moduleKey)) return true;
+  res.status(403).json({ error: 'This training area is managed by the super admin for this company.' });
+  return false;
+}
+
+function assertAnyTrainingAccess(req, res, company) {
+  const av = buildAdminVisibilityPayload(company);
+  if (hasAnyTrainingModuleAccess(av)) return true;
+  res.status(403).json({ error: 'Training is managed by the super admin for this company.' });
+  return false;
+}
 
 async function startScrape(req, res) {
   try {
     const { url } = req.body;
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'scrape')) return;
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'url is required' });
@@ -59,6 +81,9 @@ async function scrapeStatus(req, res) {
   if (job.companyId !== req.adminCompanyId) {
     return res.status(403).json({ error: 'Access denied' });
   }
+  const company = await CompanyAdmin.findByCompanyId(job.companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  if (!assertTrainingModule(req, res, company, 'scrape')) return;
   res.json({
     id: job.id,
     status: job.status,
@@ -82,6 +107,9 @@ async function scrapeSave(req, res) {
     if (job.companyId !== req.adminCompanyId) {
       return res.status(403).json({ error: 'Access denied' });
     }
+    const company = await CompanyAdmin.findByCompanyId(job.companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'scrape')) return;
     if (job.status !== 'completed') {
       return res.status(400).json({ error: 'Job is not complete yet' });
     }
@@ -123,6 +151,9 @@ async function scrapeSave(req, res) {
 async function saveConversational(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'conversational')) return;
     const { text, userMessage, assistantMessage } = req.body || {};
     const type = text ? 'instruction' : 'qa';
     appendConversational(companyId, {
@@ -144,10 +175,20 @@ async function saveConversational(req, res) {
 async function saveDocuments(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
     const files = req.files || [];
     if (!files.length) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
+    let needsDb = false;
+    let needsDoc = false;
+    for (const f of files) {
+      if (isDatabaseKnowledgeFile(f.originalname, f.mimetype)) needsDb = true;
+      else needsDoc = true;
+    }
+    if (needsDb && !assertTrainingModule(req, res, company, 'database')) return;
+    if (needsDoc && !assertTrainingModule(req, res, company, 'documents')) return;
     const saved = [];
     for (const f of files) {
       const text = await extractFromBuffer(f.buffer, f.originalname, f.mimetype);
@@ -181,6 +222,9 @@ async function saveDocuments(req, res) {
 async function saveDatabase(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'database')) return;
     const files = req.files || [];
     const title = req.body?.title != null ? String(req.body.title).trim() : '';
     const content = req.body?.content != null ? String(req.body.content).trim() : '';
@@ -218,6 +262,9 @@ async function saveDatabase(req, res) {
 async function saveMedia(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'media')) return;
     const files = req.files || [];
     const transcript = req.body?.transcript != null ? String(req.body.transcript) : '';
     const jsonlContent = req.body?.jsonlContent != null ? String(req.body.jsonlContent) : '';
@@ -262,6 +309,8 @@ async function transcribeMedia(req, res) {
     }
 
     const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'media')) return;
     const apiKey = String(company?.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
     if (!apiKey) {
       return res.status(400).json({ error: 'Gemini API key is required for auto media transcription' });
@@ -295,6 +344,9 @@ async function transcribeMedia(req, res) {
 async function saveStructured(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'structured')) return;
     let rows = [];
 
     if (req.file) {
@@ -344,6 +396,9 @@ async function saveStructured(req, res) {
 async function getManual(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'manual')) return;
     const content = getManualKnowledge(companyId);
     res.json({ content });
   } catch (err) {
@@ -355,6 +410,9 @@ async function getManual(req, res) {
 async function setManual(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertTrainingModule(req, res, company, 'manual')) return;
     const content = req.body?.content != null ? String(req.body.content) : '';
     setManualKnowledge(companyId, content);
     setLastTrainingCompleted(companyId);
@@ -370,6 +428,9 @@ async function setManual(req, res) {
 async function listFiles(req, res) {
   try {
     const companyId = req.adminCompanyId;
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!assertAnyTrainingAccess(req, res, company)) return;
     const files = listTrainingFiles(companyId);
     res.json({ files });
   } catch (err) {

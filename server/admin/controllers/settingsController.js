@@ -28,6 +28,11 @@ const {
 const {
   buildAdminVisibilityPayload,
   buildPresetVoiceAccessKey,
+  canAdminSetAiMode,
+  canAdminSetChatLanguageExtras,
+  canAdminSetChatLanguagePrimary,
+  filterChatLanguageCatalogForAdmin,
+  filterModeCatalogForAdmin,
   isPresetVoiceAllowed,
 } = require('../../services/adminSettingsAccess');
 
@@ -131,8 +136,25 @@ function dedupeLabels(labels) {
 function collectRestrictedAdminUpdateFields(body, company, adminVisibility) {
   const restricted = [];
 
-  if (body?.language !== undefined && !adminVisibility.settings.chatLanguages) {
-    restricted.push('Chat languages');
+  if (body?.language !== undefined) {
+    if (!adminVisibility.settings.chatLanguages) {
+      restricted.push('Chat languages');
+    } else {
+      const lang = body.language;
+      const curPrimary = company?.language_primary;
+      if (lang.primary !== undefined
+        && !canAdminSetChatLanguagePrimary(adminVisibility, lang.primary, curPrimary)) {
+        restricted.push('Chat languages');
+      }
+      if (lang.extraLocales !== undefined) {
+        const p = lang.primary !== undefined ? lang.primary : curPrimary;
+        const pNorm = normalizeLanguagePrimaryToCode(p);
+        const normalizedExtras = normalizeLanguageExtraLocalesInput(lang.extraLocales, pNorm);
+        if (!canAdminSetChatLanguageExtras(adminVisibility, normalizedExtras, pNorm)) {
+          restricted.push('Chat languages');
+        }
+      }
+    }
   }
   if (body?.autoTrigger !== undefined && !adminVisibility.settings.autoTrigger) {
     restricted.push('Auto-Trigger Settings');
@@ -143,7 +165,7 @@ function collectRestrictedAdminUpdateFields(body, company, adminVisibility) {
   if (body?.safety !== undefined && !adminVisibility.settings.safety) {
     restricted.push('Safety & Compliance');
   }
-  if (body?.aiMode !== undefined && !adminVisibility.aiMode) {
+  if (body?.aiMode !== undefined && !canAdminSetAiMode(adminVisibility, body.aiMode, company?.ai_mode)) {
     restricted.push('AI Mode');
   }
 
@@ -368,7 +390,7 @@ async function serializeCompanySettings(company) {
     },
     language: {
       primary: normalizeLanguagePrimaryToCode(company.language_primary || 'en'),
-      catalog: getLanguageCatalogForClient(),
+      catalog: filterChatLanguageCatalogForAdmin(company, getLanguageCatalogForClient()),
       multiEnabled: Boolean(company.language_multi_enabled),
       autoDetectEnabled: Boolean(company.language_auto_detect_enabled),
       manualSwitchEnabled: Boolean(company.language_manual_switch_enabled),
@@ -648,7 +670,8 @@ async function getModeSettings(req, res) {
     }
     if (!assertAdminModeAccess(req, res, company)) return;
 
-    res.json(getModeCatalog(company.ai_mode));
+    const catalog = getModeCatalog(company.ai_mode);
+    res.json(filterModeCatalogForAdmin(company, catalog));
   } catch (err) {
     console.error('[admin settings] modes:', err);
     res.status(500).json({ error: err.message });

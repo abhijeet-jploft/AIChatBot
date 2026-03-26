@@ -24,7 +24,7 @@ import SuperAdminProfile from './pages/SuperAdminProfile';
 import StaffWorkspace from './pages/StaffWorkspace';
 import StaffManagement from './pages/StaffManagement';
 import AccessDenied from './pages/AccessDenied';
-import { hasPermission } from './lib/permissions';
+import { buildAiModePermissionChecks, hasAnyAiModePermission, hasPermission } from './lib/permissions';
 
 const TRAINING_PERMISSION_CHECKS = [
   ['ai_configuration', 'view'],
@@ -57,7 +57,7 @@ function SuperAdminLayout({ children }) {
   const canAccess = (moduleKey, minimumLevel = 'view') => hasPermission(admin, moduleKey, minimumLevel);
   const canAccessCompanySelector =
     canAccess('business_management')
-    || canAccess('ai_configuration')
+    || hasAnyAiModePermission(admin)
     || canAccess('training_scrape')
     || canAccess('training_conversational')
     || canAccess('training_documents')
@@ -357,7 +357,7 @@ export default function SuperAdminApp() {
                   <Route path="staff-management" element={<RequirePermission moduleKey="user_management"><StaffManagement /></RequirePermission>} />
                   <Route path="companies" element={<RequireAnyPermission checks={[
                     ['business_management', 'view'],
-                    ['ai_configuration', 'view'],
+                    ...buildAiModePermissionChecks('view'),
                     ['voice_management', 'view'],
                     ['api_management', 'view'],
                     ['user_management', 'view'],
@@ -367,7 +367,7 @@ export default function SuperAdminApp() {
                   <Route path="companies/:companyId/api-tracking" element={<RequirePermission moduleKey="api_management"><CompanyApiTracking /></RequirePermission>} />
                   <Route path="companies/:companyId/configurations" element={<RequireAnyPermission checks={[
                     ['business_management', 'view'],
-                    ['ai_configuration', 'view'],
+                    ...buildAiModePermissionChecks('view'),
                     ['voice_management', 'view'],
                     ['api_management', 'view'],
                     ['user_management', 'view'],
@@ -375,10 +375,10 @@ export default function SuperAdminApp() {
                   <Route path="companies/:companyId/admin-settings-access" element={<RequirePermission moduleKey="user_management"><CompanyAdminSettingsAccess /></RequirePermission>} />
                   <Route path="companies/:companyId/voice-settings" element={<RequirePermission moduleKey="voice_management"><CompanyVoiceSettings /></RequirePermission>} />
                   <Route path="companies/:companyId/theme-settings" element={<RequirePermission moduleKey="system_settings"><CompanyThemeSettings /></RequirePermission>} />
-                  <Route path="companies/:companyId/mode-settings" element={<RequirePermission moduleKey="ai_configuration"><CompanyModeSettings /></RequirePermission>} />
+                  <Route path="companies/:companyId/mode-settings" element={<RequireAnyPermission checks={buildAiModePermissionChecks('view')}><CompanyModeSettings /></RequireAnyPermission>} />
                   <Route path="companies/:companyId" element={<RequireAnyPermission checks={[
                     ['business_management', 'view'],
-                    ['ai_configuration', 'view'],
+                    ...buildAiModePermissionChecks('view'),
                     ['voice_management', 'view'],
                     ['api_management', 'view'],
                     ['user_management', 'view'],

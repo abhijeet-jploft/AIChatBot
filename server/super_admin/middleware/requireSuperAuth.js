@@ -1,6 +1,6 @@
 const SuperAdmin = require('../models/SuperAdmin');
 const StaffAuth = require('../models/StaffAuth');
-const { buildFullPermissionMatrix, hasPermission } = require('../permissions');
+const { buildFullPermissionMatrix, getAiModePermissionKey, hasPermission } = require('../permissions');
 
 const STAFF_IDLE_TIMEOUT_MINUTES = Number(process.env.SUPER_ADMIN_STAFF_IDLE_TIMEOUT_MINUTES || 120);
 
@@ -57,6 +57,7 @@ async function requireSuperAuth(req, res, next) {
     name: staffSession.staff.name,
     email: staffSession.staff.email,
     roleId: staffSession.staff.roleId,
+    roleIds: Array.isArray(staffSession.staff.roleIds) ? staffSession.staff.roleIds : [],
     roleName: staffSession.staff.roleName,
     permissions: staffSession.staff.permissions,
     mustChangePassword: staffSession.staff.mustChangePassword,
@@ -108,7 +109,7 @@ function requireCompanySettingsMutation(req, res, next) {
   const checks = [];
 
   if ('ai' in body) checks.push(['api_management', 'edit']);
-  if ('aiMode' in body) checks.push(['ai_configuration', 'edit']);
+  if ('aiMode' in body) checks.push([getAiModePermissionKey(body.aiMode) || 'ai_configuration', 'edit']);
   if ('voice' in body) checks.push(['voice_management', 'edit']);
   if ('theme' in body) checks.push(['system_settings', 'edit']);
 

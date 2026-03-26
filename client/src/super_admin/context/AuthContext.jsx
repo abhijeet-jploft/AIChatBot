@@ -39,6 +39,8 @@ function mapSuperAdminMe(d) {
     email: d.email ?? null,
     avatarUrl: d.avatarUrl ?? null,
     roleName: d.roleName || (d.type === 'staff' ? 'Staff' : 'Super Admin'),
+    roleId: d.roleId ?? null,
+    roleIds: Array.isArray(d.roleIds) ? d.roleIds : [],
     permissions: d.permissions || {},
     mustChangePassword: Boolean(d.mustChangePassword),
     defaultRoute: d.defaultRoute || '/super-admin',

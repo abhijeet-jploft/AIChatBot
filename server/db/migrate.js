@@ -328,6 +328,18 @@ async function tableExists(client, tableName) {
   return rows.length > 0;
 }
 
+async function ensureAdminVisibilityExtraColumns(client) {
+  await client.query(
+    `ALTER TABLE admin_visibility_settings ADD COLUMN IF NOT EXISTS admin_visibility_allowed_ai_mode_ids TEXT`
+  );
+  await client.query(
+    `ALTER TABLE admin_visibility_settings ADD COLUMN IF NOT EXISTS admin_visibility_training_modules TEXT`
+  );
+  await client.query(
+    `ALTER TABLE admin_visibility_settings ADD COLUMN IF NOT EXISTS admin_visibility_allowed_chat_language_codes TEXT`
+  );
+}
+
 async function ensureModuleSettingsTables(client) {
   await client.query(MODULE_SETTINGS_SCHEMA_SQL);
   await client.query(`ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS widget_position VARCHAR(10) NOT NULL DEFAULT 'right'`);
@@ -445,6 +457,7 @@ async function migrate() {
     await client.query(SCHEMA);
     console.log('[db] Schema ready');
     await ensureModuleSettingsTables(client);
+    await ensureAdminVisibilityExtraColumns(client);
     await splitMonolithicSettingsIntoModules(client);
     console.log('[db] Module settings tables ready');
     await migrateLegacyChatbotSettingsToModules(client);
@@ -512,7 +525,6 @@ CREATE TABLE IF NOT EXISTS super_admin_staff_users (
   full_name              VARCHAR(160) NOT NULL,
   email                  VARCHAR(255) NOT NULL UNIQUE,
   password_hash          TEXT,
-  role_id                UUID         REFERENCES super_admin_roles(id) ON DELETE RESTRICT,
   is_active              BOOLEAN      NOT NULL DEFAULT TRUE,
   must_change_password   BOOLEAN      NOT NULL DEFAULT TRUE,
   last_login_at          TIMESTAMPTZ,
@@ -520,8 +532,15 @@ CREATE TABLE IF NOT EXISTS super_admin_staff_users (
   created_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_super_admin_staff_role ON super_admin_staff_users(role_id);
 CREATE INDEX IF NOT EXISTS idx_super_admin_staff_active ON super_admin_staff_users(is_active, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS super_admin_staff_user_roles (
+  staff_user_id UUID NOT NULL REFERENCES super_admin_staff_users(id) ON DELETE CASCADE,
+  role_id       UUID NOT NULL REFERENCES super_admin_roles(id) ON DELETE RESTRICT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (staff_user_id, role_id)
+);
+CREATE INDEX IF NOT EXISTS idx_super_admin_staff_user_roles_role ON super_admin_staff_user_roles(role_id);
 
 CREATE TABLE IF NOT EXISTS super_admin_staff_sessions (
   id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -557,7 +576,6 @@ async function ensureSuperAdminTables(client) {
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS full_name VARCHAR(160)`);
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
-  await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES super_admin_roles(id) ON DELETE RESTRICT`);
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT TRUE`);
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`);
@@ -565,6 +583,41 @@ async function ensureSuperAdminTables(client) {
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
   await client.query(`ALTER TABLE super_admin_staff_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
   await client.query(`ALTER TABLE super_admin_staff_sessions ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  await migrateStaffUserRoles(client);
+}
+
+/** Many-to-many staff ↔ roles; migrates legacy super_admin_staff_users.role_id then drops it. */
+async function migrateStaffUserRoles(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS super_admin_staff_user_roles (
+      staff_user_id UUID NOT NULL REFERENCES super_admin_staff_users(id) ON DELETE CASCADE,
+      role_id UUID NOT NULL REFERENCES super_admin_roles(id) ON DELETE RESTRICT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (staff_user_id, role_id)
+    )
+  `);
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_super_admin_staff_user_roles_role ON super_admin_staff_user_roles(role_id)`
+  );
+
+  const col = await client.query(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'super_admin_staff_users' AND column_name = 'role_id'`
+  );
+  if (!col.rows.length) return;
+
+  await client.query(`
+    INSERT INTO super_admin_staff_user_roles (staff_user_id, role_id)
+    SELECT id, role_id FROM super_admin_staff_users
+    WHERE role_id IS NOT NULL
+    ON CONFLICT DO NOTHING
+  `);
+
+  await client.query(
+    `ALTER TABLE super_admin_staff_users DROP CONSTRAINT IF EXISTS super_admin_staff_users_role_id_fkey`
+  );
+  await client.query(`DROP INDEX IF EXISTS idx_super_admin_staff_role`);
+  await client.query(`ALTER TABLE super_admin_staff_users DROP COLUMN role_id`);
 }
 
 /** Map legacy language labels to ISO 639-1 codes used by admin + ElevenLabs. */

@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
-import { hasAnyPermission, hasPermission } from '../lib/permissions';
+import { buildAiModePermissionChecks, hasAnyAiModePermission, hasAnyPermission, hasPermission } from '../lib/permissions';
 
 const TRAINING_PERMISSION_CHECKS = [
-  ['ai_configuration', 'view'],
+  ...buildAiModePermissionChecks('view'),
   ['training_scrape', 'view'],
   ['training_conversational', 'view'],
   ['training_documents', 'view'],
@@ -34,7 +34,7 @@ export default function CompanyDetail() {
   const canEditAdminAccess = hasPermission(admin, 'user_management', 'edit');
   const canViewApi = hasPermission(admin, 'api_management', 'view');
   const canViewVoice = hasPermission(admin, 'voice_management', 'view');
-  const canViewAi = hasPermission(admin, 'ai_configuration', 'view');
+  const canViewAi = hasAnyAiModePermission(admin, 'view');
   const canViewTraining = hasAnyPermission(admin, TRAINING_PERMISSION_CHECKS);
   const canViewConfigurations = canViewCompanyInfo || canViewAdminAccess || canViewApi || canViewVoice || canViewAi;
 

@@ -220,6 +220,7 @@
   border: 1px solid var(--sa-border);
   border-radius: var(--sa-radius);
   padding: 20px 24px;
+  color: var(--sa-text);
 }
 .sa-panel-full { width: 100%; }
 .sa-panel-compact { padding: 14px 18px; }
@@ -348,6 +349,7 @@
 .sa-field label { display: block; font-size: 12px; font-weight: 600; color: var(--sa-text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
 .sa-field label small { text-transform: none; font-weight: 400; letter-spacing: 0; }
 .sa-field input[type="text"],
+.sa-field input[type="search"],
 .sa-field input[type="email"],
 .sa-field input[type="password"],
 .sa-field input[type="url"],
@@ -378,9 +380,82 @@
 }
 .sa-field-check { display: flex; align-items: center; gap: 8px; }
 .sa-field-check label { display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-size: 13.5px; color: var(--sa-text); cursor: pointer; letter-spacing: 0; }
+/* Radio/checkbox row when the label itself has .sa-field-check (e.g. AI mode settings) */
+label.sa-field-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  text-transform: none;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--sa-text);
+  cursor: pointer;
+  letter-spacing: 0;
+}
+label.sa-field-check strong {
+  color: var(--sa-text-heading);
+  font-weight: 600;
+}
+label.sa-field-check input[type="checkbox"],
+label.sa-field-check input[type="radio"] {
+  width: auto;
+  min-width: 16px;
+  margin-top: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--sa-accent);
+}
 .sa-field-check label input[type="checkbox"] { width: auto; cursor: pointer; }
+.sa-field-check label input[type="radio"] { width: auto; cursor: pointer; }
 .sa-field-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .sa-field-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.sa-staff-audit-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px 16px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+.sa-staff-audit-filters .sa-field {
+  margin-bottom: 0;
+}
+.sa-field-inline-grow {
+  grid-column: span 2;
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .sa-field-inline-grow { grid-column: span 1; }
+}
+.sa-field-actions-inline {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.sa-audit-filter-button {
+  width: 100%;
+  min-height: 40px;
+  justify-content: center;
+  padding: 9px 14px;
+  box-sizing: border-box;
+}
+.sa-label-spacer {
+  visibility: hidden;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  min-height: 1em;
+}
+.sa-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sa-border);
+}
 .sa-inline-form { display: flex; gap: 10px; align-items: center; }
 .sa-inline-form input { flex: 1; }
 
@@ -584,6 +659,7 @@
 .sa-code { background: rgba(108,99,255,0.12); color: #a5a0ff; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: monospace; }
 .sa-code-muted { color: var(--sa-text-muted); font-size: 12px; font-family: monospace; }
 .sa-text-muted { color: var(--sa-text-muted); font-size: 13px; }
+.sa-text-muted strong { color: var(--sa-text-heading); }
 .sa-text-sm { font-size: 11.5px; }
 .sa-text-ok { color: var(--sa-success); }
 .sa-text-err { color: var(--sa-danger); }

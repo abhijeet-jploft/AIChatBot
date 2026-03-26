@@ -1,3 +1,33 @@
+const {
+  getModeOption,
+  isValidConversationModeId,
+  normalizeConversationModeId,
+} = require('./conversationModes');
+const {
+  getLanguageCatalogForClient,
+  normalizeLanguagePrimaryToCode,
+  parseLanguageExtraLocalesJson,
+  normalizeLanguageExtraLocalesInput,
+} = require('./supportedChatLanguages');
+
+const VALID_CHAT_LANGUAGE_CODES = new Set(getLanguageCatalogForClient().map((o) => o.code));
+
+/** Keys aligned with admin Training.jsx tabs */
+const TRAINING_MODULE_KEYS = Object.freeze([
+  'scrape',
+  'conversational',
+  'documents',
+  'database',
+  'media',
+  'structured',
+  'manual',
+]);
+
+const DEFAULT_TRAINING_MODULES = TRAINING_MODULE_KEYS.reduce((acc, k) => {
+  acc[k] = true;
+  return acc;
+}, {});
+
 const DEFAULT_ADMIN_VISIBILITY = Object.freeze({
   fixed: {
     basicCompanySettings: true,
@@ -5,11 +35,16 @@ const DEFAULT_ADMIN_VISIBILITY = Object.freeze({
   },
   settings: {
     chatLanguages: true,
+    /** null = all chat languages allowed when chatLanguages is on */
+    chatLanguageAllowedCodes: null,
     autoTrigger: true,
     escalation: true,
     safety: true,
   },
   aiMode: true,
+  /** null = all conversation modes allowed when aiMode is on */
+  aiModeAllowedIds: null,
+  training: { ...DEFAULT_TRAINING_MODULES },
   voice: {
     enableVoiceMode: true,
     enableVoiceResponse: true,
@@ -29,8 +64,136 @@ function cloneDefaultAdminVisibility() {
     fixed: { ...DEFAULT_ADMIN_VISIBILITY.fixed },
     settings: { ...DEFAULT_ADMIN_VISIBILITY.settings },
     aiMode: DEFAULT_ADMIN_VISIBILITY.aiMode,
+    aiModeAllowedIds: DEFAULT_ADMIN_VISIBILITY.aiModeAllowedIds,
+    training: { ...DEFAULT_ADMIN_VISIBILITY.training },
     voice: { ...DEFAULT_ADMIN_VISIBILITY.voice },
   };
+}
+
+function parseAllowedChatLanguageCodes(raw) {
+  if (raw == null || raw === '') return null;
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(parsed)) return null;
+  const cleaned = parsed
+    .map((c) => normalizeLanguagePrimaryToCode(c))
+    .filter((c) => VALID_CHAT_LANGUAGE_CODES.has(c));
+  return Array.from(new Set(cleaned));
+}
+
+function canAdminSetChatLanguagePrimary(adminVisibility, newPrimary, currentPrimary) {
+  if (!adminVisibility?.settings?.chatLanguages) return false;
+  const next = normalizeLanguagePrimaryToCode(newPrimary);
+  const cur = normalizeLanguagePrimaryToCode(currentPrimary);
+  if (next === cur) return true;
+  const allowed = adminVisibility.settings.chatLanguageAllowedCodes;
+  if (allowed == null) return true;
+  if (!Array.isArray(allowed) || allowed.length === 0) return false;
+  return allowed.map((c) => normalizeLanguagePrimaryToCode(c)).includes(next);
+}
+
+function canAdminSetChatLanguageExtras(adminVisibility, extraLocaleCodes, primaryCode) {
+  if (!adminVisibility?.settings?.chatLanguages) return false;
+  const allowed = adminVisibility.settings.chatLanguageAllowedCodes;
+  if (allowed == null) return true;
+  if (!Array.isArray(allowed) || allowed.length === 0) return false;
+  const allowSet = new Set(allowed.map((c) => normalizeLanguagePrimaryToCode(c)));
+  const p = normalizeLanguagePrimaryToCode(primaryCode);
+  for (const x of extraLocaleCodes) {
+    const c = normalizeLanguagePrimaryToCode(x);
+    if (c === p) continue;
+    if (!allowSet.has(c)) return false;
+  }
+  return true;
+}
+
+function filterChatLanguageCatalogForAdmin(company, fullCatalog) {
+  const av = buildAdminVisibilityPayload(company);
+  if (!av.settings.chatLanguages) return [];
+  const allowed = av.settings.chatLanguageAllowedCodes;
+  if (allowed == null) return fullCatalog;
+  const allowSet = new Set(allowed.map((c) => normalizeLanguagePrimaryToCode(c)));
+  const primary = normalizeLanguagePrimaryToCode(company.language_primary);
+  const extras = parseLanguageExtraLocalesJson(company.language_extra_locales);
+  [primary, ...extras].forEach((c) => allowSet.add(normalizeLanguagePrimaryToCode(c)));
+  return fullCatalog.filter((row) => allowSet.has(row.code));
+}
+
+function parseAllowedAiModeIds(raw) {
+  if (raw == null || raw === '') return null;
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(parsed)) return null;
+  const cleaned = parsed
+    .map((id) => String(id || '').trim().toLowerCase())
+    .filter((id) => isValidConversationModeId(id));
+  return Array.from(new Set(cleaned.map((id) => normalizeConversationModeId(id))));
+}
+
+function parseTrainingModules(raw) {
+  const base = { ...DEFAULT_TRAINING_MODULES };
+  if (raw == null || raw === '') return base;
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return base;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return base;
+  for (const key of TRAINING_MODULE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+      base[key] = Boolean(parsed[key]);
+    }
+  }
+  return base;
+}
+
+function sanitizeTrainingModulesPatch(input) {
+  if (!input || typeof input !== 'object') return { ...DEFAULT_TRAINING_MODULES };
+  const next = { ...DEFAULT_TRAINING_MODULES };
+  for (const key of TRAINING_MODULE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(input, key)) {
+      next[key] = Boolean(input[key]);
+    }
+  }
+  return next;
+}
+
+function canAdminSetAiMode(adminVisibility, newModeId, currentModeId) {
+  if (!adminVisibility?.aiMode) return false;
+  const next = normalizeConversationModeId(newModeId);
+  const cur = normalizeConversationModeId(currentModeId);
+  if (next === cur) return true;
+  const allowed = adminVisibility.aiModeAllowedIds;
+  if (allowed == null) return true;
+  if (!Array.isArray(allowed) || allowed.length === 0) return false;
+  return allowed.some((id) => normalizeConversationModeId(id) === next);
+}
+
+function isTrainingModuleAllowed(adminVisibility, moduleKey) {
+  const k = String(moduleKey || '').trim().toLowerCase();
+  if (!TRAINING_MODULE_KEYS.includes(k)) return false;
+  const t = adminVisibility?.training?.[k];
+  if (t === undefined) return true;
+  return Boolean(t);
+}
+
+function hasAnyTrainingModuleAccess(adminVisibility) {
+  return TRAINING_MODULE_KEYS.some((k) => isTrainingModuleAllowed(adminVisibility, k));
 }
 
 function buildPresetVoiceAccessKey(profileId, gender) {
@@ -134,10 +297,15 @@ function buildAdminVisibilityPayload(company) {
   const payload = cloneDefaultAdminVisibility();
 
   payload.settings.chatLanguages = company?.admin_visibility_language_settings !== false;
+  payload.settings.chatLanguageAllowedCodes = parseAllowedChatLanguageCodes(
+    company?.admin_visibility_allowed_chat_language_codes
+  );
   payload.settings.autoTrigger = company?.admin_visibility_auto_trigger !== false;
   payload.settings.escalation = company?.admin_visibility_escalation !== false;
   payload.settings.safety = company?.admin_visibility_safety !== false;
   payload.aiMode = company?.admin_visibility_ai_mode !== false;
+  payload.aiModeAllowedIds = parseAllowedAiModeIds(company?.admin_visibility_allowed_ai_mode_ids);
+  payload.training = parseTrainingModules(company?.admin_visibility_training_modules);
 
   payload.voice.enableVoiceMode = company?.admin_visibility_voice_mode_toggle !== false;
   payload.voice.enableVoiceResponse = company?.admin_visibility_voice_response_toggle !== false;
@@ -150,6 +318,24 @@ function buildAdminVisibilityPayload(company) {
   );
 
   return payload;
+}
+
+function filterModeCatalogForAdmin(company, catalog) {
+  const av = buildAdminVisibilityPayload(company);
+  const modes = catalog?.options?.modes || [];
+  if (!av.aiMode) {
+    return { ...catalog, options: { ...catalog.options, modes: [] } };
+  }
+  const allowed = av.aiModeAllowedIds;
+  if (allowed == null) return catalog;
+  const set = new Set(allowed.map((id) => normalizeConversationModeId(id)));
+  let filtered = modes.filter((m) => set.has(m.id));
+  const currentId = normalizeConversationModeId(company?.ai_mode);
+  if (!filtered.some((m) => m.id === currentId)) {
+    const opt = getModeOption(currentId);
+    filtered = [opt, ...filtered];
+  }
+  return { ...catalog, options: { ...catalog.options, modes: filtered } };
 }
 
 function normalizeAdminVisibilityPatchInput(payload) {
@@ -190,6 +376,49 @@ function normalizeAdminVisibilityPatchInput(payload) {
     updates.admin_visibility_allowed_preset_voice_keys = allowedKeys.storedValue;
   }
 
+  if (payload?.aiModeAllowedIds !== undefined) {
+    if (payload.aiModeAllowedIds === null) {
+      updates.admin_visibility_allowed_ai_mode_ids = null;
+    } else if (!Array.isArray(payload.aiModeAllowedIds)) {
+      return { updates: {}, error: 'aiModeAllowedIds must be an array or null' };
+    } else {
+      const cleaned = payload.aiModeAllowedIds
+        .map((id) => String(id || '').trim().toLowerCase())
+        .filter((id) => isValidConversationModeId(id))
+        .map((id) => normalizeConversationModeId(id));
+      const unique = Array.from(new Set(cleaned));
+      updates.admin_visibility_allowed_ai_mode_ids = unique.length ? JSON.stringify(unique) : JSON.stringify([]);
+    }
+  }
+
+  if (payload?.training !== undefined) {
+    if (payload.training === null) {
+      updates.admin_visibility_training_modules = null;
+    } else if (typeof payload.training !== 'object' || Array.isArray(payload.training)) {
+      return { updates: {}, error: 'training must be an object or null' };
+    } else {
+      const sanitized = sanitizeTrainingModulesPatch(payload.training);
+      updates.admin_visibility_training_modules = JSON.stringify(sanitized);
+    }
+  }
+
+  if (payload?.settings?.chatLanguageAllowedCodes !== undefined) {
+    if (payload.settings.chatLanguageAllowedCodes === null) {
+      updates.admin_visibility_allowed_chat_language_codes = null;
+    } else if (!Array.isArray(payload.settings.chatLanguageAllowedCodes)) {
+      return { updates: {}, error: 'chatLanguageAllowedCodes must be an array or null' };
+    } else {
+      const cleaned = Array.from(new Set(
+        payload.settings.chatLanguageAllowedCodes
+          .map((c) => normalizeLanguagePrimaryToCode(c))
+          .filter((c) => VALID_CHAT_LANGUAGE_CODES.has(c))
+      ));
+      updates.admin_visibility_allowed_chat_language_codes = cleaned.length
+        ? JSON.stringify(cleaned)
+        : JSON.stringify([]);
+    }
+  }
+
   return { updates };
 }
 
@@ -213,11 +442,19 @@ function hasAnyVoiceSettingAccess(adminVisibility) {
 
 module.exports = {
   DEFAULT_ADMIN_VISIBILITY,
+  TRAINING_MODULE_KEYS,
   buildAdminVisibilityPayload,
   buildPresetVoiceAccessKey,
+  canAdminSetAiMode,
+  canAdminSetChatLanguageExtras,
+  canAdminSetChatLanguagePrimary,
+  filterChatLanguageCatalogForAdmin,
+  filterModeCatalogForAdmin,
   getAllowedPresetVoiceKeysForLanguage,
+  hasAnyTrainingModuleAccess,
   hasAnyVoiceSettingAccess,
   isPresetVoiceAllowed,
+  isTrainingModuleAllowed,
   normalizeAdminVisibilityPatchInput,
   parseAllowedPresetVoiceKeys,
   serializeAllowedPresetVoiceKeys,

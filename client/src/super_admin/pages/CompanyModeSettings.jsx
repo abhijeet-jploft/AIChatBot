@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { getAiModePermissionKey, hasPermission } from '../lib/permissions';
 
 export default function CompanyModeSettings() {
   const { companyId } = useParams();
-  const { saFetch } = useSuperAuth();
+  const { admin, saFetch } = useSuperAuth();
   const { showToast } = useSuperToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modeCatalog, setModeCatalog] = useState(null);
   const [selectedMode, setSelectedMode] = useState('mixed_mode');
+  const canEditSelectedMode = hasPermission(admin, getAiModePermissionKey(selectedMode) || 'ai_configuration', 'edit');
 
   useEffect(() => {
     Promise.all([
@@ -79,7 +81,7 @@ export default function CompanyModeSettings() {
             ))}
           </div>
           <div className="sa-field-actions">
-            <button type="button" className="sa-btn sa-btn-primary" disabled={saving} onClick={handleSave}>
+            <button type="button" className="sa-btn sa-btn-primary" disabled={saving || !canEditSelectedMode} onClick={handleSave}>
               {saving ? 'Saving…' : 'Save mode'}
             </button>
           </div>
