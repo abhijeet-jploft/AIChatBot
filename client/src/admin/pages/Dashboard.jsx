@@ -481,7 +481,7 @@ export default function Dashboard() {
                       </div>
                       <div className="d-flex flex-column gap-1 ms-2">
                         <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-outline-secondary">
-                          Operator chat
+                          Operate Chat
                         </Link>
                         {isLive ? (
                           <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary">

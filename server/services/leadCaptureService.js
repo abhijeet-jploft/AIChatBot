@@ -1,4 +1,9 @@
 const Lead = require('../models/Lead');
+const {
+  buildLeadRequirementSummary,
+  sanitizeLocation,
+  sanitizeVisitorName,
+} = require('./conversationInsights');
 
 const EMAIL_RE = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i;
 const PHONE_RE = /(\+?\d[\d\s\-()]{8,}\d)/;
@@ -43,15 +48,15 @@ function extractName(text = '') {
   for (const pattern of NAME_PATTERNS) {
     const match = source.match(pattern);
     if (match && match[1]) {
-      return match[1].trim().replace(/\s+/g, ' ').slice(0, 80);
+      return sanitizeVisitorName(match[1]);
     }
   }
   return '';
 }
 
 function extractLocation(text = '') {
-  const match = String(text).match(/\b(?:from|based in|located in|location is)\s+([a-z][a-z\s]{1,50})\b/i);
-  return match ? match[1].trim().replace(/\s+/g, ' ') : '';
+  const match = String(text).match(/\b(?:from|based in|located in|location is)\s+([a-z][a-z\s,-]{1,80})/i);
+  return match ? sanitizeLocation(match[1]) : '';
 }
 
 function extractBusinessType(text = '') {
@@ -91,15 +96,7 @@ function inferDeviceType(userAgent = '') {
 }
 
 function buildProjectSummary(messages = []) {
-  const userLines = (messages || [])
-    .filter((m) => m?.role === 'user')
-    .map((m) => String(m.content || '').trim())
-    .filter(Boolean);
-
-  if (!userLines.length) return '';
-
-  const excerpt = userLines.slice(-4).join(' ');
-  return excerpt.length > 380 ? `${excerpt.slice(0, 377)}...` : excerpt;
+  return buildLeadRequirementSummary({ messages });
 }
 
 function inferIntent(flags = {}) {
@@ -158,11 +155,7 @@ function findLatestUserMessage(messages = []) {
   return '';
 }
 
-async function captureLeadFromConversation({ companyId, sessionId, messages = [], requestMeta = {} }) {
-  if (!companyId || !sessionId || !Array.isArray(messages) || messages.length === 0) {
-    return { captured: false, reason: 'missing_context' };
-  }
-
+function deriveLeadFromConversation({ messages = [], requestMeta = {} }) {
   const userMessages = messages.filter((m) => m?.role === 'user').map((m) => String(m.content || ''));
   const latestUserMessage = findLatestUserMessage(messages);
   const allUserText = userMessages.join('\n');
@@ -175,7 +168,16 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
   const budgetRange = extractBudgetRange(allUserText);
   const timeline = extractTimeline(allUserText);
   const serviceRequested = inferServiceRequested(allUserText || latestUserMessage);
-  const projectSummary = buildProjectSummary(messages);
+  const projectSummary = buildLeadRequirementSummary({
+    lead: {
+      location,
+      business_type: businessType,
+      service_requested: serviceRequested,
+      budget_range: budgetRange,
+      timeline,
+    },
+    messages,
+  });
 
   const consultationRequested = CONSULTATION_RE.test(latestUserMessage);
   const pricingRequested = PRICING_RE.test(latestUserMessage);
@@ -188,13 +190,6 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
     || meetingRequested
     || consultationRequested
     || urgencyMentioned;
-
-  // Lead capture: only when we can reach the visitor — email or mobile (phone).
-  // Name alone, pricing/consultation/meeting asks, or generic high intent do NOT create a lead.
-  const hasContact = Boolean(email) || Boolean(phone);
-  if (!hasContact) {
-    return { captured: false, reason: 'no_contact_details' };
-  }
 
   const leadScore = scoreLead({
     hasPhone: Boolean(phone),
@@ -229,23 +224,67 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
   const landingPage = requestMeta.pageUrl || requestMeta.referer || requestMeta.origin || '';
   const deviceType = inferDeviceType(requestMeta.userAgent);
 
-  const { lead, inserted, previousStatus } = await Lead.upsertCapturedLead({
-    companyId,
-    sessionId,
+  return {
     name,
     phone,
     email,
     location,
     businessType,
-    serviceRequested,
-    projectSummary,
     budgetRange,
     timeline,
+    serviceRequested,
+    projectSummary,
+    aiDetectedIntent,
+    contactMethod,
+    leadScore,
     landingPage,
     deviceType,
-    aiDetectedIntent,
-    leadScore,
-    contactMethod,
+    flags: {
+      consultationRequested,
+      pricingRequested,
+      contactRequested,
+      meetingRequested,
+      urgencyMentioned,
+      budgetMentioned,
+      timelineMentioned,
+      highIntent,
+      userMessageCount: userMessages.length,
+    },
+  };
+}
+
+async function captureLeadFromConversation({ companyId, sessionId, messages = [], requestMeta = {} }) {
+  if (!companyId || !sessionId || !Array.isArray(messages) || messages.length === 0) {
+    return { captured: false, reason: 'missing_context' };
+  }
+
+  const inferred = deriveLeadFromConversation({ messages, requestMeta });
+  const userMessages = messages.filter((m) => m?.role === 'user').map((m) => String(m.content || ''));
+
+  // Lead capture: only when we can reach the visitor — email or mobile (phone).
+  // Name alone, pricing/consultation/meeting asks, or generic high intent do NOT create a lead.
+  const hasContact = Boolean(inferred.email) || Boolean(inferred.phone);
+  if (!hasContact) {
+    return { captured: false, reason: 'no_contact_details' };
+  }
+
+  const { lead, inserted, previousStatus } = await Lead.upsertCapturedLead({
+    companyId,
+    sessionId,
+    name: inferred.name,
+    phone: inferred.phone,
+    email: inferred.email,
+    location: inferred.location,
+    businessType: inferred.businessType,
+    serviceRequested: inferred.serviceRequested,
+    projectSummary: inferred.projectSummary,
+    budgetRange: inferred.budgetRange,
+    timeline: inferred.timeline,
+    landingPage: inferred.landingPage,
+    deviceType: inferred.deviceType,
+    aiDetectedIntent: inferred.aiDetectedIntent,
+    leadScore: inferred.leadScore,
+    contactMethod: inferred.contactMethod,
   });
 
   if (!lead) {
@@ -259,9 +298,9 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
       'lead_created',
       'Lead captured automatically from chatbot conversation.',
       {
-        aiDetectedIntent,
-        leadScore,
-        contactMethod,
+        aiDetectedIntent: inferred.aiDetectedIntent,
+        leadScore: inferred.leadScore,
+        contactMethod: inferred.contactMethod,
       }
     );
   }
@@ -276,4 +315,6 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
 
 module.exports = {
   captureLeadFromConversation,
+  deriveLeadFromConversation,
+  normalizePhone,
 };

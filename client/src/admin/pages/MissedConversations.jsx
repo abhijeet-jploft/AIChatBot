@@ -105,7 +105,7 @@ export default function MissedConversations() {
                             to={`/admin/chat/${row.sessionId}`}
                             className="btn btn-sm btn-primary me-1"
                           >
-                            Operator chat
+                            Operate Chat
                           </Link>
                           <a
                             href={`/?sessionId=${encodeURIComponent(row.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}

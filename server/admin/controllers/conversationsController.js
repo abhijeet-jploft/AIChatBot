@@ -1,7 +1,14 @@
 const pool = require('../../db/index');
 const ChatMessage = require('../../models/ChatMessage');
 const ChatSession = require('../../models/ChatSession');
+const Lead = require('../../models/Lead');
 const { pushMessageToSession, recordMessage: recordLiveMessage } = require('../../services/activeVisitorsService');
+const { deriveLeadFromConversation, normalizePhone } = require('../../services/leadCaptureService');
+const {
+  buildConversationSummary,
+  pickVisitorDisplayName,
+  sanitizeLocation,
+} = require('../../services/conversationInsights');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -11,6 +18,11 @@ function humanizeToken(value) {
     .replace(/_/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function normalizeEmail(value = '') {
+  const email = String(value || '').trim().toLowerCase();
+  return /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i.test(email) ? email : '';
 }
 
 function inferIntentFromMessages(messages = []) {
@@ -27,50 +39,6 @@ function inferIntentFromMessages(messages = []) {
   if (/\b(website|web site|landing page|portal)\b/.test(userText)) return 'website';
   if (/\b(call|meeting|consult|schedule)\b/.test(userText)) return 'consultation_request';
   return 'general_inquiry';
-}
-
-function buildConversationSummary({ lead, messages = [], intentTag, messageCount, durationSeconds }) {
-  const projectSummary = String(lead?.project_summary || '').trim();
-  const userMessages = messages
-    .filter((m) => String(m.role || '').toLowerCase() === 'user')
-    .map((m) => String(m.content || '').trim())
-    .filter(Boolean);
-
-  const requirementsDiscussed = projectSummary || userMessages.slice(-3).join(' ').slice(0, 420) || 'No requirement summary captured.';
-  const leadScoreCategory = String(lead?.lead_score_category || '').toLowerCase();
-  const qualificationLevel = leadScoreCategory
-    ? humanizeToken(leadScoreCategory)
-    : (lead?.id ? 'Warm' : 'Cold');
-
-  let suggestedNextAction = 'Continue monitoring and qualify the visitor.';
-  if (lead?.status === 'converted') {
-    suggestedNextAction = 'Lead converted. Move to onboarding and project handoff.';
-  } else if (lead?.status === 'proposal_sent') {
-    suggestedNextAction = 'Follow up on proposal and confirm decision timeline.';
-  } else if (lead?.status === 'follow_up_required') {
-    suggestedNextAction = 'Schedule immediate follow-up with a human agent.';
-  } else if (lead?.id) {
-    suggestedNextAction = 'Contact this lead and confirm budget/timeline details.';
-  }
-
-  const summaryParts = [
-    `Intent: ${humanizeToken(intentTag) || 'General inquiry'}`,
-    `Messages: ${messageCount || 0}`,
-    `Duration: ${Math.max(0, Number(durationSeconds || 0))}s`,
-  ];
-  if (lead?.business_type) summaryParts.push(`Business: ${lead.business_type}`);
-  if (lead?.service_requested) summaryParts.push(`Service: ${lead.service_requested}`);
-  if (lead?.budget_range) summaryParts.push(`Budget: ${lead.budget_range}`);
-  if (lead?.timeline) summaryParts.push(`Timeline: ${lead.timeline}`);
-
-  return {
-    text: summaryParts.join(' | ').slice(0, 700),
-    visitorIntent: humanizeToken(intentTag) || 'General inquiry',
-    businessType: lead?.business_type || null,
-    requirementsDiscussed,
-    qualificationLevel,
-    suggestedNextAction,
-  };
 }
 
 function inferConversationStatus({ updatedAt, leadStatus, activeCutoffMs }) {
@@ -329,7 +297,7 @@ async function listConversations(req, res) {
         leadId: r.lead_id || null,
         leadCaptured: Boolean(r.lead_id),
         visitorId: r.id,
-        visitorName: r.lead_name || r.lead_email || r.lead_phone || 'Anonymous visitor',
+        visitorName: pickVisitorDisplayName(r.lead_name, r.lead_email, r.lead_phone),
         sourcePage: r.landing_page || null,
         intentTag,
         summary: summarySeed ? summarySeed.slice(0, 240) : `Intent: ${humanizeToken(intentTag) || 'General inquiry'}`,
@@ -469,7 +437,7 @@ async function getConversationDetail(req, res) {
         id: sessionRow.id,
         title: sessionRow.title || 'Conversation',
         visitorId: sessionRow.id,
-        visitorName: sessionRow.lead_name || sessionRow.lead_email || sessionRow.lead_phone || 'Anonymous visitor',
+        visitorName: pickVisitorDisplayName(sessionRow.lead_name, sessionRow.lead_email, sessionRow.lead_phone),
         sourcePage: sessionRow.landing_page || null,
         status: inferConversationStatus({
           updatedAt: sessionRow.updated_at,
@@ -485,10 +453,10 @@ async function getConversationDetail(req, res) {
       lead: sessionRow.lead_id
         ? {
             id: sessionRow.lead_id,
-            name: sessionRow.lead_name,
+            name: pickVisitorDisplayName(sessionRow.lead_name, sessionRow.lead_email, sessionRow.lead_phone),
             phone: sessionRow.lead_phone,
             email: sessionRow.lead_email,
-            location: sessionRow.lead_location,
+            location: sanitizeLocation(sessionRow.lead_location),
             businessType: sessionRow.business_type,
             serviceRequested: sessionRow.service_requested,
             projectSummary: sessionRow.project_summary,
@@ -509,6 +477,79 @@ async function getConversationDetail(req, res) {
     });
   } catch (err) {
     console.error('[admin conversations] detail:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function convertConversationToLead(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const sessionId = req.params.sessionId;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId required' });
+    }
+
+    const sessionRow = await pool.query(
+      'SELECT id FROM chat_sessions WHERE id = $1 AND company_id = $2',
+      [sessionId, companyId]
+    );
+    if (!sessionRow.rows?.length) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const messages = await ChatMessage.listBySession(sessionId);
+    const inferred = deriveLeadFromConversation({ messages, requestMeta: {} });
+    const name = pickVisitorDisplayName(req.body?.name, inferred.name, req.body?.email, req.body?.phone);
+    const phone = normalizePhone(req.body?.phone || inferred.phone || '');
+    const email = normalizeEmail(req.body?.email || inferred.email || '');
+    const location = sanitizeLocation(req.body?.location || inferred.location || '');
+
+    if (!phone && !email) {
+      return res.status(400).json({ error: 'Phone or email is required to convert this conversation into a lead' });
+    }
+
+    const existing = await Lead.findByCompanyAndSession(companyId, sessionId);
+    const leadScore = Math.max(
+      Number(inferred.leadScore || 0),
+      phone ? 30 : 0,
+      email ? 22 : 0,
+      name ? 8 : 0
+    );
+
+    const { lead, inserted, previousStatus } = await Lead.upsertCapturedLead({
+      companyId,
+      sessionId,
+      name,
+      phone,
+      email,
+      location,
+      businessType: inferred.businessType,
+      serviceRequested: inferred.serviceRequested,
+      projectSummary: inferred.projectSummary,
+      budgetRange: inferred.budgetRange,
+      timeline: inferred.timeline,
+      landingPage: inferred.landingPage,
+      deviceType: inferred.deviceType,
+      aiDetectedIntent: inferred.aiDetectedIntent,
+      leadScore,
+      contactMethod: phone && email ? 'whatsapp/email/call' : phone ? 'whatsapp/call' : 'email',
+    });
+
+    if (lead?.id && !existing && inserted) {
+      await Lead.addStatusHistory(lead.id, previousStatus, lead.status || 'new');
+    }
+    if (lead?.id) {
+      await Lead.addActivity(
+        lead.id,
+        'manual_conversion',
+        'Lead created or updated manually from admin conversations.',
+        { sessionId, inserted: Boolean(inserted) }
+      );
+    }
+
+    return res.json({ ok: true, inserted: Boolean(inserted), lead });
+  } catch (err) {
+    console.error('[admin conversations] convert lead:', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -578,4 +619,4 @@ async function sendMessage(req, res) {
   }
 }
 
-module.exports = { listConversations, getConversationDetail, getMessages, sendMessage };
+module.exports = { listConversations, getConversationDetail, getMessages, sendMessage, convertConversationToLead };

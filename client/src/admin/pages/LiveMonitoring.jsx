@@ -215,7 +215,7 @@ export default function LiveMonitoring() {
                         </div>
                       </td>
                       <td className="align-middle text-end">
-                        <Link to={`/admin/chat/${session.sessionId}`} className="btn btn-sm btn-primary me-1">Operator chat</Link>
+                        <Link to={`/admin/chat/${session.sessionId}`} className="btn btn-sm btn-primary me-1">Operate Chat</Link>
                         <a
                           href={`/?sessionId=${encodeURIComponent(session.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
                           target="_blank"

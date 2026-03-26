@@ -54,6 +54,15 @@ function formatTimeAgo(dateStr) {
   return d.toLocaleDateString();
 }
 
+function buildConvertLeadDraft(detail) {
+  return {
+    name: detail?.lead?.name || detail?.session?.visitorName || '',
+    phone: detail?.lead?.phone || '',
+    email: detail?.lead?.email || '',
+    location: detail?.lead?.location || '',
+  };
+}
+
 export default function Conversations() {
   const { authFetch, company } = useAuth();
   const [search, setSearch] = useState('');
@@ -70,6 +79,10 @@ export default function Conversations() {
   const [detailId, setDetailId] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [showConvertLeadModal, setShowConvertLeadModal] = useState(false);
+  const [convertLeadDraft, setConvertLeadDraft] = useState({ name: '', phone: '', email: '', location: '' });
+  const [convertingLead, setConvertingLead] = useState(false);
+  const [convertLeadError, setConvertLeadError] = useState('');
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
@@ -110,12 +123,47 @@ export default function Conversations() {
       if (!res.ok) throw new Error('Failed to load conversation details');
       const payload = await res.json();
       setDetail(payload);
+      setConvertLeadDraft(buildConvertLeadDraft(payload));
     } catch {
       setDetail({ error: 'Failed to load conversation details' });
     } finally {
       setDetailLoading(false);
     }
   }, [authFetch]);
+
+  const openConvertLeadModal = (conversation) => {
+    setDetailId(conversation.id);
+    setConvertLeadDraft({
+      name: conversation.visitorName || '',
+      phone: '',
+      email: '',
+      location: '',
+    });
+    setConvertLeadError('');
+    setShowConvertLeadModal(true);
+  };
+
+  const submitConvertLead = async () => {
+    if (!detailId) return;
+    setConvertingLead(true);
+    setConvertLeadError('');
+    try {
+      const res = await authFetch(`/conversations/${detailId}/convert-lead`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(convertLeadDraft),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error || 'Failed to convert lead');
+      setShowConvertLeadModal(false);
+      await loadConversations();
+      await openDetail(detailId);
+    } catch (err) {
+      setConvertLeadError(err.message || 'Failed to convert lead');
+    } finally {
+      setConvertingLead(false);
+    }
+  };
 
   useEffect(() => {
     loadConversations();
@@ -319,8 +367,13 @@ export default function Conversations() {
                           <button type="button" className="btn btn-sm btn-outline-primary me-1" onClick={() => openDetail(conv.id)}>
                             Details
                           </button>
+                          {!conv.leadCaptured ? (
+                            <button type="button" className="btn btn-sm btn-outline-success me-1" onClick={() => openConvertLeadModal(conv)}>
+                              Convert Lead
+                            </button>
+                          ) : null}
                           <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary me-1">
-                            Operator chat
+                            Operate Chat
                           </Link>
                           <a
                             href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
@@ -449,6 +502,54 @@ export default function Conversations() {
                     </div>
                   </>
                 ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showConvertLeadModal ? (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100"
+          style={{ background: 'rgba(0,0,0,0.55)', zIndex: 2060 }}
+          onClick={() => { if (!convertingLead) setShowConvertLeadModal(false); }}
+        >
+          <div
+            className="position-absolute top-50 start-50 translate-middle"
+            style={{ width: 'min(560px, 94vw)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="card" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
+              <div className="card-header d-flex justify-content-between align-items-center" style={{ borderColor: 'var(--chat-border)' }}>
+                <strong>Convert conversation to lead</strong>
+                <button className="btn btn-sm btn-outline-secondary" onClick={() => setShowConvertLeadModal(false)} disabled={convertingLead}>Close</button>
+              </div>
+              <div className="card-body">
+                <div className="row g-2">
+                  <div className="col-md-6">
+                    <label className="form-label small">Visitor name</label>
+                    <input className="form-control form-control-sm" value={convertLeadDraft.name} onChange={(e) => setConvertLeadDraft((prev) => ({ ...prev, name: e.target.value }))} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small">Location</label>
+                    <input className="form-control form-control-sm" value={convertLeadDraft.location} onChange={(e) => setConvertLeadDraft((prev) => ({ ...prev, location: e.target.value }))} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small">Phone</label>
+                    <input className="form-control form-control-sm" value={convertLeadDraft.phone} onChange={(e) => setConvertLeadDraft((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Required if email is empty" />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small">Email</label>
+                    <input className="form-control form-control-sm" value={convertLeadDraft.email} onChange={(e) => setConvertLeadDraft((prev) => ({ ...prev, email: e.target.value }))} placeholder="Required if phone is empty" />
+                  </div>
+                </div>
+                {convertLeadError ? <div className="text-danger small mt-2">{convertLeadError}</div> : null}
+                <div className="d-flex justify-content-end gap-2 mt-3">
+                  <button className="btn btn-outline-secondary btn-sm" onClick={() => setShowConvertLeadModal(false)} disabled={convertingLead}>Cancel</button>
+                  <button className="btn btn-success btn-sm" onClick={submitConvertLead} disabled={convertingLead}>
+                    {convertingLead ? 'Converting...' : 'Convert Lead'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

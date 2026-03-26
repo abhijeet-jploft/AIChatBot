@@ -223,7 +223,7 @@ export default function TakeOver() {
     <div className="p-4">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Take over conversation</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
-        <strong>Operator chat</strong> opens the full visitor-style chat (theme, mic, voice playback) so you can read the thread and reply; messages are sent to the visitor in real time. Use <strong>Visitor preview</strong> to open the public site in a new tab. Quick <strong>Send</strong> below still works for one-line replies.
+        <strong>Operate Chat</strong> opens the full visitor-style chat (theme, mic, voice playback) so you can read the thread and reply; messages are sent to the visitor in real time. Use <strong>Visitor preview</strong> to open the public site in a new tab. Quick <strong>Send</strong> below still works for one-line replies.
       </p>
 
       {/* Tabs */}
@@ -315,7 +315,7 @@ export default function TakeOver() {
                                     to={`/admin/chat/${s.sessionId}`}
                                     className="btn btn-sm btn-primary"
                                   >
-                                    Operator chat
+                                    Operate Chat
                                   </Link>
                                   <a
                                     href={visitorPreviewUrl(s.sessionId)}
@@ -460,7 +460,7 @@ export default function TakeOver() {
                                 to={`/admin/chat/${conv.id}`}
                                 className="btn btn-sm btn-primary"
                               >
-                                Operator chat
+                                Operate Chat
                               </Link>
                               <a
                                 href={visitorPreviewUrl(conv.id)}

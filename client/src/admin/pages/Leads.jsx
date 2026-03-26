@@ -74,6 +74,17 @@ function parseFilename(contentDisposition, fallbackName) {
   return match?.[1] || fallbackName;
 }
 
+function TranscriptExpandIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
 export default function Leads() {
   const { authFetch } = useAuth();
   const { showToast } = useAdminToast();
@@ -673,7 +684,7 @@ export default function Leads() {
                     <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)', position: 'sticky', top: 0, zIndex: 1 }}>
                       <tr>
                         <th className="py-2" style={{ width: 34 }} />
-                        <th className="py-2">Lead</th>
+                        <th className="py-2">Lead name</th>
                         <th className="py-2">Requirement summary</th>
                         <th className="py-2">Status</th>
                         <th className="py-2">Lead score</th>
@@ -713,12 +724,12 @@ export default function Leads() {
                                 }}
                                 title="Open lead details"
                               >
-                                {lead.name || lead.email || lead.phone || 'Unnamed lead'}
+                                {lead.display_name || lead.name || lead.email || lead.phone || 'Unnamed lead'}
                               </button>
                             </td>
                             <td className="align-middle small">
-                              <div className="text-truncate" style={{ maxWidth: 260 }} title={lead.project_summary || lead.service_requested || ''}>
-                                {lead.project_summary || lead.service_requested || '-'}
+                              <div className="text-truncate" style={{ maxWidth: 260 }} title={lead.requirement_summary || lead.project_summary || lead.service_requested || ''}>
+                                {lead.requirement_summary || lead.project_summary || lead.service_requested || '-'}
                               </div>
                             </td>
                             <td className="align-middle">
@@ -828,7 +839,7 @@ export default function Leads() {
                   <div className="d-flex justify-content-between align-items-start gap-2 mb-3 flex-wrap">
                     <div>
                       <h6 className="mb-1" style={{ color: 'var(--chat-text-heading)' }}>
-                        {selectedLead.name || selectedLead.email || selectedLead.phone || 'Lead'}
+                        {selectedLead.display_name || selectedLead.name || selectedLead.email || selectedLead.phone || 'Lead'}
                       </h6>
                       <div className="small" style={{ color: 'var(--chat-muted)' }}>
                         Captured: {formatDateTime(selectedLead.created_at)}
@@ -841,7 +852,7 @@ export default function Leads() {
                           className="btn btn-primary btn-sm"
                           onClick={() => navigate(`/admin/chat/${selectedLead.session_id}`)}
                         >
-                          Operator chat
+                          Operate Chat
                         </button>
                       ) : null}
                       <button className="btn btn-outline-primary btn-sm" onClick={exportCurrentLead}>Export Lead</button>
@@ -872,7 +883,6 @@ export default function Leads() {
                     <div className="col-md-6"><strong>Conversation ID:</strong> {selectedLead.session_id || '-'}</div>
                     <div className="col-md-6"><strong>Intent:</strong> {humanize(selectedLead.ai_detected_intent)}</div>
                     <div className="col-md-6"><strong>Contact Method:</strong> {selectedLead.contact_method || '-'}</div>
-                    <div className="col-md-6"><strong>Assigned Owner:</strong> {selectedLead.assigned_owner || '-'}</div>
                     <div className="col-md-6"><strong>Reminder:</strong> {selectedLead.reminder_at ? formatDateTime(selectedLead.reminder_at) : '-'}</div>
                   </div>
 
@@ -890,22 +900,6 @@ export default function Leads() {
                       </select>
                       <button className="btn btn-primary btn-sm" onClick={saveStatus} disabled={savingStatus}>
                         {savingStatus ? 'Saving...' : 'Update'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label small">Assigned owner</label>
-                    <div className="d-flex gap-2">
-                      <input
-                        type="text"
-                        className="form-control form-control-sm"
-                        value={ownerValue}
-                        onChange={(e) => setOwnerValue(e.target.value)}
-                        placeholder="Owner name"
-                      />
-                      <button className="btn btn-outline-primary btn-sm" onClick={saveOwner} disabled={savingOwner}>
-                        {savingOwner ? 'Saving...' : 'Save'}
                       </button>
                     </div>
                   </div>
@@ -949,7 +943,7 @@ export default function Leads() {
                   <div className="mb-3">
                     <label className="form-label small">AI-generated summary</label>
                     <div className="p-2 rounded" style={{ background: 'var(--chat-bg)', border: '1px solid var(--chat-border)' }}>
-                      {selectedLead.project_summary || 'No project summary available.'}
+                      {selectedLead.requirement_summary || selectedLead.project_summary || 'No project summary available.'}
                     </div>
                   </div>
 
@@ -1030,7 +1024,18 @@ export default function Leads() {
                   </div>
 
                   <div className="mt-3" id="lead-transcript-panel">
-                    <label className="form-label small">Full conversation transcript</label>
+                    <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
+                      <label className="form-label small mb-0">Full conversation transcript</label>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+                        onClick={() => setShowTranscriptModal(true)}
+                        title="Open transcript in full screen"
+                        aria-label="Open transcript in full screen"
+                      >
+                        <TranscriptExpandIcon />
+                      </button>
+                    </div>
                     <div style={{ maxHeight: 260, overflowY: 'auto', background: '#0b0b0e', border: '1px solid var(--chat-border)', borderRadius: 8, padding: '10px 12px' }}>
                       {(detail?.transcript || []).length ? (
                         detail.transcript.map((message, idx) => (

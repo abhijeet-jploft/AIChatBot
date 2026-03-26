@@ -1,5 +1,10 @@
 const Lead = require('../../models/Lead');
 const { sendDueReminderDigest } = require('../../services/leadNotificationService');
+const {
+  buildLeadRequirementSummary,
+  pickVisitorDisplayName,
+  sanitizeLocation,
+} = require('../../services/conversationInsights');
 
 function toArrayIds(idsParam) {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -105,7 +110,14 @@ async function listLeads(req, res) {
   try {
     const filters = parseListFilters(req.query);
     const result = await Lead.listByCompany(req.adminCompanyId, filters);
-    res.json(result);
+    res.json({
+      ...result,
+      rows: (result.rows || []).map((row) => ({
+        ...row,
+        display_name: pickVisitorDisplayName(row.name, row.email, row.phone),
+        requirement_summary: buildLeadRequirementSummary({ lead: row }),
+      })),
+    });
   } catch (err) {
     console.error('[admin leads] list:', err);
     res.status(500).json({ error: err.message });
@@ -142,7 +154,12 @@ async function getLeadDetail(req, res) {
     ]);
 
     res.json({
-      lead,
+      lead: {
+        ...lead,
+        display_name: pickVisitorDisplayName(lead.name, lead.email, lead.phone),
+        location: sanitizeLocation(lead.location),
+        requirement_summary: buildLeadRequirementSummary({ lead, messages: transcript }),
+      },
       transcript,
       statusHistory,
       activities,
