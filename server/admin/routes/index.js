@@ -68,6 +68,7 @@ router.post('/leads/:leadId/activity', requireAuth, leadsController.addActivity)
 router.delete('/leads/:leadId', requireAuth, leadsController.removeLead);
 
 router.post('/training/scrape/start', requireAuth, trainingController.startScrape);
+router.get('/training/scrape/active', requireAuth, trainingController.scrapeActive);
 router.get('/training/scrape/status/:jobId', requireAuth, trainingController.scrapeStatus);
 router.post('/training/scrape/save/:jobId', requireAuth, trainingController.scrapeSave);
 

@@ -1001,10 +1001,33 @@
   function normalizePhoneForHref(rawPhone) {
     var source = String(rawPhone || '').trim();
     if (!source) return '';
-    var startsWithPlus = /^\+/.test(source);
+    var startsWithPlus = /^[+＋]/.test(source);
     var digits = source.replace(/\D/g, '');
     if (digits.length < 8 || digits.length > 15) return '';
     return (startsWithPlus ? '+' : '') + digits;
+  }
+
+  function normalizeWhatsappForHref(rawPhone) {
+    var normalized = normalizePhoneForHref(rawPhone).replace(/^\+/, '');
+    return normalized ? 'https://wa.me/' + normalized : '';
+  }
+
+  function trimTrailingUrlPunctuation(url) {
+    var source = String(url || '');
+    var match = source.match(/[)\],.!?:;]+$/);
+    if (!match) return { cleanUrl: source, trailing: '' };
+
+    var trailing = match[0];
+    var cleanUrl = source.slice(0, -trailing.length);
+    while (trailing.charAt(0) === ')') {
+      var opens = (cleanUrl.match(/\(/g) || []).length;
+      var closes = (cleanUrl.match(/\)/g) || []).length;
+      if (closes < opens) break;
+      cleanUrl += ')';
+      trailing = trailing.slice(1);
+    }
+
+    return { cleanUrl: cleanUrl, trailing: trailing };
   }
 
   function toSafeHref(rawUrl) {
@@ -1071,12 +1094,22 @@
 
     var html = escapeHtml(text)
       .replace(/https?:\/\/[^\s<]+/g, function (url) {
-        return renderSafeLink(url, url);
+        var parts = trimTrailingUrlPunctuation(url);
+        return renderSafeLink(parts.cleanUrl, parts.cleanUrl) + escapeHtml(parts.trailing);
+      })
+      .replace(/(^|[^/\w])(www\.[^\s<]+)/g, function (_fullMatch, prefix, url) {
+        var parts = trimTrailingUrlPunctuation(url);
+        return prefix + renderSafeLink(parts.cleanUrl, 'https://' + parts.cleanUrl) + escapeHtml(parts.trailing);
+      })
+      .replace(/(\b(?:whats\s*app|whatsapp|wa)\b(?:\s+(?:number|no\.?|contact))?\s*[:=-]?\s*)((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)/gi, function (fullMatch, label, phoneText) {
+        var whatsappHref = normalizeWhatsappForHref(phoneText);
+        if (!whatsappHref) return fullMatch;
+        return escapeHtml(label) + renderSafeLink(phoneText.trim(), whatsappHref);
       })
       .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, function (email) {
         return renderSafeLink(email, 'mailto:' + email);
       })
-      .replace(/(^|[^\w])((?:\+|00)?\d[\d\s().-]{6,}\d)(?=$|[^\w])/g, function (fullMatch, prefix, phoneText) {
+      .replace(/(^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/g, function (fullMatch, prefix, phoneText) {
         var safePhone = normalizePhoneForHref(phoneText);
         if (!safePhone) return fullMatch;
         return prefix + renderSafeLink(phoneText.trim(), 'tel:' + safePhone);
@@ -1189,7 +1222,7 @@
       }
       return false;
     });
-    var phoneMatch = userText.match(/(?:^|[^\w])((?:\+|00)?\d[\d\s().-]{6,}\d)(?=$|[^\w])/);
+    var phoneMatch = userText.match(/(?:^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/);
     if (phoneMatch && phoneMatch[1]) phone = phoneMatch[1].trim();
     var emailMatch = userText.match(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i);
     if (emailMatch && emailMatch[0]) email = emailMatch[0].trim();

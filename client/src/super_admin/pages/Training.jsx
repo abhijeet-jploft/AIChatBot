@@ -131,6 +131,24 @@ export default function Training() {
     }
   }, [companyId, jobId, job]);
 
+  useEffect(() => {
+    if (!companyId || jobId) return;
+    const loadActiveJob = async () => {
+      try {
+        const res = await saFetch(`/training/${companyId}/scrape/active`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.jobId) {
+          setJobId(data.jobId);
+          setJob(data);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    loadActiveJob();
+  }, [companyId, jobId, saFetch]);
+
   // Warn before closing the tab while a scrape is active (prevents accidental full refresh).
   useEffect(() => {
     const busy = submitting || job?.status === 'running';
@@ -157,7 +175,27 @@ export default function Training() {
     const poll = async () => {
       try {
         const res = await saFetch(`/training/${companyId}/scrape/status/${jobId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (res.status === 404) {
+            const activeRes = await saFetch(`/training/${companyId}/scrape/active`);
+            if (activeRes.ok) {
+              const activeData = await activeRes.json();
+              if (activeData?.jobId) {
+                if (activeData.jobId !== jobId) setJobId(activeData.jobId);
+                setJob(activeData);
+                return;
+              }
+            }
+            clearInterval(pollRef.current);
+            setJob((current) => ({
+              ...(current || {}),
+              status: 'failed',
+              error: 'Scrape job was lost (server restarted). Start again to continue.',
+            }));
+            setJobId(null);
+          }
+          return;
+        }
         const data = await res.json();
         setJob(data);
         if (data.status === 'completed' || data.status === 'failed') clearInterval(pollRef.current);
@@ -206,6 +244,12 @@ export default function Training() {
   useEffect(() => {
     loadFiles();
   }, [loadFiles]);
+
+  const hasScrapedTrainingFile = files.some((file) => file?.name === 'scraped_website.jsonl');
+  const canSaveScrapedPages = (job?.pages?.length || 0) > 0 && job?.status !== 'failed';
+  const scrapeSaveLabel = hasScrapedTrainingFile
+    ? (job?.status === 'completed' ? 'Append scraped pages to scraped_website.jsonl' : 'Append pages scraped so far to scraped_website.jsonl')
+    : (job?.status === 'completed' ? 'Create scraped_website.jsonl from scraped pages' : 'Create scraped_website.jsonl from pages scraped so far');
 
   // ─── Scrape ───────────────────────────────────────────────────────────────
   const handleScrapeSubmit = async (e) => {
@@ -637,11 +681,14 @@ export default function Training() {
                   {job.pages?.length || 0} pages | {job.jsonlLines || 0} JSONL lines
                 </span>
               </div>
-              {job.status === 'completed' && (
+              {canSaveScrapedPages && (
                 <div style={{ marginBottom: 14 }}>
                   <button type="button" className="sa-btn sa-btn-success sa-btn-sm" onClick={handleScrapeSave} disabled={!canEditTab('training_scrape')}>
-                    Save to training data
+                    {scrapeSaveLabel}
                   </button>
+                  <div style={{ marginTop: 8, color: 'var(--sa-text-muted)', fontSize: 12 }}>
+                    Uses {job.status === 'completed' ? 'the completed scrape job' : 'pages already scraped so far'} to {hasScrapedTrainingFile ? 'append only new' : 'create'} entries in <strong style={{ color: 'var(--sa-text)' }}>scraped_website.jsonl</strong>.
+                  </div>
                 </div>
               )}
               {job.pages?.length > 0 && (

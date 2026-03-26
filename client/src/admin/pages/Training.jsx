@@ -130,6 +130,24 @@ export default function Training() {
   }, [companyId, jobId, job]);
 
   useEffect(() => {
+    if (jobId) return;
+    const loadActiveJob = async () => {
+      try {
+        const res = await authFetch('/training/scrape/active');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.jobId) {
+          setJobId(data.jobId);
+          setJob(data);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    loadActiveJob();
+  }, [jobId, authFetch]);
+
+  useEffect(() => {
     const busy = submitting || job?.status === 'running';
     if (!busy) return undefined;
     const onBeforeUnload = (e) => {
@@ -154,7 +172,27 @@ export default function Training() {
     const poll = async () => {
       try {
         const res = await authFetch(`/training/scrape/status/${jobId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (res.status === 404) {
+            const activeRes = await authFetch('/training/scrape/active');
+            if (activeRes.ok) {
+              const activeData = await activeRes.json();
+              if (activeData?.jobId) {
+                if (activeData.jobId !== jobId) setJobId(activeData.jobId);
+                setJob(activeData);
+                return;
+              }
+            }
+            clearInterval(pollRef.current);
+            setJob((current) => ({
+              ...(current || {}),
+              status: 'failed',
+              error: 'Scrape job was lost (server restarted). Start again to continue.',
+            }));
+            setJobId(null);
+          }
+          return;
+        }
         const data = await res.json();
         setJob(data);
         if (data.status === 'completed' || data.status === 'failed') clearInterval(pollRef.current);
@@ -199,6 +237,11 @@ export default function Training() {
   }, [loadFiles]);
 
   const companyLabel = company?.displayName || company?.companyId || 'this company';
+  const hasScrapedTrainingFile = files.some((file) => file?.name === 'scraped_website.jsonl');
+  const canSaveScrapedPages = (job?.pages?.length || 0) > 0 && job?.status !== 'failed';
+  const scrapeSaveLabel = hasScrapedTrainingFile
+    ? (job?.status === 'completed' ? 'Append scraped pages to scraped_website.jsonl' : 'Append pages scraped so far to scraped_website.jsonl')
+    : (job?.status === 'completed' ? 'Create scraped_website.jsonl from scraped pages' : 'Create scraped_website.jsonl from pages scraped so far');
 
   // ─── Scrape ───────────────────────────────────────────────────────────────
   const handleScrapeSubmit = async (e) => {
@@ -676,8 +719,15 @@ export default function Training() {
                   <span className={`badge ${STATUS_CLASS[job.status] || 'bg-secondary'}`} style={{ fontSize: 11 }}>{job.status.toUpperCase()}</span>
                   <span className="small text-muted">{job.pages?.length || 0} pages | {job.jsonlLines || 0} JSONL lines</span>
                 </div>
-                {job.status === 'completed' && (
-                  <div className="d-flex gap-2 mb-3"><button type="button" className="btn btn-sm btn-success" onClick={handleScrapeSave}>Save to training data</button></div>
+                {canSaveScrapedPages && (
+                  <div className="d-flex flex-column gap-2 mb-3 align-items-start">
+                    <button type="button" className="btn btn-sm btn-success" onClick={handleScrapeSave}>
+                      {scrapeSaveLabel}
+                    </button>
+                    <div className="small text-muted">
+                      Uses {job.status === 'completed' ? 'the completed scrape job' : 'pages already scraped so far'} to {hasScrapedTrainingFile ? 'append only new' : 'create'} entries in <strong>scraped_website.jsonl</strong>.
+                    </div>
+                  </div>
                 )}
                 {job.pages?.length > 0 && (
                   <div className="mb-3">

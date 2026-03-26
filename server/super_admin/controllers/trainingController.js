@@ -3,7 +3,7 @@
  * Wraps the existing admin training service but allows the super admin
  * to target any company (passed as req.body.companyId or req.params.companyId).
  */
-const { createJob, getJob, runJob } = require('../../services/scraperService');
+const { createJob, getJob, runJob, getActiveJobForCompany } = require('../../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../../services/trainingLoader');
 const { setLastTrainingCompleted } = require('../../services/trainingNotificationStore');
 const { appendSystemLog } = require('../../services/adminLogStore');
@@ -52,6 +52,11 @@ async function startScrape(req, res) {
       return res.status(400).json({ error: 'Only http and https URLs are allowed' });
     }
 
+    const activeJob = getActiveJobForCompany(companyId);
+    if (activeJob) {
+      return res.json({ jobId: activeJob.id, companyId, resumed: true });
+    }
+
     const jobId = createJob(url.trim(), companyId);
     runJob(jobId).catch((err) => console.error(`[super admin scrape] job ${jobId} crashed:`, err.message));
     return res.json({ jobId, companyId });
@@ -77,6 +82,29 @@ async function scrapeStatus(req, res) {
   });
 }
 
+// GET /super-admin/training/:companyId/scrape/active
+async function scrapeActive(req, res) {
+  const { companyId } = req.params;
+  const company = await resolveCompany(companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+
+  const job = getActiveJobForCompany(companyId);
+  if (!job) return res.json({ jobId: null });
+
+  return res.json({
+    jobId: job.id,
+    status: job.status,
+    pages: job.pages,
+    errors: job.errors?.slice(-20) || [],
+    log: job.log?.slice(-100) || [],
+    progress: job.progress,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    error: job.error,
+    jsonlLines: job.jsonlContent ? job.jsonlContent.split('\n').filter(Boolean).length : 0,
+  });
+}
+
 // POST /super-admin/training/:companyId/scrape/save/:jobId
 async function scrapeSave(req, res) {
   try {
@@ -87,15 +115,13 @@ async function scrapeSave(req, res) {
     const job = getJob(jobId);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (job.companyId !== companyId) return res.status(403).json({ error: 'Job does not belong to this company' });
-    if (job.status !== 'completed') return res.status(400).json({ error: `Job is not complete yet (status: ${job.status})` });
-    if (!job.jsonlContent) return res.status(400).json({ error: 'No scraped content to save' });
+    if (job.status === 'failed') return res.status(400).json({ error: `Job failed and cannot be saved (status: ${job.status})` });
+    if (!job.jsonlContent?.trim()) return res.status(400).json({ error: 'No scraped pages are ready to save yet' });
 
-    const lines = job.jsonlContent.split('\n').filter(Boolean);
-    const newCount = await appendJsonlLinesOnlyIfNew(companyId, lines);
-    await mergeScrapedContent(companyId);
+    const { appended, skipped } = mergeScrapedContent(companyId, job.jsonlContent);
     setLastTrainingCompleted(companyId);
 
-    return res.json({ ok: true, savedLines: newCount, totalLines: lines.length });
+    return res.json({ ok: true, partial: job.status !== 'completed', jobStatus: job.status, savedLines: appended, skippedLines: skipped, totalLines: job.jsonlContent.split('\n').filter(Boolean).length });
   } catch (err) {
     console.error('[super admin training] scrapeSave:', err);
     return res.status(500).json({ error: err.message });
@@ -363,7 +389,7 @@ async function listFiles(req, res) {
 }
 
 module.exports = {
-  startScrape, scrapeStatus, scrapeSave,
+  startScrape, scrapeStatus, scrapeActive, scrapeSave,
   saveConversational, saveDocuments,
   saveDatabase, transcribeMedia, saveMedia, saveStructured,
   getManual, setManual, listFiles,

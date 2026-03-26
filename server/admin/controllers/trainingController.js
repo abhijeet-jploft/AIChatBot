@@ -1,4 +1,4 @@
-const { createJob, getJob, runJob } = require('../../services/scraperService');
+const { createJob, getJob, runJob, getActiveJobForCompany } = require('../../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../../services/trainingLoader');
 const { setLastTrainingCompleted } = require('../../services/trainingNotificationStore');
 const { appendSystemLog } = require('../../services/adminLogStore');
@@ -62,6 +62,11 @@ async function startScrape(req, res) {
       return res.status(400).json({ error: 'Only http and https URLs are allowed' });
     }
 
+    const activeJob = getActiveJobForCompany(companyId);
+    if (activeJob) {
+      return res.json({ jobId: activeJob.id, companyId, resumed: true });
+    }
+
     const jobId = createJob(url.trim(), companyId);
     runJob(jobId).catch((err) =>
       console.error(`[admin scrape] job ${jobId} crashed:`, err.message)
@@ -100,6 +105,26 @@ async function scrapeStatus(req, res) {
   });
 }
 
+async function scrapeActive(req, res) {
+  const job = getActiveJobForCompany(req.adminCompanyId);
+  if (!job) return res.json({ jobId: null });
+  const company = await CompanyAdmin.findByCompanyId(job.companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  if (!assertTrainingModule(req, res, company, 'scrape')) return;
+  return res.json({
+    jobId: job.id,
+    status: job.status,
+    pages: job.pages,
+    errors: job.errors?.slice(-20) || [],
+    log: job.log?.slice(-100) || [],
+    progress: job.progress,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    error: job.error,
+    jsonlLines: job.jsonlContent ? job.jsonlContent.split('\n').filter(Boolean).length : 0,
+  });
+}
+
 async function scrapeSave(req, res) {
   try {
     const job = getJob(req.params.jobId);
@@ -110,8 +135,11 @@ async function scrapeSave(req, res) {
     const company = await CompanyAdmin.findByCompanyId(job.companyId);
     if (!company) return res.status(404).json({ error: 'Company not found' });
     if (!assertTrainingModule(req, res, company, 'scrape')) return;
-    if (job.status !== 'completed') {
-      return res.status(400).json({ error: 'Job is not complete yet' });
+    if (job.status === 'failed') {
+      return res.status(400).json({ error: 'Job failed and cannot be saved' });
+    }
+    if (!job.jsonlContent?.trim()) {
+      return res.status(400).json({ error: 'No scraped pages are ready to save yet' });
     }
 
     const dir = path.join(TRAIN_DATA_DIR, job.companyId);
@@ -136,6 +164,8 @@ async function scrapeSave(req, res) {
     res.json({
       saved: true,
       companyId: job.companyId,
+      partial: job.status !== 'completed',
+      jobStatus: job.status,
       linesAppended: appended,
       linesSkipped: skipped,
       links: uniqueLinks.length,
@@ -443,6 +473,7 @@ async function listFiles(req, res) {
 module.exports = {
   startScrape,
   scrapeStatus,
+  scrapeActive,
   scrapeSave,
   saveConversational,
   saveDocuments,

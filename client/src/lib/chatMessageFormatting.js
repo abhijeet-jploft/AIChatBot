@@ -1,5 +1,7 @@
 const EMAIL_RE = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi;
-const PHONE_RE = /(^|[^\w])((?:\+|00)?\d[\d\s().-]{6,}\d)(?=$|[^\w])/g;
+const PHONE_RE = /(^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/g;
+const URL_RE = /(^|[^/\w])((?:https?:\/\/|www\.)[^\s<>()]+)/g;
+const WHATSAPP_RE = /(\b(?:whats\s*app|whatsapp|wa)\b(?:\s+(?:number|no\.?|contact))?\s*[:=-]?\s*)((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)/gi;
 const UNICODE_BULLET_RE = /^([ \t]*)[•●▪◦‣⁃]\s+/;
 const NAME_PATTERNS = [
   /\bmy name is\s+([a-z][a-z\s.'-]{1,60})/i,
@@ -29,7 +31,7 @@ function normalizePhoneForHref(rawPhone = '') {
   const source = String(rawPhone || '').trim();
   if (!source) return '';
 
-  const startsWithPlus = /^\+/.test(source);
+  const startsWithPlus = /^[+＋]/.test(source);
   const digits = source.replace(/\D/g, '');
   if (digits.length < 8 || digits.length > 15) return '';
 
@@ -68,10 +70,61 @@ function escapeMarkdownLabel(text) {
   return String(text || '').replace(/[\[\]]/g, '\\$&');
 }
 
+function trimTrailingUrlPunctuation(url) {
+  const source = String(url || '');
+  const match = source.match(/[)\],.!?:;]+$/);
+  if (!match) {
+    return { cleanUrl: source, trailing: '' };
+  }
+
+  let trailing = match[0];
+  let cleanUrl = source.slice(0, -trailing.length);
+
+  while (trailing.startsWith(')')) {
+    const opens = (cleanUrl.match(/\(/g) || []).length;
+    const closes = (cleanUrl.match(/\)/g) || []).length;
+    if (closes < opens) break;
+    cleanUrl += ')';
+    trailing = trailing.slice(1);
+  }
+
+  return { cleanUrl, trailing };
+}
+
+function normalizeUrlForHref(rawUrl = '') {
+  const source = String(rawUrl || '').trim();
+  if (!source) return '';
+  const withProtocol = /^https?:\/\//i.test(source) ? source : `https://${source}`;
+  try {
+    const parsed = new URL(withProtocol);
+    return /^https?:$/i.test(parsed.protocol) ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function normalizeWhatsappForHref(rawPhone = '') {
+  const digits = normalizePhoneForHref(rawPhone).replace(/^\+/, '');
+  return digits ? `https://wa.me/${digits}` : '';
+}
+
 function linkifyContactsInMarkdown(content) {
   const { protectedText, tokens } = protectSegments(content);
 
-  let next = protectedText.replace(EMAIL_RE, (match) => `[${escapeMarkdownLabel(match)}](mailto:${match})`);
+  let next = protectedText.replace(URL_RE, (fullMatch, prefix, rawUrl) => {
+    const { cleanUrl, trailing } = trimTrailingUrlPunctuation(rawUrl);
+    const safeHref = normalizeUrlForHref(cleanUrl);
+    if (!safeHref) return fullMatch;
+    return `${prefix}[${escapeMarkdownLabel(cleanUrl)}](${safeHref})${trailing}`;
+  });
+
+  next = next.replace(WHATSAPP_RE, (fullMatch, label, phoneText) => {
+    const href = normalizeWhatsappForHref(phoneText);
+    if (!href) return fullMatch;
+    return `${label}[${escapeMarkdownLabel(phoneText.trim())}](${href})`;
+  });
+
+  next = next.replace(EMAIL_RE, (match) => `[${escapeMarkdownLabel(match)}](mailto:${match})`);
 
   next = next.replace(PHONE_RE, (fullMatch, prefix, phoneText) => {
     const hrefPhone = normalizePhoneForHref(phoneText);
