@@ -15,6 +15,7 @@ const superAdminRoutes = require('./super_admin/routes');
 const { renderEmbedPage } = require('./controllers/embedPageController');
 const { migrate } = require('./db/migrate');
 const { attachPresenceWs } = require('./ws/presence');
+const { stopAllJobs } = require('./services/scraperService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -67,6 +68,15 @@ app.get('/embed/:slug', (req, res) => {
     .send('Missing embed token. Use /embed/{slug}/{embed_secret}?companyId={company_id}');
 });
 
+/**
+ * Emergency stop endpoint:
+ * Stops all active scraper/training jobs in this process.
+ */
+app.get('/stop-all', (_req, res) => {
+  stopAllJobs();
+  return res.type('text/plain').send('stopped all');
+});
+
 const superAdminUploadDir = path.join(__dirname, '../uploads/super-admin');
 fs.mkdirSync(superAdminUploadDir, { recursive: true });
 app.use('/uploads/super-admin', express.static(superAdminUploadDir));
@@ -76,6 +86,10 @@ app.use(express.static(clientDist));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'AI Chat Agent API running' });
+});
+
+app.use((_req, res) => {
+  res.status(404).type('text/plain').send('not found');
 });
 
 // System error logging (admin logs module)

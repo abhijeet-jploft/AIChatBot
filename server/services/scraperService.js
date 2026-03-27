@@ -1254,6 +1254,35 @@ function resumeJob(jobId) {
   return { ok: true };
 }
 
+function stopAllJobs() {
+  let stopped = 0;
+  let alreadyFinished = 0;
+  let notFound = 0;
+  let failed = 0;
+
+  for (const job of jobs.values()) {
+    if (!job?.id) continue;
+    const r = requestStopJob(job.id);
+    if (r?.ok) {
+      stopped += 1;
+      continue;
+    }
+    const msg = String(r?.error || '').toLowerCase();
+    if (msg.includes('already finished')) alreadyFinished += 1;
+    else if (msg.includes('not found')) notFound += 1;
+    else failed += 1;
+  }
+
+  cleanupFinishedJobs();
+  return {
+    totalJobs: jobs.size,
+    stopped,
+    alreadyFinished,
+    notFound,
+    failed,
+  };
+}
+
 loadPersistedJobs();
 cleanupFinishedJobs();
 for (const job of jobs.values()) {
@@ -1279,4 +1308,5 @@ module.exports = {
   requestPauseJob,
   requestStopJob,
   resumeJob,
+  stopAllJobs,
 };
