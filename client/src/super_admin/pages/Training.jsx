@@ -7,6 +7,8 @@ import { hasPermission } from '../lib/permissions';
 const STATUS_BADGE = {
   pending:   { cls: 'sa-badge-cold', label: 'PENDING' },
   running:   { cls: 'sa-badge-warn', label: 'RUNNING' },
+  paused:    { cls: 'sa-badge-cold', label: 'PAUSED' },
+  stopped:   { cls: 'sa-badge-cold', label: 'STOPPED' },
   completed: { cls: 'sa-badge-ok',   label: 'DONE' },
   failed:    { cls: 'sa-badge-hot',  label: 'FAILED' },
 };
@@ -198,7 +200,9 @@ export default function Training() {
         }
         const data = await res.json();
         setJob(data);
-        if (data.status === 'completed' || data.status === 'failed') clearInterval(pollRef.current);
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'stopped') {
+          clearInterval(pollRef.current);
+        }
       } catch { /* ignore */ }
     };
     poll();
@@ -271,6 +275,43 @@ export default function Training() {
       showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleScrapePause = async () => {
+    if (!jobId) return;
+    try {
+      const res = await saFetch(`/training/${companyId}/scrape/pause/${jobId}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Pause failed');
+      showToast('Pause requested — crawler will stop after the current page.', 'success');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
+    }
+  };
+
+  const handleScrapeResume = async () => {
+    if (!jobId) return;
+    try {
+      const res = await saFetch(`/training/${companyId}/scrape/resume/${jobId}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Resume failed');
+      showToast('Resuming scrape…', 'success');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
+    }
+  };
+
+  const handleScrapeStop = async () => {
+    if (!jobId) return;
+    if (!window.confirm('Stop scraping? Partial results stay in this job until you save.')) return;
+    try {
+      const res = await saFetch(`/training/${companyId}/scrape/stop/${jobId}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Stop failed');
+      showToast('Stop processed.', 'success');
+    } catch (err) {
+      showToast(trainingFetchErrorMessage(err), 'error');
     }
   };
 
@@ -592,6 +633,7 @@ export default function Training() {
     }
   };
 
+  const scrapeSessionBusy = job && ['pending', 'running', 'paused'].includes(job.status);
   const isScrapeRunning = job?.status === 'running' || submitting;
 
   return (
@@ -654,13 +696,13 @@ export default function Training() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   required
-                  disabled={isScrapeRunning}
+                  disabled={scrapeSessionBusy}
                 />
               </div>
               <button
                 type="submit"
                 className="sa-btn sa-btn-primary"
-                  disabled={!canEditTab('training_scrape') || !url.trim() || isScrapeRunning}
+                  disabled={!canEditTab('training_scrape') || !url.trim() || scrapeSessionBusy}
               >
                 {isScrapeRunning
                   ? (job?.status === 'running'
@@ -681,6 +723,23 @@ export default function Training() {
                   {job.pages?.length || 0} pages | {job.jsonlLines || 0} JSONL lines
                 </span>
               </div>
+              {jobId && (job.status === 'running' || job.status === 'paused') && canEditTab('training_scrape') && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                  {job.status === 'running' && (
+                    <button type="button" className="sa-btn sa-btn-sm sa-btn-secondary" onClick={handleScrapePause}>
+                      Pause
+                    </button>
+                  )}
+                  {job.status === 'paused' && (
+                    <button type="button" className="sa-btn sa-btn-sm sa-btn-primary" onClick={handleScrapeResume}>
+                      Resume
+                    </button>
+                  )}
+                  <button type="button" className="sa-btn sa-btn-sm" style={{ borderColor: 'var(--sa-danger)', color: 'var(--sa-danger)' }} onClick={handleScrapeStop}>
+                    Stop
+                  </button>
+                </div>
+              )}
               {canSaveScrapedPages && (
                 <div style={{ marginBottom: 14 }}>
                   <button type="button" className="sa-btn sa-btn-success sa-btn-sm" onClick={handleScrapeSave} disabled={!canEditTab('training_scrape')}>
@@ -714,6 +773,7 @@ export default function Training() {
               >
                 {(job.log || []).map((line, i) => <div key={`${line}-${i}`}>{line}</div>)}
                 {job.status === 'running' && <div style={{ opacity: 0.4 }}>... crawling ...</div>}
+                {job.status === 'paused' && <div style={{ opacity: 0.65 }}>— paused —</div>}
               </div>
             </div>
           )}

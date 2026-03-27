@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { createJob, getJob, runJob } = require('../services/scraperService');
+const { createJob, getJob, runJob, requestPauseJob, requestStopJob, resumeJob } = require('../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../services/trainingLoader');
 const { mergeScrapedContent } = require('../services/trainingDataService');
 
@@ -68,7 +68,7 @@ function status(req, res) {
 function download(req, res) {
   const job = getJob(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'Job not found' });
-  if (job.status !== 'completed') {
+  if (job.status !== 'completed' && job.status !== 'stopped') {
     return res.status(400).json({ error: 'Job is not complete yet' });
   }
 
@@ -84,7 +84,7 @@ function download(req, res) {
 function save(req, res) {
   const job = getJob(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'Job not found' });
-  if (job.status !== 'completed') {
+  if (job.status !== 'completed' && job.status !== 'stopped') {
     return res.status(400).json({ error: 'Job is not complete yet' });
   }
 
@@ -114,4 +114,22 @@ function save(req, res) {
   });
 }
 
-module.exports = { start, status, download, save };
+function pause(req, res) {
+  const r = requestPauseJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+}
+
+function stop(req, res) {
+  const r = requestStopJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+}
+
+function resume(req, res) {
+  const r = resumeJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+}
+
+module.exports = { start, status, download, save, pause, stop, resume };

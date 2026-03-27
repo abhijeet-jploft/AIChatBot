@@ -94,6 +94,18 @@ router.get('/training/:companyId/scrape/status/:jobId', requireSuperAuth, requir
 	['ai_configuration', 'view'],
 	['training_scrape', 'view'],
 ]), trainingController.scrapeStatus);
+router.post('/training/:companyId/scrape/pause/:jobId', requireSuperAuth, requireAnyPermission([
+	['ai_configuration', 'edit'],
+	['training_scrape', 'edit'],
+]), trainingController.scrapePause);
+router.post('/training/:companyId/scrape/stop/:jobId', requireSuperAuth, requireAnyPermission([
+	['ai_configuration', 'edit'],
+	['training_scrape', 'edit'],
+]), trainingController.scrapeStop);
+router.post('/training/:companyId/scrape/resume/:jobId', requireSuperAuth, requireAnyPermission([
+	['ai_configuration', 'edit'],
+	['training_scrape', 'edit'],
+]), trainingController.scrapeResume);
 router.post('/training/:companyId/scrape/save/:jobId', requireSuperAuth, requireAnyPermission([
 	['ai_configuration', 'edit'],
 	['training_scrape', 'edit'],

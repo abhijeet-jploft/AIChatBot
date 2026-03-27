@@ -10,6 +10,8 @@ import {
 const STATUS_CLASS = {
   pending: 'bg-secondary',
   running: 'bg-warning text-dark',
+  paused: 'bg-info text-dark',
+  stopped: 'bg-secondary',
   completed: 'bg-success',
   failed: 'bg-danger',
 };
@@ -195,7 +197,9 @@ export default function Training() {
         }
         const data = await res.json();
         setJob(data);
-        if (data.status === 'completed' || data.status === 'failed') clearInterval(pollRef.current);
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'stopped') {
+          clearInterval(pollRef.current);
+        }
       } catch {}
     };
     poll();
@@ -263,6 +267,43 @@ export default function Training() {
       showToast(trainingFetchErrorMessage(err), 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleScrapePause = async () => {
+    if (!jobId) return;
+    try {
+      const res = await authFetch(`/training/scrape/pause/${jobId}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Pause failed');
+      showToast('Pause requested — crawler will stop after the current page.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Pause failed', 'error');
+    }
+  };
+
+  const handleScrapeResume = async () => {
+    if (!jobId) return;
+    try {
+      const res = await authFetch(`/training/scrape/resume/${jobId}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Resume failed');
+      showToast('Resuming scrape…', 'success');
+    } catch (err) {
+      showToast(err.message || 'Resume failed', 'error');
+    }
+  };
+
+  const handleScrapeStop = async () => {
+    if (!jobId) return;
+    if (!window.confirm('Stop scraping? Partial results stay in this job until you save.')) return;
+    try {
+      const res = await authFetch(`/training/scrape/stop/${jobId}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Stop failed');
+      showToast('Stop processed.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Stop failed', 'error');
     }
   };
 
@@ -619,6 +660,7 @@ export default function Training() {
     }
   };
 
+  const scrapeSessionBusy = job && ['pending', 'running', 'paused'].includes(job.status);
   const isScrapeRunning = job?.status === 'running' || submitting;
 
   if (!visibleTabs.length) {
@@ -702,12 +744,12 @@ export default function Training() {
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     required
-                    disabled={isScrapeRunning}
+                    disabled={scrapeSessionBusy}
                     style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
                   />
                 </div>
                 <div className="col-12 col-md-4 d-flex align-items-end">
-                  <button type="submit" className="btn btn-primary px-4 w-100" disabled={!url.trim() || isScrapeRunning}>
+                  <button type="submit" className="btn btn-primary px-4 w-100" disabled={!url.trim() || scrapeSessionBusy}>
                     {isScrapeRunning ? <><span className="spinner-border spinner-border-sm me-2" />{job?.status === 'running' ? `Scraping — ${job.pages?.length || 0} pages...` : 'Starting...'}</> : 'Start scraping'}
                   </button>
                 </div>
@@ -719,6 +761,23 @@ export default function Training() {
                   <span className={`badge ${STATUS_CLASS[job.status] || 'bg-secondary'}`} style={{ fontSize: 11 }}>{job.status.toUpperCase()}</span>
                   <span className="small text-muted">{job.pages?.length || 0} pages | {job.jsonlLines || 0} JSONL lines</span>
                 </div>
+                {jobId && (job.status === 'running' || job.status === 'paused') && (
+                  <div className="d-flex flex-wrap gap-2 mb-3">
+                    {job.status === 'running' && (
+                      <button type="button" className="btn btn-sm btn-outline-secondary" onClick={handleScrapePause}>
+                        Pause
+                      </button>
+                    )}
+                    {job.status === 'paused' && (
+                      <button type="button" className="btn btn-sm btn-primary" onClick={handleScrapeResume}>
+                        Resume
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-sm btn-outline-danger" onClick={handleScrapeStop}>
+                      Stop
+                    </button>
+                  </div>
+                )}
                 {canSaveScrapedPages && (
                   <div className="d-flex flex-column gap-2 mb-3 align-items-start">
                     <button type="button" className="btn btn-sm btn-success" onClick={handleScrapeSave}>
@@ -747,6 +806,7 @@ export default function Training() {
                 <div ref={logRef} style={{ maxHeight: 220, overflowY: 'auto', background: '#0b0b0e', border: '1px solid var(--chat-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: '#86efac', whiteSpace: 'pre-wrap' }}>
                   {(job.log || []).map((line, i) => <div key={`${line}-${i}`}>{line}</div>)}
                   {job.status === 'running' && <div style={{ opacity: 0.4 }}>... crawling ...</div>}
+                  {job.status === 'paused' && <div style={{ opacity: 0.65 }}>— paused —</div>}
                 </div>
               </div>
             )}

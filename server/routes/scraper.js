@@ -5,6 +5,9 @@ const router = express.Router();
 
 router.post('/start', scraperController.start);
 router.get('/status/:jobId', scraperController.status);
+router.post('/pause/:jobId', scraperController.pause);
+router.post('/stop/:jobId', scraperController.stop);
+router.post('/resume/:jobId', scraperController.resume);
 router.get('/download/:jobId', scraperController.download);
 router.post('/save/:jobId', scraperController.save);
 

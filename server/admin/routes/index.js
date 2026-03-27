@@ -72,6 +72,9 @@ router.delete('/leads/:leadId', requireAuth, leadsController.removeLead);
 router.post('/training/scrape/start', requireAuth, trainingController.startScrape);
 router.get('/training/scrape/active', requireAuth, trainingController.scrapeActive);
 router.get('/training/scrape/status/:jobId', requireAuth, trainingController.scrapeStatus);
+router.post('/training/scrape/pause/:jobId', requireAuth, trainingController.scrapePause);
+router.post('/training/scrape/stop/:jobId', requireAuth, trainingController.scrapeStop);
+router.post('/training/scrape/resume/:jobId', requireAuth, trainingController.scrapeResume);
 router.post('/training/scrape/save/:jobId', requireAuth, trainingController.scrapeSave);
 
 router.post('/training/conversational', requireAuth, trainingController.saveConversational);

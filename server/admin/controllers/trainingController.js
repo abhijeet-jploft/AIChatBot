@@ -1,4 +1,12 @@
-const { createJob, getJob, runJob, getActiveJobForCompany } = require('../../services/scraperService');
+const {
+  createJob,
+  getJob,
+  runJob,
+  getActiveJobForCompany,
+  requestPauseJob,
+  requestStopJob,
+  resumeJob,
+} = require('../../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../../services/trainingLoader');
 const { setLastTrainingCompleted } = require('../../services/trainingNotificationStore');
 const { appendSystemLog } = require('../../services/adminLogStore');
@@ -103,6 +111,48 @@ async function scrapeStatus(req, res) {
       ? job.jsonlContent.split('\n').filter(Boolean).length
       : 0,
   });
+}
+
+async function scrapePause(req, res) {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.companyId !== req.adminCompanyId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const company = await CompanyAdmin.findByCompanyId(job.companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  if (!assertTrainingModule(req, res, company, 'scrape')) return;
+  const r = requestPauseJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  return res.json({ ok: true });
+}
+
+async function scrapeStop(req, res) {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.companyId !== req.adminCompanyId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const company = await CompanyAdmin.findByCompanyId(job.companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  if (!assertTrainingModule(req, res, company, 'scrape')) return;
+  const r = requestStopJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  return res.json({ ok: true });
+}
+
+async function scrapeResume(req, res) {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.companyId !== req.adminCompanyId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const company = await CompanyAdmin.findByCompanyId(job.companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  if (!assertTrainingModule(req, res, company, 'scrape')) return;
+  const r = resumeJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  return res.json({ ok: true });
 }
 
 async function scrapeActive(req, res) {
@@ -473,6 +523,9 @@ async function listFiles(req, res) {
 module.exports = {
   startScrape,
   scrapeStatus,
+  scrapePause,
+  scrapeStop,
+  scrapeResume,
   scrapeActive,
   scrapeSave,
   saveConversational,

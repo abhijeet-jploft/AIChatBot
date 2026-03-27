@@ -218,6 +218,8 @@ function loadPersistedJobs() {
           error: parsed.error || null,
           crawlState: parsed.crawlState || null,
           runnerActive: false,
+          pauseFlag: Boolean(parsed.pauseFlag),
+          stopFlag: Boolean(parsed.stopFlag),
         });
       } catch {
         /* ignore malformed snapshots */
@@ -745,9 +747,10 @@ async function runJob(jobId) {
   const job = jobs.get(jobId);
   if (!job) return;
   if (job.runnerActive) return;
+  if (job.status === 'completed' || job.status === 'stopped') return;
   job.runnerActive = true;
 
-  if (job.status !== 'completed' && job.status !== 'failed') {
+  if (job.status !== 'completed' && job.status !== 'failed' && job.status !== 'stopped') {
     job.status = 'running';
   }
   if (!job.startedAt) job.startedAt = Date.now();
@@ -785,6 +788,23 @@ async function runJob(jobId) {
       persistJob(job);
     };
 
+    const handleUserControl = () => {
+      if (job.stopFlag) {
+        job.stopFlag = false;
+        finalizeStoppedJobSync(job, scraped, rootUrl, log);
+        return true;
+      }
+      if (job.pauseFlag) {
+        job.pauseFlag = false;
+        job.status = 'paused';
+        log('Paused by user.');
+        syncState();
+        persistJob(job);
+        return true;
+      }
+      return false;
+    };
+
     if (!queue.length && !visited.size && !scraped.length) {
       log(`Starting deep link crawl: ${rootUrl}`);
       // Phase 1: Root first, then priority seeds
@@ -816,7 +836,14 @@ async function runJob(jobId) {
       syncState();
     }
 
+    if (handleUserControl()) {
+      return;
+    }
+
     while (queue.length > 0 && scraped.length < MAX_PAGES) {
+      if (handleUserControl()) {
+        return;
+      }
       const url = queue.shift();
       if (!url || visited.has(url)) continue;
       visited.add(url);
@@ -828,7 +855,13 @@ async function runJob(jobId) {
 
       try {
         await new Promise((r) => setTimeout(r, REQUEST_DELAY));
+        if (handleUserControl()) {
+          return;
+        }
         const pageData = await fetchPage(url);
+        if (handleUserControl()) {
+          return;
+        }
         const rawHtml = pageData?.rawHtml;
 
         if (!rawHtml) {
@@ -1010,6 +1043,8 @@ function createJob(url, companyId) {
     error: null,
     crawlState: null,
     runnerActive: false,
+    pauseFlag: false,
+    stopFlag: false,
   };
   jobs.set(jobId, job);
   persistJob(job);
@@ -1020,14 +1055,110 @@ function getJob(jobId) {
   return jobs.get(jobId) || null;
 }
 
-/** Returns the first active (pending or running) job for the company, if any. */
+/** Returns the first active (pending, running, or paused) job for the company, if any. */
 function getActiveJobForCompany(companyId) {
   for (const job of jobs.values()) {
-    if (job.companyId === companyId && (job.status === 'pending' || job.status === 'running')) {
+    if (
+      job.companyId === companyId
+      && (job.status === 'pending' || job.status === 'running' || job.status === 'paused')
+    ) {
       return job;
     }
   }
   return null;
+}
+
+/**
+ * Pause a running crawl (picked up between pages).
+ * @returns {{ ok: true } | { ok: false, error: string }}
+ */
+function requestPauseJob(jobId) {
+  const job = jobs.get(jobId);
+  if (!job) return { ok: false, error: 'Job not found' };
+  if (job.status !== 'running' || !job.runnerActive) {
+    return { ok: false, error: 'Job is not running' };
+  }
+  job.pauseFlag = true;
+  return { ok: true };
+}
+
+function finalizeStoppedJobSync(job, scraped, rootUrl, log) {
+  log('Stopped by user.');
+  if (!scraped.length) {
+    job.status = 'stopped';
+    job.error = job.error || 'Stopped before any pages were scraped.';
+    job.jsonlContent = null;
+    job.crawlState = null;
+  } else {
+    job.jsonlContent = buildJobJsonlContent(job, scraped, rootUrl);
+    const lineCount = job.jsonlContent ? job.jsonlContent.split('\n').filter(Boolean).length : 0;
+    job.status = 'stopped';
+    job.completedAt = Date.now();
+    job.crawlState = null;
+    log(`Stopped with partial results — ${lineCount} JSONL lines from ${scraped.length} pages.`);
+  }
+  job.progress = { queued: 0, done: scraped.length };
+  persistJob(job);
+}
+
+/** Stop when no runner is active (e.g. paused). */
+function stopJobImmediate(jobId) {
+  const job = jobs.get(jobId);
+  if (!job) return { ok: false, error: 'Job not found' };
+  if (['completed', 'failed', 'stopped'].includes(job.status)) {
+    return { ok: false, error: 'Job already finished' };
+  }
+
+  const log = (msg) => {
+    if (!job.log) job.log = [];
+    job.log.push(msg);
+    if (job.log.length > 2000) job.log.shift();
+    persistJob(job);
+  };
+  const state = job.crawlState || {};
+  const rootUrl = state.rootUrl || normalizeUrl(job.url, job.url);
+  const scraped = Array.isArray(state.scrapedPages) ? [...state.scrapedPages] : [];
+
+  finalizeStoppedJobSync(job, scraped, rootUrl, log);
+  job.runnerActive = false;
+  persistJob(job);
+  return { ok: true };
+}
+
+/**
+ * Signal stop: in-flight runs exit between pages; paused/pending jobs finalize immediately.
+ * @returns {{ ok: true } | { ok: false, error: string }}
+ */
+function requestStopJob(jobId) {
+  const job = jobs.get(jobId);
+  if (!job) return { ok: false, error: 'Job not found' };
+  if (['completed', 'failed', 'stopped'].includes(job.status)) {
+    return { ok: false, error: 'Job already finished' };
+  }
+  if (job.runnerActive) {
+    job.stopFlag = true;
+    return { ok: true };
+  }
+  return stopJobImmediate(jobId);
+}
+
+/**
+ * Resume a paused job (continues from persisted crawl state).
+ * @returns {{ ok: true } | { ok: false, error: string }}
+ */
+function resumeJob(jobId) {
+  const job = jobs.get(jobId);
+  if (!job) return { ok: false, error: 'Job not found' };
+  if (job.status !== 'paused') {
+    return { ok: false, error: 'Job is not paused' };
+  }
+  if (job.runnerActive) return { ok: false, error: 'Job runner is already active' };
+  job.pauseFlag = false;
+  job.stopFlag = false;
+  runJob(jobId).catch((err) => {
+    console.error(`[scraper] resume job ${jobId} crashed:`, err.message);
+  });
+  return { ok: true };
 }
 
 loadPersistedJobs();
@@ -1041,4 +1172,12 @@ for (const job of jobs.values()) {
   }
 }
 
-module.exports = { createJob, getJob, runJob, getActiveJobForCompany };
+module.exports = {
+  createJob,
+  getJob,
+  runJob,
+  getActiveJobForCompany,
+  requestPauseJob,
+  requestStopJob,
+  resumeJob,
+};

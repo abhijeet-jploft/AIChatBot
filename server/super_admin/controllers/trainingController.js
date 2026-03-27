@@ -3,7 +3,15 @@
  * Wraps the existing admin training service but allows the super admin
  * to target any company (passed as req.body.companyId or req.params.companyId).
  */
-const { createJob, getJob, runJob, getActiveJobForCompany } = require('../../services/scraperService');
+const {
+  createJob,
+  getJob,
+  runJob,
+  getActiveJobForCompany,
+  requestPauseJob,
+  requestStopJob,
+  resumeJob,
+} = require('../../services/scraperService');
 const { TRAIN_DATA_DIR } = require('../../services/trainingLoader');
 const { setLastTrainingCompleted } = require('../../services/trainingNotificationStore');
 const { appendSystemLog } = require('../../services/adminLogStore');
@@ -80,6 +88,40 @@ async function scrapeStatus(req, res) {
     completedAt: job.completedAt, error: job.error,
     jsonlLines: job.jsonlContent ? job.jsonlContent.split('\n').filter(Boolean).length : 0,
   });
+}
+
+// POST .../scrape/pause/:jobId
+async function scrapePause(req, res) {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.companyId !== req.params.companyId) {
+    return res.status(403).json({ error: 'Job does not belong to this company' });
+  }
+  const r = requestPauseJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  return res.json({ ok: true });
+}
+
+async function scrapeStop(req, res) {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.companyId !== req.params.companyId) {
+    return res.status(403).json({ error: 'Job does not belong to this company' });
+  }
+  const r = requestStopJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  return res.json({ ok: true });
+}
+
+async function scrapeResume(req, res) {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.companyId !== req.params.companyId) {
+    return res.status(403).json({ error: 'Job does not belong to this company' });
+  }
+  const r = resumeJob(req.params.jobId);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  return res.json({ ok: true });
 }
 
 // GET /super-admin/training/:companyId/scrape/active
@@ -389,7 +431,13 @@ async function listFiles(req, res) {
 }
 
 module.exports = {
-  startScrape, scrapeStatus, scrapeActive, scrapeSave,
+  startScrape,
+  scrapeStatus,
+  scrapePause,
+  scrapeStop,
+  scrapeResume,
+  scrapeActive,
+  scrapeSave,
   saveConversational, saveDocuments,
   saveDatabase, transcribeMedia, saveMedia, saveStructured,
   getManual, setManual, listFiles,
