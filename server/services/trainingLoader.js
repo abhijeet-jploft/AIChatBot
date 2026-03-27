@@ -4,6 +4,7 @@ const path = require('path');
 const TRAIN_DATA_DIR = path.join(__dirname, '../../train_data');
 const MAX_CONTEXT_CHARS = parseInt(process.env.TRAINING_CONTEXT_MAX_CHARS || '60000', 10);
 const MAX_JSONL_MATCHES = parseInt(process.env.TRAINING_JSONL_TOP_K || '5', 10);
+const RESERVED_TRAINING_DIRS = new Set(['_default', '_scrape_jobs']);
 
 const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'build', 'built', 'by', 'can', 'could',
@@ -112,7 +113,7 @@ function getCompanies() {
 
   const entries = fs.readdirSync(TRAIN_DATA_DIR, { withFileTypes: true });
   return entries
-    .filter((e) => e.isDirectory() && e.name.startsWith('_') && e.name !== '_default')
+    .filter((e) => e.isDirectory() && e.name.startsWith('_') && !RESERVED_TRAINING_DIRS.has(e.name) && !e.name.startsWith('_scrape_jobs'))
     .map((e) => ({
       id: e.name,
       name: e.name.replace(/^_/, '').replace(/_/g, ' '),

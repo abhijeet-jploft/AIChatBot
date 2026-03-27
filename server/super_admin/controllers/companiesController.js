@@ -24,6 +24,13 @@ function normalizeAdminEmail(raw) {
   return String(raw || '').trim().toLowerCase();
 }
 
+function normalizeCompanyWebsite(raw) {
+  const s = String(raw || '').trim().slice(0, 512);
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
+
 // GET /super-admin/companies
 async function listCompanies(req, res) {
   try {
@@ -38,6 +45,7 @@ async function listCompanies(req, res) {
        FROM chatbots c
        LEFT JOIN chat_settings ch ON ch.company_id = c.company_id
        LEFT JOIN embed_settings em ON em.company_id = c.company_id
+       WHERE c.company_id NOT IN ('_scrape_jobs')
        ORDER BY c.created_at DESC`
     );
     return res.json(rows);
@@ -151,6 +159,7 @@ async function getCompany(req, res) {
     const { rows } = await pool.query(
       `SELECT
          c.company_id, c.name, c.description, c.created_at, c.admin_email, c.is_suspended,
+         c.owner_name, c.admin_phone, c.company_website, c.industry_category,
          CASE WHEN c.password_hash IS NOT NULL THEN true ELSE false END AS admin_configured,
          ch.display_name, ch.agent_paused, ch.ai_mode, ch.ai_provider, ch.ai_model,
          ch.greeting_message, ch.widget_position,
@@ -180,7 +189,16 @@ async function getCompany(req, res) {
 async function updateCompany(req, res) {
   try {
     const { companyId } = req.params;
-    const { name, description, adminEmail } = req.body;
+    const {
+      name,
+      description,
+      adminEmail,
+      ownerName,
+      adminPhone,
+      phone,
+      companyWebsite,
+      industryCategory,
+    } = req.body;
     const updates = [];
     const params = [];
 
@@ -201,6 +219,27 @@ async function updateCompany(req, res) {
       }
       updates.push(`admin_email = $${params.length + 1}`);
       params.push(email);
+    }
+
+    if (ownerName !== undefined) {
+      updates.push(`owner_name = $${params.length + 1}`);
+      params.push(String(ownerName || '').trim().slice(0, 255) || null);
+    }
+
+    const phoneVal = adminPhone !== undefined ? adminPhone : phone;
+    if (phoneVal !== undefined) {
+      updates.push(`admin_phone = $${params.length + 1}`);
+      params.push(String(phoneVal || '').trim().slice(0, 64) || null);
+    }
+
+    if (companyWebsite !== undefined) {
+      updates.push(`company_website = $${params.length + 1}`);
+      params.push(normalizeCompanyWebsite(companyWebsite));
+    }
+
+    if (industryCategory !== undefined) {
+      updates.push(`industry_category = $${params.length + 1}`);
+      params.push(String(industryCategory || '').trim().slice(0, 128) || null);
     }
 
     if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });

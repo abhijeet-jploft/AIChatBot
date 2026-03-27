@@ -24,6 +24,7 @@ router.post('/auth/setup', authController.setup);
 // ─── Protected ──────────────────────────────────────────────────────────────
 router.post('/auth/logout', requireAuth, authController.logout);
 router.get('/auth/me', requireAuth, authController.me);
+router.patch('/auth/profile', requireAuth, authController.updateProfile);
 router.post('/auth/change-password', requireAuth, authController.changePassword);
 
 router.get('/settings', requireAuth, settingsController.getSettings);

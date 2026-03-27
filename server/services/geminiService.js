@@ -1,6 +1,13 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { loadCompanyContext } = require('./trainingLoader');
-const { buildBusinessProfilePrompt, buildDocxRulesPrompt, buildLanguageInstruction, enforceOutputRules, inferCompanyProfile } = require('./chatRules');
+const {
+  buildBusinessProfilePrompt,
+  buildConfiguredBusinessInfoPrompt,
+  buildDocxRulesPrompt,
+  buildLanguageInstruction,
+  enforceOutputRules,
+  inferCompanyProfile,
+} = require('./chatRules');
 const {
   buildConversationModePrompt,
   buildModeContext,
@@ -22,11 +29,18 @@ const BASE_SYSTEM_PROMPT_PREFIX =
   '- Use emojis naturally in your responses to make the conversation fun and engaging (e.g. 👍 😊 ✨ 🎯 💡). Do not overuse—1–3 per message is enough.\n' +
   '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n';
 
-function buildBaseSystemPrompt(assistantName = '', languageInstruction = '', businessProfilePrompt = '', companyProfile = null) {
+function buildBaseSystemPrompt(
+  assistantName = '',
+  languageInstruction = '',
+  businessProfilePrompt = '',
+  companyProfile = null,
+  configuredBusinessInfoPrompt = ''
+) {
   return [
     BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName, companyProfile }),
     languageInstruction,
     businessProfilePrompt,
+    configuredBusinessInfoPrompt,
   ].filter(Boolean).join('\n');
 }
 
@@ -38,12 +52,21 @@ function isModelNotFoundError(err) {
   return (msg.includes('404') && (msg.includes('not found') || msg.includes('not supported'))) || msg.includes('429');
 }
 
-function buildPrompt(companyId, messages, modeId, modeContext, assistantName = '', languageConfig = {}) {
+function buildPrompt(
+  companyId,
+  messages,
+  modeId,
+  modeContext,
+  assistantName = '',
+  languageConfig = {},
+  configuredBusinessInfo = null
+) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
   const context = loadCompanyContext(companyId, latestUserMessage);
   const companyProfile = inferCompanyProfile({ context });
   const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const convo = (messages || []).map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`).join('\n');
+  const configuredBizPrompt = buildConfiguredBusinessInfoPrompt(configuredBusinessInfo);
   return [
     buildBaseSystemPrompt(
       assistantName,
@@ -54,10 +77,10 @@ function buildPrompt(companyId, messages, modeId, modeContext, assistantName = '
         languageAutoDetectEnabled: languageConfig?.autoDetectEnabled,
         languageExtraLocales: languageConfig?.extraLocales,
         context,
-      })
-      ,
+      }),
       buildBusinessProfilePrompt(companyProfile),
-      companyProfile
+      companyProfile,
+      configuredBizPrompt
     ),
     context
       ? `## Company Knowledge Base\nUse the following information to answer accurately and contextually:\n\n${context}`
@@ -81,6 +104,7 @@ async function sendMessage(companyId, messages, options = {}) {
     model,
     assistantName,
     languageConfig,
+    configuredBusinessInfo,
     ..._rest
   } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
@@ -96,7 +120,15 @@ async function sendMessage(companyId, messages, options = {}) {
   if (modelName.toLowerCase().includes('claude')) {
     modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   }
-  const prompt = buildPrompt(companyId, messages, modeId, modeContext, assistantName, languageConfig);
+  const prompt = buildPrompt(
+    companyId,
+    messages,
+    modeId,
+    modeContext,
+    assistantName,
+    languageConfig,
+    configuredBusinessInfo
+  );
   const candidates = [modelName, ...GEMINI_MODEL_FALLBACKS].filter((v, i, arr) => v && arr.indexOf(v) === i);
   try {
     for (let i = 0; i < candidates.length; i += 1) {

@@ -8,6 +8,7 @@ import Leads from './pages/Leads';
 import Conversations from './pages/Conversations';
 import LiveMonitoring from './pages/LiveMonitoring';
 import Settings from './pages/Settings';
+import AccountProfile from './pages/AccountProfile';
 import ApiSettings from './pages/ApiSettings';
 import VoiceSettings from './pages/VoiceSettings';
 import Theme from './pages/Theme';
@@ -49,6 +50,7 @@ function AdminLayout({ children }) {
     {
       label: 'Configuration',
       items: [
+        { to: '/admin/account-profile', label: 'Account profile' },
         { to: '/admin/settings', label: 'Settings' },
         ...(canAccessVoiceSettings ? [{ to: '/admin/voice-settings', label: 'Voice Settings' }] : []),
         { to: '/admin/theme', label: 'Theme' },
@@ -223,6 +225,18 @@ export default function AdminApp() {
             token ? (
               <AdminLayout>
                 <LiveMonitoring />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="account-profile"
+          element={
+            token ? (
+              <AdminLayout>
+                <AccountProfile />
               </AdminLayout>
             ) : (
               <Navigate to="/admin/login" replace />

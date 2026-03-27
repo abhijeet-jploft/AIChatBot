@@ -54,6 +54,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_chatbots_admin_email_unique
   ON chatbots (admin_email)
   WHERE admin_email IS NOT NULL AND admin_email <> '';
 
+-- Company admin (owner) account profile (4.8.2)
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS admin_phone VARCHAR(64);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS company_website VARCHAR(512);
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS industry_category VARCHAR(128);
+
 CREATE TABLE IF NOT EXISTS admin_sessions (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id  VARCHAR(255) NOT NULL REFERENCES chatbots(company_id) ON DELETE CASCADE,
@@ -450,6 +456,18 @@ async function backfillEmbedCredentials(client) {
   }
 }
 
+async function ensureChatSettingsBusinessInfoColumns(client) {
+  await client.query(`
+    ALTER TABLE chat_settings
+      ADD COLUMN IF NOT EXISTS business_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS business_description TEXT,
+      ADD COLUMN IF NOT EXISTS business_industry_type VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS business_service_categories TEXT,
+      ADD COLUMN IF NOT EXISTS business_contact_email VARCHAR(320),
+      ADD COLUMN IF NOT EXISTS business_contact_phone VARCHAR(64)
+  `);
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 async function migrate() {
   const client = await pool.connect();
@@ -466,6 +484,8 @@ async function migrate() {
     console.log('[db] Chatbots synced');
     await ensureModuleSettingsRows(client);
     console.log('[db] Module settings rows ensured');
+    await ensureChatSettingsBusinessInfoColumns(client);
+    console.log('[db] Business info columns ready');
     await backfillEmbedCredentials(client);
     console.log('[db] Embed paths ready');
     await normalizeLanguagePrimaryCodes(client);

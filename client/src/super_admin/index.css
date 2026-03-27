@@ -351,9 +351,11 @@
 .sa-field input[type="text"],
 .sa-field input[type="search"],
 .sa-field input[type="email"],
+.sa-field input[type="tel"],
 .sa-field input[type="password"],
 .sa-field input[type="url"],
 .sa-field input[type="date"],
+.sa-field input[type="number"],
 .sa-field textarea,
 .sa-field select {
   width: 100%;

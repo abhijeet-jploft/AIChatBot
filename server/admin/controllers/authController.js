@@ -2,6 +2,26 @@ const CompanyAdmin = require('../models/CompanyAdmin');
 const { hashPassword, verifyPassword, generateToken, getSessionExpiry } = require('../utils/auth');
 const { buildAdminVisibilityPayload } = require('../../services/adminSettingsAccess');
 
+function buildMePayload(company) {
+  if (!company) return null;
+  return {
+    companyId: company.company_id,
+    name: company.name,
+    companyName: company.name,
+    ownerName: company.owner_name || null,
+    chatbotName: company.display_name || '',
+    displayName: company.name,
+    adminEmail: company.admin_email || null,
+    phone: company.admin_phone || null,
+    companyWebsite: company.company_website || null,
+    industryCategory: company.industry_category || null,
+    isSuspended: Boolean(company.is_suspended),
+    iconUrl: company.icon_url || null,
+    greetingMessage: company.greeting_message || null,
+    adminVisibility: buildAdminVisibilityPayload(company),
+  };
+}
+
 function validatePasswordStrength(password) {
   const value = String(password || '');
   if (value.length < 8) {
@@ -84,20 +104,44 @@ async function me(req, res) {
     if (!company) {
       return res.status(404).json({ error: 'Company not found' });
     }
-    res.json({
-      companyId: company.company_id,
-      name: company.name,
-      companyName: company.name,
-      chatbotName: company.display_name || '',
-      displayName: company.name,
-      adminEmail: company.admin_email || null,
-      isSuspended: Boolean(company.is_suspended),
-      iconUrl: company.icon_url || null,
-      greetingMessage: company.greeting_message || null,
-      adminVisibility: buildAdminVisibilityPayload(company),
-    });
+    res.json(buildMePayload(company));
   } catch (err) {
     console.error('[admin auth] me:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function updateProfile(req, res) {
+  try {
+    const body = req.body || {};
+    const companyId = req.adminCompanyId;
+    try {
+      await CompanyAdmin.updateAccountProfile(companyId, {
+        ownerName: body.ownerName,
+        adminEmail: body.email ?? body.adminEmail,
+        adminPhone: body.phone ?? body.adminPhone,
+        companyName: body.companyName,
+        companyWebsite: body.companyWebsite,
+        industryCategory: body.industryCategory,
+      });
+    } catch (e) {
+      if (e.code === 'EMAIL_IN_USE') {
+        return res.status(409).json({ error: 'This email is already in use by another account.' });
+      }
+      if (e.code === 'EMAIL_REQUIRED' || e.code === 'INVALID_EMAIL') {
+        return res.status(400).json({ error: 'A valid email address is required.' });
+      }
+      if (e.code === 'COMPANY_NAME_REQUIRED') {
+        return res.status(400).json({ error: 'Company name is required.' });
+      }
+      throw e;
+    }
+
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    res.json(buildMePayload(company));
+  } catch (err) {
+    console.error('[admin auth] updateProfile:', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -145,4 +189,4 @@ async function changePassword(req, res) {
   }
 }
 
-module.exports = { login, setup, logout, me, changePassword };
+module.exports = { login, setup, logout, me, updateProfile, changePassword };

@@ -105,14 +105,34 @@ function toSentence(text = '') {
   return cleaned.endsWith('.') ? cleaned : `${cleaned}.`;
 }
 
+function extractKeyDiscussionPoints({ messages = [], projectSummary = '' } = {}) {
+  const meaningfulMessages = getMeaningfulUserMessages(messages);
+  
+  // If we have recent messages, use them as discussion points
+  if (meaningfulMessages.length > 0) {
+    return meaningfulMessages.slice(-3).filter(Boolean);
+  }
+  
+  // Fallback: if there's a project summary, try to split it into sentence-like chunks
+  const cleanedSummary = stripContactArtifacts(projectSummary);
+  if (!cleanedSummary) return [];
+  
+  // Split by sentence-ending punctuation
+  const points = cleanedSummary
+    .split(/[.!?]+/)
+    .map(line => normalizeWhitespace(line))
+    .filter(line => line && line.length > 8);
+  
+  return points.slice(0, 5);
+}
+
 function buildLeadRequirementSummary({ lead = {}, messages = [] } = {}) {
   const serviceRequested = normalizeWhitespace(lead.serviceRequested || lead.service_requested || '');
   const businessType = normalizeWhitespace(lead.businessType || lead.business_type || '');
   const budgetRange = normalizeWhitespace(lead.budgetRange || lead.budget_range || '');
   const timeline = normalizeWhitespace(lead.timeline || '');
   const location = sanitizeLocation(lead.location || '');
-  const recentHighlights = getMeaningfulUserMessages(messages).slice(-2).join(' ');
-  const cleanedProjectSummary = stripContactArtifacts(lead.projectSummary || lead.project_summary || '');
+  const discussionPoints = extractKeyDiscussionPoints({ messages, projectSummary: lead.projectSummary || lead.project_summary || '' });
 
   const sentences = [];
   if (serviceRequested && businessType) {
@@ -133,11 +153,6 @@ function buildLeadRequirementSummary({ lead = {}, messages = [] } = {}) {
 
   if (location) {
     sentences.push(toSentence(`Location shared: ${location}`));
-  }
-
-  const highlightSource = recentHighlights || cleanedProjectSummary;
-  if (highlightSource) {
-    sentences.push(toSentence(`Key discussion points: ${highlightSource}`));
   }
 
   const summary = normalizeWhitespace(sentences.filter(Boolean).join(' '));
@@ -198,6 +213,7 @@ function pickVisitorDisplayName(...values) {
 module.exports = {
   buildConversationSummary,
   buildLeadRequirementSummary,
+  extractKeyDiscussionPoints,
   humanizeToken,
   normalizeWhitespace,
   pickVisitorDisplayName,

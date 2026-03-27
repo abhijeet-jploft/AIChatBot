@@ -3,6 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
 import { buildAiModePermissionChecks, hasAnyAiModePermission, hasAnyPermission, hasPermission } from '../lib/permissions';
+import {
+  INDUSTRY_PRESETS,
+  OTHER_VALUE,
+  parseIndustryFromApi,
+  buildIndustryToSave,
+} from '../../lib/accountProfileIndustry';
 
 const TRAINING_PERMISSION_CHECKS = [
   ...buildAiModePermissionChecks('view'),
@@ -27,7 +33,13 @@ export default function CompanyDetail() {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editAdminEmail, setEditAdminEmail] = useState('');
+  const [editOwnerName, setEditOwnerName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editCompanyWebsite, setEditCompanyWebsite] = useState('');
+  const [industrySelect, setIndustrySelect] = useState('');
+  const [industryOtherSpecify, setIndustryOtherSpecify] = useState('');
   const [editBusy, setEditBusy] = useState(false);
+  const [openAdminBusy, setOpenAdminBusy] = useState(false);
   const canViewCompanyInfo = hasPermission(admin, 'business_management', 'view');
   const canEditCompanyInfo = hasPermission(admin, 'business_management', 'edit');
   const canViewAdminAccess = hasPermission(admin, 'user_management', 'view');
@@ -52,6 +64,12 @@ export default function CompanyDetail() {
       setEditName(c.name || '');
       setEditDesc(c.description || '');
       setEditAdminEmail(c.admin_email || '');
+      setEditOwnerName(c.owner_name || '');
+      setEditPhone(c.admin_phone || '');
+      setEditCompanyWebsite(c.company_website || '');
+      const { select, other } = parseIndustryFromApi(c.industry_category);
+      setIndustrySelect(select);
+      setIndustryOtherSpecify(other);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -61,16 +79,37 @@ export default function CompanyDetail() {
 
   useEffect(() => { load(); }, [companyId]);
 
+  const handleIndustrySelectChange = (value) => {
+    setIndustrySelect(value);
+    if (value !== OTHER_VALUE) setIndustryOtherSpecify('');
+  };
+
   const handleEdit = async (e) => {
     e.preventDefault();
+    const specify = industryOtherSpecify.trim();
+    if (industrySelect === OTHER_VALUE && !specify) {
+      showToast('Please specify the industry when “Other” is selected.', 'error');
+      return;
+    }
+    const industryCategory = buildIndustryToSave(industrySelect, specify);
+
     setEditBusy(true);
     try {
       const res = await saFetch(`/companies/${companyId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editName, description: editDesc, adminEmail: editAdminEmail.trim() }),
+        body: JSON.stringify({
+          name: editName,
+          description: editDesc,
+          adminEmail: editAdminEmail.trim(),
+          ownerName: editOwnerName.trim(),
+          phone: editPhone.trim(),
+          companyWebsite: editCompanyWebsite.trim(),
+          industryCategory,
+        }),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
+      const errJson = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(errJson.error || 'Update failed');
       showToast('Company updated', 'success');
       load();
     } catch (err) {
@@ -104,6 +143,7 @@ export default function CompanyDetail() {
   };
 
   const handleOpenAsAdmin = async () => {
+    setOpenAdminBusy(true);
     try {
       const res = await saFetch(`/companies/${companyId}/impersonate`, { method: 'POST' });
       const data = await res.json();
@@ -123,6 +163,8 @@ export default function CompanyDetail() {
       showToast('Opening company admin in a new tab', 'success');
     } catch (err) {
       showToast(err.message, 'error');
+    } finally {
+      setOpenAdminBusy(false);
     }
   };
 
@@ -200,8 +242,8 @@ export default function CompanyDetail() {
             </Link>
           )}
           {canEditAdminAccess && (
-            <button type="button" className="sa-btn sa-btn-primary sa-btn-sm" onClick={handleOpenAsAdmin}>
-              Open as company admin
+            <button type="button" className="sa-btn sa-btn-primary sa-btn-sm" onClick={handleOpenAsAdmin} disabled={openAdminBusy}>
+              {openAdminBusy ? 'Opening...' : 'Open as company admin'}
             </button>
           )}
         </div>
@@ -247,6 +289,77 @@ export default function CompanyDetail() {
                 Company admins sign in with this email and their password. Must be unique across companies.
               </p>
             </div>
+
+            <h4 className="sa-panel-title" style={{ fontSize: 15, marginTop: 16, marginBottom: 10 }}>
+              Owner account profile
+            </h4>
+            <p className="sa-text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+              Same fields as the company admin &quot;Account profile&quot; page. Admins can also edit these themselves.
+            </p>
+            <div className="sa-field">
+              <label>Owner name</label>
+              <input
+                type="text"
+                value={editOwnerName}
+                onChange={(e) => setEditOwnerName(e.target.value)}
+                disabled={!canEditCompanyInfo}
+                autoComplete="off"
+              />
+            </div>
+            <div className="sa-field">
+              <label>Phone number</label>
+              <input
+                type="tel"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="e.g. +1 555 0100"
+                disabled={!canEditCompanyInfo}
+                autoComplete="tel"
+              />
+            </div>
+            <div className="sa-field">
+              <label>Company website</label>
+              <input
+                type="text"
+                value={editCompanyWebsite}
+                onChange={(e) => setEditCompanyWebsite(e.target.value)}
+                placeholder="https://example.com"
+                disabled={!canEditCompanyInfo}
+                autoComplete="off"
+              />
+            </div>
+            <div className="sa-field">
+              <label>Industry category</label>
+              <select
+                value={industrySelect}
+                onChange={(e) => handleIndustrySelectChange(e.target.value)}
+                disabled={!canEditCompanyInfo}
+              >
+                <option value="">Select industry…</option>
+                {INDUSTRY_PRESETS.map((label) => (
+                  <option key={label} value={label}>{label}</option>
+                ))}
+                <option value={OTHER_VALUE}>{OTHER_VALUE}</option>
+              </select>
+            </div>
+            {industrySelect === OTHER_VALUE ? (
+              <div className="sa-field">
+                <label>Please specify industry</label>
+                <input
+                  type="text"
+                  value={industryOtherSpecify}
+                  onChange={(e) => setIndustryOtherSpecify(e.target.value)}
+                  placeholder='e.g. Agriculture, Non-profit'
+                  maxLength={120}
+                  required
+                  disabled={!canEditCompanyInfo}
+                />
+                <p className="sa-text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Required when Other is selected.
+                </p>
+              </div>
+            ) : null}
+
             <div className="sa-field-row">
               <div className="sa-info-item"><span>AI Mode</span><strong>{company.ai_mode || 'default'}</strong></div>
               <div className="sa-info-item"><span>AI Provider</span><strong>{company.ai_provider || '—'}</strong></div>

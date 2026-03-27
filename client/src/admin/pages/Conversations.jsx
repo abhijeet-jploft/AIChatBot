@@ -1,6 +1,36 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+
+async function toggleElementFullscreen(element) {
+  if (!element) return;
+
+  if (document.fullscreenElement === element) {
+    await document.exitFullscreen();
+    return;
+  }
+
+  if (document.fullscreenElement) {
+    await document.exitFullscreen();
+  }
+
+  if (typeof element.requestFullscreen !== 'function') {
+    return;
+  }
+
+  await element.requestFullscreen();
+}
+
+function TranscriptExpandIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
 
 const PAGE_SIZE = 20;
 const INTENT_OPTIONS = [
@@ -83,6 +113,8 @@ export default function Conversations() {
   const [convertLeadDraft, setConvertLeadDraft] = useState({ name: '', phone: '', email: '', location: '' });
   const [convertingLead, setConvertingLead] = useState(false);
   const [convertLeadError, setConvertLeadError] = useState('');
+  const transcriptPanelRef = useRef(null);
+  const [isTranscriptFullscreen, setIsTranscriptFullscreen] = useState(false);
 
   const loadConversations = useCallback(async () => {
     setLoading(true);
@@ -168,6 +200,29 @@ export default function Conversations() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsTranscriptFullscreen(document.fullscreenElement === transcriptPanelRef.current);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    handleFullscreenChange();
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!detailId && document.fullscreenElement === transcriptPanelRef.current) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, [detailId]);
+
+  const handleTranscriptFullscreen = useCallback(async () => {
+    await toggleElementFullscreen(transcriptPanelRef.current);
+  }, []);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -483,9 +538,20 @@ export default function Conversations() {
                       </div>
                     ) : null}
 
-                    <div>
-                      <div className="small fw-semibold mb-2">Full transcript</div>
-                      <div style={{ maxHeight: 360, overflowY: 'auto', background: '#11131a', border: '1px solid #2e3545', borderRadius: 8, padding: 12 }}>
+                    <div ref={transcriptPanelRef}>
+                      <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
+                        <div className="small fw-semibold mb-0">Full transcript</div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+                          onClick={handleTranscriptFullscreen}
+                          title={isTranscriptFullscreen ? 'Exit full screen' : 'Open transcript in full screen'}
+                          aria-label={isTranscriptFullscreen ? 'Exit full screen' : 'Open transcript in full screen'}
+                        >
+                          <TranscriptExpandIcon />
+                        </button>
+                      </div>
+                      <div style={isTranscriptFullscreen ? { height: 'calc(100vh - 128px)', overflowY: 'auto', background: '#11131a', border: '1px solid #2e3545', borderRadius: 8, padding: 12 } : { maxHeight: 360, overflowY: 'auto', background: '#11131a', border: '1px solid #2e3545', borderRadius: 8, padding: 12 }}>
                         {(detail.messages || []).length ? (
                           detail.messages.map((message, index) => (
                             <div key={`${message.createdAt}-${index}`} className="mb-2" style={{ color: '#d1d5db' }}>

@@ -80,6 +80,27 @@ function buildLanguageConfig(chatbot = null) {
   };
 }
 
+function pickConfiguredBusinessInfo(chatbot) {
+  if (!chatbot) return null;
+  const businessName = String(chatbot.business_name || '').trim();
+  const businessDescription = String(chatbot.business_description || '').trim();
+  const industryType = String(chatbot.business_industry_type || '').trim();
+  const serviceCategories = String(chatbot.business_service_categories || '').trim();
+  const contactEmail = String(chatbot.business_contact_email || '').trim();
+  const contactPhone = String(chatbot.business_contact_phone || '').trim();
+  if (!businessName && !businessDescription && !industryType && !serviceCategories && !contactEmail && !contactPhone) {
+    return null;
+  }
+  return {
+    businessName: businessName || undefined,
+    businessDescription: businessDescription || undefined,
+    industryType: industryType || undefined,
+    serviceCategories: serviceCategories || undefined,
+    contactEmail: contactEmail || undefined,
+    contactPhone: contactPhone || undefined,
+  };
+}
+
 function buildVoiceConfig(chatbot = null) {
   const adminVisibility = buildAdminVisibilityPayload(chatbot);
   return {
@@ -273,6 +294,7 @@ async function postMessage(req, res) {
 
     const aiStartedAt = Date.now();
     const effectiveAiModel = resolveEffectiveModel(aiConfig.provider, aiConfig.model);
+    const configuredBusinessInfo = pickConfiguredBusinessInfo(chatbot);
     let response = '';
     try {
       response = aiConfig.provider === 'gemini'
@@ -283,6 +305,7 @@ async function postMessage(req, res) {
           apiKey: aiConfig.geminiApiKey,
           assistantName: aiConfig.assistantName,
           languageConfig: aiConfig.language,
+          configuredBusinessInfo,
         })
         : await sendAnthropicMessage(companyId, messages, {
           modeId: selectedModeId,
@@ -291,6 +314,7 @@ async function postMessage(req, res) {
           apiKey: aiConfig.anthropicApiKey,
           assistantName: aiConfig.assistantName,
           languageConfig: aiConfig.language,
+          configuredBusinessInfo,
         });
       await trackApiUsage({
         companyId,

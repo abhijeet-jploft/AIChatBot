@@ -354,6 +354,14 @@ async function serializeCompanySettings(company) {
     displayName: company.display_name || '',
     iconUrl: (company.icon_url != null && String(company.icon_url).trim()) || null,
     greetingMessage: company.greeting_message || null,
+    businessInformation: {
+      businessName: company.business_name || '',
+      businessDescription: company.business_description || '',
+      industryType: company.business_industry_type || '',
+      serviceCategories: company.business_service_categories || '',
+      contactEmail: company.business_contact_email || '',
+      contactPhone: company.business_contact_phone || '',
+    },
     widget: {
       position: String(company.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
     },
@@ -437,6 +445,7 @@ async function updateSettings(req, res) {
       displayName,
       iconUrl,
       greetingMessage,
+      businessInformation,
       widget,
       aiMode,
       ai,
@@ -547,11 +556,31 @@ async function updateSettings(req, res) {
       normalizedVoiceGender = companyCustomVoice.gender;
     }
 
+    let businessInfoPatch = {};
+    if (businessInformation !== undefined) {
+      const bi = businessInformation && typeof businessInformation === 'object' ? businessInformation : {};
+      const bizEmail = String(bi.contactEmail ?? bi.businessContactEmail ?? '').trim().toLowerCase();
+      if (bizEmail && !isValidEmail(bizEmail)) {
+        return res.status(400).json({ error: 'Invalid business contact email' });
+      }
+      businessInfoPatch = {
+        business_name: String(bi.businessName || '').trim().slice(0, 255) || null,
+        business_description: String(bi.businessDescription || '').trim() || null,
+        business_industry_type: String(bi.industryType || '').trim().slice(0, 255) || null,
+        business_service_categories: String(bi.serviceCategories || '').trim() || null,
+        business_contact_email: bizEmail || null,
+        business_contact_phone: String(bi.contactPhone || '').trim().slice(0, 64) || null,
+      };
+    }
+
     await CompanyAdmin.updateSettings(req.adminCompanyId, {
       company_name: resolvedCompanyName,
       display_name: chatbotTitle,
       icon_url: iconUrl !== undefined ? (String(iconUrl).trim() || null) : undefined,
-      greeting_message: greetingMessage !== undefined ? greetingMessage : undefined,
+      greeting_message: greetingMessage !== undefined
+        ? (String(greetingMessage).trim() || null)
+        : undefined,
+      ...businessInfoPatch,
       widget_position: widget?.position !== undefined
         ? (String(widget.position).toLowerCase() === 'left' ? 'left' : 'right')
         : undefined,

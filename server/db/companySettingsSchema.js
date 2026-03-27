@@ -40,7 +40,13 @@ CREATE TABLE IF NOT EXISTS chat_settings (
   ai_model VARCHAR(128),
   anthropic_api_key TEXT,
   gemini_api_key TEXT,
-  agent_paused BOOLEAN NOT NULL DEFAULT FALSE
+  agent_paused BOOLEAN NOT NULL DEFAULT FALSE,
+  business_name VARCHAR(255),
+  business_description TEXT,
+  business_industry_type VARCHAR(255),
+  business_service_categories TEXT,
+  business_contact_email VARCHAR(320),
+  business_contact_phone VARCHAR(64)
 );
 
 CREATE TABLE IF NOT EXISTS theme_settings (

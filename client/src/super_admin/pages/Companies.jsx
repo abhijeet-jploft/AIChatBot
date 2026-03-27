@@ -119,7 +119,11 @@ export default function Companies() {
     }
   };
 
-  const filteredCompanies = companies.filter((company) => {
+  const visibleCompanies = companies.filter(
+    (company) => String(company?.company_id || '').toLowerCase() !== '_scrape_jobs'
+  );
+
+  const filteredCompanies = visibleCompanies.filter((company) => {
     const matchesSearch = matchesCompanySearch(company, filters.search);
     const matchesAgent =
       filters.agentStatus === 'all' ||
@@ -150,9 +154,9 @@ export default function Companies() {
       <div className="sa-page-header">
         <div>
           <h2 className="sa-page-title">Companies</h2>
-          {!loading && companies.length > 0 && (
+          {!loading && visibleCompanies.length > 0 && (
             <div className="sa-text-muted" style={{ marginTop: 6 }}>
-              Showing {filteredCompanies.length} of {companies.length} companies
+              Showing {filteredCompanies.length} of {visibleCompanies.length} companies
             </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
@@ -99,6 +99,12 @@ export default function Settings() {
   const [chatbotName, setChatbotName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
+  const [bizName, setBizName] = useState('');
+  const [bizDescription, setBizDescription] = useState('');
+  const [bizIndustryType, setBizIndustryType] = useState('');
+  const [bizServiceCategories, setBizServiceCategories] = useState('');
+  const [bizContactEmail, setBizContactEmail] = useState('');
+  const [bizContactPhone, setBizContactPhone] = useState('');
   const [languagePrimary, setLanguagePrimary] = useState('en');
   const [languageCatalog, setLanguageCatalog] = useState([]);
   const [languageMulti, setLanguageMulti] = useState(false);
@@ -123,9 +129,29 @@ export default function Settings() {
   });
   const [changingPassword, setChangingPassword] = useState(false);
   const [adminVisibility, setAdminVisibility] = useState(() => mergeAdminVisibility());
+  const [activeTab, setActiveTab] = useState('general');
+  /** Sub-sections inside General (reduces scrolling). */
+  const [generalSubTab, setGeneralSubTab] = useState('branding');
+
+  const tabChatVisible = adminVisibility.settings.chatLanguages || adminVisibility.settings.autoTrigger;
+  const tabPoliciesVisible = adminVisibility.settings.escalation || adminVisibility.settings.safety;
+
+  const validTabs = useMemo(() => {
+    const t = ['general'];
+    if (tabChatVisible) t.push('chat');
+    if (tabPoliciesVisible) t.push('policies');
+    t.push('account');
+    return t;
+  }, [tabChatVisible, tabPoliciesVisible]);
+
+  useEffect(() => {
+    if (!validTabs.includes(activeTab)) setActiveTab('general');
+  }, [validTabs, activeTab]);
 
   useEffect(() => {
     if (location.hash === '#chatbot-name' || location.hash === '#company-name') {
+      setActiveTab('general');
+      setGeneralSubTab('branding');
       requestAnimationFrame(() => {
         const id = location.hash === '#company-name' ? 'company-name' : 'chatbot-name';
         document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -145,6 +171,13 @@ export default function Settings() {
         setChatbotName(d.chatbotName ?? d.displayName ?? '');
         setIconUrl(d.iconUrl || '');
         setGreetingMessage(d.greetingMessage || '');
+        const bi = d.businessInformation || {};
+        setBizName(bi.businessName || '');
+        setBizDescription(bi.businessDescription || '');
+        setBizIndustryType(bi.industryType || '');
+        setBizServiceCategories(bi.serviceCategories || '');
+        setBizContactEmail(bi.contactEmail || '');
+        setBizContactPhone(bi.contactPhone || '');
         setWidgetPosition(d.widget?.position === 'left' ? 'left' : 'right');
         setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
         setLeadNotificationEmail(d.leadNotifications?.email || '');
@@ -209,7 +242,15 @@ export default function Settings() {
         companyName: coName,
         chatbotName: chatbotName.trim(),
         iconUrl: iconUrl.trim() || undefined,
-        greetingMessage: greetingMessage.trim() || undefined,
+        greetingMessage: greetingMessage.trim(),
+        businessInformation: {
+          businessName: bizName.trim(),
+          businessDescription: bizDescription.trim(),
+          industryType: bizIndustryType.trim(),
+          serviceCategories: bizServiceCategories.trim(),
+          contactEmail: bizContactEmail.trim(),
+          contactPhone: bizContactPhone.trim(),
+        },
         widget: {
           position: widgetPosition,
         },
@@ -328,12 +369,102 @@ export default function Settings() {
   const isAutoOpenMode = autoTrigger.openMode === 'auto';
   const showVoiceSettingsCard = hasAnyVoiceSettingAccess(adminVisibility);
 
+  const tabBtnClass = (id) =>
+    `nav-link py-2 px-3 ${activeTab === id ? 'active' : ''}`;
+
+  const generalSubBtnClass = (id) =>
+    `nav-link py-1 px-3 small ${generalSubTab === id ? 'active' : ''}`;
+
   return (
     <div className="p-4">
-      <h5 className="mb-4" style={{ color: 'var(--chat-text-heading)' }}>Company settings</h5>
+      <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Company settings</h5>
       <form onSubmit={handleSubmit}>
+        <ul
+          className="nav nav-tabs flex-wrap gap-1 mb-3 border-bottom"
+          style={{ borderColor: 'var(--chat-border)' }}
+          role="tablist"
+        >
+          <li className="nav-item" role="presentation">
+            <button type="button" className={tabBtnClass('general')} onClick={() => setActiveTab('general')} style={{ color: activeTab === 'general' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'general' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
+              General
+            </button>
+          </li>
+          {tabChatVisible ? (
+            <li className="nav-item" role="presentation">
+              <button type="button" className={tabBtnClass('chat')} onClick={() => setActiveTab('chat')} style={{ color: activeTab === 'chat' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'chat' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
+                Chat &amp; automation
+              </button>
+            </li>
+          ) : null}
+          {tabPoliciesVisible ? (
+            <li className="nav-item" role="presentation">
+              <button type="button" className={tabBtnClass('policies')} onClick={() => setActiveTab('policies')} style={{ color: activeTab === 'policies' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'policies' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
+                Escalation &amp; safety
+              </button>
+            </li>
+          ) : null}
+          <li className="nav-item" role="presentation">
+            <button type="button" className={tabBtnClass('account')} onClick={() => setActiveTab('account')} style={{ color: activeTab === 'account' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'account' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
+              Account
+            </button>
+          </li>
+        </ul>
+
+        {activeTab === 'general' && (
+        <div className="settings-tab-panel">
+        <ul
+          className="nav nav-tabs flex-wrap gap-1 mb-3 pb-2 border-bottom"
+          style={{ borderColor: 'var(--chat-border)' }}
+          role="tablist"
+          aria-label="General settings sections"
+        >
+          <li className="nav-item" role="presentation">
+            <button
+              type="button"
+              className={generalSubBtnClass('branding')}
+              onClick={() => setGeneralSubTab('branding')}
+              style={{
+                color: generalSubTab === 'branding' ? 'var(--chat-text-heading)' : 'var(--chat-muted)',
+                background: generalSubTab === 'branding' ? 'var(--chat-surface)' : 'transparent',
+                borderColor: 'var(--chat-border)',
+              }}
+            >
+              Branding &amp; greeting
+            </button>
+          </li>
+          <li className="nav-item" role="presentation">
+            <button
+              type="button"
+              className={generalSubBtnClass('business')}
+              onClick={() => setGeneralSubTab('business')}
+              style={{
+                color: generalSubTab === 'business' ? 'var(--chat-text-heading)' : 'var(--chat-muted)',
+                background: generalSubTab === 'business' ? 'var(--chat-surface)' : 'transparent',
+                borderColor: 'var(--chat-border)',
+              }}
+            >
+              Business information
+            </button>
+          </li>
+          <li className="nav-item" role="presentation">
+            <button
+              type="button"
+              className={generalSubBtnClass('website')}
+              onClick={() => setGeneralSubTab('website')}
+              style={{
+                color: generalSubTab === 'website' ? 'var(--chat-text-heading)' : 'var(--chat-muted)',
+                background: generalSubTab === 'website' ? 'var(--chat-surface)' : 'transparent',
+                borderColor: 'var(--chat-border)',
+              }}
+            >
+              Widget, embed &amp; leads
+            </button>
+          </li>
+        </ul>
         <div className="row g-4 align-items-start">
-          <div className="col-12 col-lg-8">
+          <div className="col-12">
+            {generalSubTab === 'branding' && (
+            <>
             <div className="mb-3" id="company-name">
               <label className="form-label">Company name</label>
               <input
@@ -404,98 +535,83 @@ export default function Settings() {
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               />
             </div>
+            </>
+            )}
 
-            {adminVisibility.settings.chatLanguages && (
+            {generalSubTab === 'business' && (
             <div className="mb-4 p-3 rounded-3" style={cardStyle}>
-              <div className="fw-semibold mb-2" style={headingStyle}>Chat languages</div>
+              <div className="fw-semibold mb-2" style={headingStyle}>Business information</div>
               <p className="small mb-3" style={mutedStyle}>
-                Default language for replies when the visitor&apos;s language is unclear. With multi-language enabled, the assistant matches the visitor when possible.
-                ElevenLabs voice uses the same language hint as the generated reply (multilingual voices).
+                Optional context for the AI when chatting with visitors (business identity, services, public contact). If left blank, the assistant behaves as before. If provided, it may reference this when answers benefit—knowledge base still wins for product and policy facts.
               </p>
               <div className="mb-3">
-                <label className="form-label">Primary language</label>
-                <select
-                  className="form-select"
-                  value={languagePrimary}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setLanguagePrimary(next);
-                    setLanguageExtra((prev) => prev.filter((c) => c !== next));
-                  }}
-                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-                >
-                  {(languageCatalog.length
-                    ? languageCatalog
-                    : [{ code: 'en', label: 'English' }]
-                  ).map((opt) => (
-                    <option key={opt.code} value={opt.code}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-check mb-2">
+                <label className="form-label">Business name</label>
                 <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="lang-multi"
-                  checked={languageMulti}
-                  onChange={(e) => setLanguageMulti(e.target.checked)}
+                  type="text"
+                  className="form-control"
+                  value={bizName}
+                  onChange={(e) => setBizName(e.target.value)}
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
                 />
-                <label className="form-check-label" htmlFor="lang-multi" style={labelStyle}>
-                  Multi-language replies (match visitor language when supported)
-                </label>
               </div>
-              {languageMulti && (
-                <>
-                  <div className="form-check mb-2">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      id="lang-auto"
-                      checked={languageAuto}
-                      onChange={(e) => setLanguageAuto(e.target.checked)}
-                    />
-                    <label className="form-check-label" htmlFor="lang-auto" style={labelStyle}>
-                      Auto-detect language from visitor messages
-                    </label>
-                  </div>
-                  <div className="form-check mb-3">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      id="lang-manual"
-                      checked={languageManual}
-                      onChange={(e) => setLanguageManual(e.target.checked)}
-                    />
-                    <label className="form-check-label" htmlFor="lang-manual" style={labelStyle}>
-                      Allow manual language switch (widget / client)
-                    </label>
-                  </div>
-                  <label className="form-label">Additional reply languages (optional)</label>
-                  <p className="small mb-1" style={mutedStyle}>
-                    Hold Ctrl (Windows) or ⌘ (Mac) to select multiple. Leave empty to allow any supported language together with the primary.
-                  </p>
-                  <select
-                    multiple
-                    className="form-select"
-                    size={Math.min(12, Math.max(6, (languageCatalog.length || 8) - 1))}
-                    value={languageExtra}
-                    onChange={(e) => {
-                      const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-                      setLanguageExtra(selected.filter((c) => c !== languagePrimary));
-                    }}
-                    style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-                  >
-                    {languageCatalog
-                      .filter((opt) => opt.code !== languagePrimary)
-                      .map((opt) => (
-                        <option key={opt.code} value={opt.code}>{opt.label}</option>
-                      ))}
-                  </select>
-                </>
-              )}
+              <div className="mb-3">
+                <label className="form-label">Business description</label>
+                <textarea
+                  className="form-control"
+                  rows={4}
+                  value={bizDescription}
+                  onChange={(e) => setBizDescription(e.target.value)}
+                  placeholder="Short description of what the business does"
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label">Industry type</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={bizIndustryType}
+                  onChange={(e) => setBizIndustryType(e.target.value)}
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label">Service categories</label>
+                <textarea
+                  className="form-control"
+                  rows={2}
+                  value={bizServiceCategories}
+                  onChange={(e) => setBizServiceCategories(e.target.value)}
+                  placeholder="e.g. Web design, SEO, Support (comma or line separated)"
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label">Business contact email</label>
+                <input
+                  type="email"
+                  className="form-control"
+                  value={bizContactEmail}
+                  onChange={(e) => setBizContactEmail(e.target.value)}
+                  placeholder="hello@business.com"
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                />
+              </div>
+              <div className="mb-0">
+                <label className="form-label">Business contact phone number</label>
+                <input
+                  type="tel"
+                  className="form-control"
+                  value={bizContactPhone}
+                  onChange={(e) => setBizContactPhone(e.target.value)}
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                />
+              </div>
             </div>
             )}
 
+            {generalSubTab === 'website' && (
+            <>
             <div className="mb-3">
               <label className="form-label">Widget side</label>
               <select
@@ -624,34 +740,120 @@ export default function Settings() {
                 Email includes lead name, requested service, and urgency level.
               </div>
             </div>
-          </div>
 
-          <div className="col-12 col-lg-4">
             {showVoiceSettingsCard && (
-            <div
-              className="p-3 rounded-3"
-              style={{
-                background: 'var(--chat-surface)',
-                border: '1px solid var(--chat-border)',
-              }}
-            >
+            <div className="p-3 rounded-3 mt-3" style={cardStyle}>
               <div className="mb-2" style={{ color: 'var(--chat-text-heading)', fontWeight: 700 }}>
                 Voice settings
               </div>
-
               <div className="form-text" style={mutedStyle}>
                 Voice options now have a dedicated page so you can manage voice mode and male/female response voice separately.
               </div>
-
               <Link to="/admin/voice-settings" className="btn btn-sm btn-outline-primary mt-3">
                 Open voice settings
               </Link>
             </div>
             )}
+            </>
+            )}
           </div>
         </div>
+        </div>
+        )}
 
-        {/* Auto-Trigger */}
+        {activeTab === 'chat' && tabChatVisible && (
+        <div className="settings-tab-panel">
+            {adminVisibility.settings.chatLanguages && (
+            <div className="mb-4 p-3 rounded-3" style={cardStyle}>
+              <div className="fw-semibold mb-2" style={headingStyle}>Chat languages</div>
+              <p className="small mb-3" style={mutedStyle}>
+                Default language for replies when the visitor&apos;s language is unclear. With multi-language enabled, the assistant matches the visitor when possible.
+                ElevenLabs voice uses the same language hint as the generated reply (multilingual voices).
+              </p>
+              <div className="mb-3">
+                <label className="form-label">Primary language</label>
+                <select
+                  className="form-select"
+                  value={languagePrimary}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setLanguagePrimary(next);
+                    setLanguageExtra((prev) => prev.filter((c) => c !== next));
+                  }}
+                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                >
+                  {(languageCatalog.length
+                    ? languageCatalog
+                    : [{ code: 'en', label: 'English' }]
+                  ).map((opt) => (
+                    <option key={opt.code} value={opt.code}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-check mb-2">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="lang-multi"
+                  checked={languageMulti}
+                  onChange={(e) => setLanguageMulti(e.target.checked)}
+                />
+                <label className="form-check-label" htmlFor="lang-multi" style={labelStyle}>
+                  Multi-language replies (match visitor language when supported)
+                </label>
+              </div>
+              {languageMulti && (
+                <>
+                  <div className="form-check mb-2">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="lang-auto"
+                      checked={languageAuto}
+                      onChange={(e) => setLanguageAuto(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="lang-auto" style={labelStyle}>
+                      Auto-detect language from visitor messages
+                    </label>
+                  </div>
+                  <div className="form-check mb-3">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="lang-manual"
+                      checked={languageManual}
+                      onChange={(e) => setLanguageManual(e.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="lang-manual" style={labelStyle}>
+                      Allow manual language switch (widget / client)
+                    </label>
+                  </div>
+                  <label className="form-label">Additional reply languages (optional)</label>
+                  <p className="small mb-1" style={mutedStyle}>
+                    Hold Ctrl (Windows) or ⌘ (Mac) to select multiple. Leave empty to allow any supported language together with the primary.
+                  </p>
+                  <select
+                    multiple
+                    className="form-select"
+                    size={Math.min(12, Math.max(6, (languageCatalog.length || 8) - 1))}
+                    value={languageExtra}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                      setLanguageExtra(selected.filter((c) => c !== languagePrimary));
+                    }}
+                    style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                  >
+                    {languageCatalog
+                      .filter((opt) => opt.code !== languagePrimary)
+                      .map((opt) => (
+                        <option key={opt.code} value={opt.code}>{opt.label}</option>
+                      ))}
+                  </select>
+                </>
+              )}
+            </div>
+            )}
+
         {adminVisibility.settings.autoTrigger && (
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <div className="mb-3" style={headingStyle}>Auto-Trigger Settings</div>
@@ -772,7 +974,11 @@ export default function Settings() {
           </div>
         </div>
         )}
+        </div>
+        )}
 
+        {activeTab === 'policies' && tabPoliciesVisible && (
+        <div className="settings-tab-panel">
         {/* Escalation */}
         {adminVisibility.settings.escalation && (
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
@@ -904,7 +1110,11 @@ export default function Settings() {
           </div>
         </div>
         )}
+        </div>
+        )}
 
+        {activeTab === 'account' && (
+        <div className="settings-tab-panel">
         {/* Sessions */}
         <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
           <div className="mb-3" style={headingStyle}>Sessions</div>
@@ -974,11 +1184,16 @@ export default function Settings() {
             </button>
           </div>
         </div>
+        </div>
+        )}
 
-        <div className="mt-4">
+        <div className="mt-4 pt-3 border-top" style={{ borderColor: 'var(--chat-border)' }}>
           <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? 'Saving...' : 'Save settings'}
           </button>
+          <span className="small ms-3" style={{ color: 'var(--chat-muted)' }}>
+            Saves every main tab and general sub-section in one request.
+          </span>
         </div>
       </form>
     </div>

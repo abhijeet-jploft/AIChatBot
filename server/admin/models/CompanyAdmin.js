@@ -37,7 +37,10 @@ async function findByCompanyId(companyId) {
   await ensureSettingsRow(companyId);
   const { rows } = await pool.query(
     `SELECT c.id, c.company_id, c.name, c.password_hash, c.admin_email, c.is_suspended,
+            c.owner_name, c.admin_phone, c.company_website, c.industry_category,
             ch.display_name, ch.icon_url, ch.greeting_message,
+            ch.business_name, ch.business_description, ch.business_industry_type,
+            ch.business_service_categories, ch.business_contact_email, ch.business_contact_phone,
             ch.widget_position,
             ch.auto_trigger_enabled,
             ch.auto_trigger_open_mode,
@@ -125,6 +128,72 @@ async function setPassword(companyId, passwordHash) {
   );
 }
 
+function normalizeCompanyWebsite(raw) {
+  const s = String(raw || '').trim().slice(0, 512);
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
+
+/**
+ * Owner account profile — chatbots row only.
+ * @throws {Error} codes: EMAIL_IN_USE, EMAIL_REQUIRED, COMPANY_NAME_REQUIRED
+ */
+async function updateAccountProfile(companyId, {
+  ownerName,
+  adminEmail,
+  adminPhone,
+  companyName,
+  companyWebsite,
+  industryCategory,
+}) {
+  const email = normalizeAdminEmail(adminEmail);
+  if (!email) {
+    const err = new Error('Email is required');
+    err.code = 'EMAIL_REQUIRED';
+    throw err;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const err = new Error('Invalid email');
+    err.code = 'INVALID_EMAIL';
+    throw err;
+  }
+
+  const clash = await pool.query(
+    `SELECT company_id FROM chatbots WHERE admin_email = $1 AND company_id <> $2`,
+    [email, companyId]
+  );
+  if (clash.rows.length) {
+    const err = new Error('Email in use');
+    err.code = 'EMAIL_IN_USE';
+    throw err;
+  }
+
+  const name = String(companyName ?? '').trim().slice(0, 255);
+  if (!name) {
+    const err = new Error('Company name is required');
+    err.code = 'COMPANY_NAME_REQUIRED';
+    throw err;
+  }
+
+  const owner = String(ownerName ?? '').trim().slice(0, 255) || null;
+  const phone = String(adminPhone ?? '').trim().slice(0, 64) || null;
+  const websiteVal = normalizeCompanyWebsite(companyWebsite);
+  const industry = String(industryCategory ?? '').trim().slice(0, 128) || null;
+
+  await pool.query(
+    `UPDATE chatbots SET
+       owner_name = $1,
+       admin_email = $2,
+       admin_phone = $3,
+       name = $4,
+       company_website = $5,
+       industry_category = $6
+     WHERE company_id = $7`,
+    [owner, email, phone, name, websiteVal, industry, companyId]
+  );
+}
+
 async function flushTableUpdate(table, companyId, setFragments, values) {
   if (!ALLOWED_MODULE_TABLES.has(table)) throw new Error(`Invalid settings table: ${table}`);
   if (!setFragments.length) return;
@@ -141,6 +210,12 @@ async function updateSettings(companyId, {
   display_name,
   icon_url,
   greeting_message,
+  business_name,
+  business_description,
+  business_industry_type,
+  business_service_categories,
+  business_contact_email,
+  business_contact_phone,
   widget_position,
   auto_trigger_enabled,
   auto_trigger_open_mode,
@@ -216,6 +291,30 @@ async function updateSettings(companyId, {
   if (greeting_message !== undefined) {
     chatU.push(`greeting_message = $${i++}`);
     chatV.push(greeting_message);
+  }
+  if (business_name !== undefined) {
+    chatU.push(`business_name = $${i++}`);
+    chatV.push(String(business_name || '').trim().slice(0, 255) || null);
+  }
+  if (business_description !== undefined) {
+    chatU.push(`business_description = $${i++}`);
+    chatV.push(String(business_description || '').trim() || null);
+  }
+  if (business_industry_type !== undefined) {
+    chatU.push(`business_industry_type = $${i++}`);
+    chatV.push(String(business_industry_type || '').trim().slice(0, 255) || null);
+  }
+  if (business_service_categories !== undefined) {
+    chatU.push(`business_service_categories = $${i++}`);
+    chatV.push(String(business_service_categories || '').trim() || null);
+  }
+  if (business_contact_email !== undefined) {
+    chatU.push(`business_contact_email = $${i++}`);
+    chatV.push(String(business_contact_email || '').trim().slice(0, 320) || null);
+  }
+  if (business_contact_phone !== undefined) {
+    chatU.push(`business_contact_phone = $${i++}`);
+    chatV.push(String(business_contact_phone || '').trim().slice(0, 64) || null);
   }
   if (widget_position !== undefined) {
     chatU.push(`widget_position = $${i++}`);
@@ -661,6 +760,7 @@ module.exports = {
   setAdminEmail,
   ensureSettingsRow,
   setPassword,
+  updateAccountProfile,
   updateSettings,
   updateThemeSettings,
   updateAdminVisibility,

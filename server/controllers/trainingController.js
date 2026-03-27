@@ -29,7 +29,7 @@ async function getCompaniesList(req, res) {
       `SELECT c.company_id, c.name
        FROM chatbots c
        INNER JOIN chat_settings ch ON ch.company_id = c.company_id
-       WHERE c.company_id != '_default'
+       WHERE c.company_id NOT IN ('_default', '_scrape_jobs')
        ORDER BY c.name ASC`
     );
     const merged = new Map();

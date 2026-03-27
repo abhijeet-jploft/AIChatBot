@@ -2,6 +2,7 @@ const Lead = require('../../models/Lead');
 const { sendDueReminderDigest } = require('../../services/leadNotificationService');
 const {
   buildLeadRequirementSummary,
+  extractKeyDiscussionPoints,
   pickVisitorDisplayName,
   sanitizeLocation,
 } = require('../../services/conversationInsights');
@@ -116,6 +117,7 @@ async function listLeads(req, res) {
         ...row,
         display_name: pickVisitorDisplayName(row.name, row.email, row.phone),
         requirement_summary: buildLeadRequirementSummary({ lead: row }),
+        key_discussion_points: extractKeyDiscussionPoints({ projectSummary: row.project_summary || '' }),
       })),
     });
   } catch (err) {
@@ -159,6 +161,7 @@ async function getLeadDetail(req, res) {
         display_name: pickVisitorDisplayName(lead.name, lead.email, lead.phone),
         location: sanitizeLocation(lead.location),
         requirement_summary: buildLeadRequirementSummary({ lead, messages: transcript }),
+        key_discussion_points: extractKeyDiscussionPoints({ messages: transcript, projectSummary: lead.project_summary || '' }),
       },
       transcript,
       statusHistory,

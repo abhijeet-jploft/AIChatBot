@@ -608,8 +608,36 @@ function enforceOutputRules({
   return output;
 }
 
+/**
+ * Optional business summary from admin "Business information" settings.
+ * When empty, returns '' so the AI runs with only base rules + knowledge base.
+ */
+function buildConfiguredBusinessInfoPrompt(info) {
+  if (!info || typeof info !== 'object') return '';
+  const businessName = String(info.businessName || '').trim();
+  const businessDescription = String(info.businessDescription || '').trim();
+  const industryType = String(info.industryType || '').trim();
+  const serviceCategories = String(info.serviceCategories || '').trim();
+  const contactEmail = String(info.contactEmail || '').trim();
+  const contactPhone = String(info.contactPhone || '').trim();
+  const lines = [];
+  if (businessName) lines.push(`Business name: ${businessName}`);
+  if (businessDescription) lines.push(`Description: ${businessDescription}`);
+  if (industryType) lines.push(`Industry type: ${industryType}`);
+  if (serviceCategories) lines.push(`Service categories: ${serviceCategories}`);
+  if (contactEmail) lines.push(`Business contact email: ${contactEmail}`);
+  if (contactPhone) lines.push(`Business contact phone: ${contactPhone}`);
+  if (!lines.length) return '';
+  return [
+    '## Configured business information',
+    'The business configured the following. You may reference it when it helps answer visitor questions (for example what the company does or how to reach them). If this conflicts with the company knowledge base, prefer the knowledge base for product facts, policies, and page-specific details. If this section is empty or not relevant to the question, answer as usual from the knowledge base and general rules.',
+    ...lines.map((l) => `- ${l}`),
+  ].join('\n');
+}
+
 module.exports = {
   buildBusinessProfilePrompt,
+  buildConfiguredBusinessInfoPrompt,
   buildDocxRulesPrompt,
   buildLanguageInstruction,
   detectNaturalLanguageFromText,

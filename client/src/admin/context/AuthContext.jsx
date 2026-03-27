@@ -104,6 +104,10 @@ export function AuthProvider({ children }) {
           companyId: d.companyId,
           displayName: d.companyName || d.name,
           adminEmail: d.adminEmail ?? null,
+          ownerName: d.ownerName ?? null,
+          phone: d.phone ?? null,
+          companyWebsite: d.companyWebsite ?? null,
+          industryCategory: d.industryCategory ?? null,
           isSuspended: Boolean(d.isSuspended),
           adminVisibility: mergeAdminVisibility(d.adminVisibility),
         })
@@ -134,10 +138,35 @@ export function AuthProvider({ children }) {
       companyId: data.companyId,
       displayName: data.companyName,
       adminEmail: data.adminEmail ?? null,
+      ownerName: data.ownerName ?? null,
+      phone: data.phone ?? null,
+      companyWebsite: data.companyWebsite ?? null,
+      industryCategory: data.industryCategory ?? null,
       isSuspended: Boolean(data.isSuspended),
       adminVisibility: mergeAdminVisibility(data.adminVisibility),
     });
   }, [setToken]);
+
+  const refreshProfile = useCallback(async () => {
+    if (!token) return null;
+    const r = await fetch(`${API_BASE}/admin/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return null;
+    const d = await readJsonSafe(r);
+    setCompany({
+      companyId: d.companyId,
+      displayName: d.companyName || d.name,
+      adminEmail: d.adminEmail ?? null,
+      ownerName: d.ownerName ?? null,
+      phone: d.phone ?? null,
+      companyWebsite: d.companyWebsite ?? null,
+      industryCategory: d.industryCategory ?? null,
+      isSuspended: Boolean(d.isSuspended),
+      adminVisibility: mergeAdminVisibility(d.adminVisibility),
+    });
+    return d;
+  }, [token]);
 
   const logout = useCallback(async () => {
     try {
@@ -185,6 +214,7 @@ export function AuthProvider({ children }) {
         login,
         logout,
         authFetch,
+        refreshProfile,
         setError,
       }}
     >

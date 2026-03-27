@@ -57,6 +57,12 @@ export default function CompanySettings() {
   const [chatbotName, setChatbotName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
+  const [bizName, setBizName] = useState('');
+  const [bizDescription, setBizDescription] = useState('');
+  const [bizIndustryType, setBizIndustryType] = useState('');
+  const [bizServiceCategories, setBizServiceCategories] = useState('');
+  const [bizContactEmail, setBizContactEmail] = useState('');
+  const [bizContactPhone, setBizContactPhone] = useState('');
   const [languagePrimary, setLanguagePrimary] = useState('en');
   const [languageCatalog, setLanguageCatalog] = useState([]);
   const [languageMulti, setLanguageMulti] = useState(false);
@@ -81,6 +87,13 @@ export default function CompanySettings() {
       setChatbotName(d.chatbotName || '');
       setIconUrl(d.iconUrl || '');
       setGreetingMessage(d.greetingMessage || '');
+      const bi = d.businessInformation || {};
+      setBizName(bi.businessName || '');
+      setBizDescription(bi.businessDescription || '');
+      setBizIndustryType(bi.industryType || '');
+      setBizServiceCategories(bi.serviceCategories || '');
+      setBizContactEmail(bi.contactEmail || '');
+      setBizContactPhone(bi.contactPhone || '');
       setWidgetPosition(d.widget?.position === 'left' ? 'left' : 'right');
       setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
       setLeadNotificationEmail(d.leadNotifications?.email || '');
@@ -128,7 +141,15 @@ export default function CompanySettings() {
           companyName: coName,
           chatbotName: chatbotName.trim(),
           iconUrl: iconUrl.trim() || undefined,
-          greetingMessage: greetingMessage.trim() || undefined,
+          greetingMessage: greetingMessage.trim(),
+          businessInformation: {
+            businessName: bizName.trim(),
+            businessDescription: bizDescription.trim(),
+            industryType: bizIndustryType.trim(),
+            serviceCategories: bizServiceCategories.trim(),
+            contactEmail: bizContactEmail.trim(),
+            contactPhone: bizContactPhone.trim(),
+          },
           widget: { position: widgetPosition },
           leadNotifications: {
             emailEnabled: leadEmailNotificationsEnabled,
@@ -209,6 +230,36 @@ export default function CompanySettings() {
         <div className="sa-field">
           <label>Greeting message</label>
           <textarea className="sa-textarea" rows={3} value={greetingMessage} onChange={(e) => setGreetingMessage(e.target.value)} />
+        </div>
+
+        <hr style={{ borderColor: 'var(--sa-border)' }} />
+        <h4 className="sa-panel-title" style={{ marginTop: 0 }}>Business information</h4>
+        <p className="sa-text-muted" style={{ fontSize: 12 }}>
+          Optional for the AI when answering visitors; knowledge base takes priority for product/policy facts. Same as company admin Settings.
+        </p>
+        <div className="sa-field">
+          <label>Business name</label>
+          <input type="text" value={bizName} onChange={(e) => setBizName(e.target.value)} autoComplete="off" />
+        </div>
+        <div className="sa-field">
+          <label>Business description</label>
+          <textarea className="sa-textarea" rows={4} value={bizDescription} onChange={(e) => setBizDescription(e.target.value)} placeholder="What the business does" />
+        </div>
+        <div className="sa-field">
+          <label>Industry type</label>
+          <input type="text" value={bizIndustryType} onChange={(e) => setBizIndustryType(e.target.value)} autoComplete="off" />
+        </div>
+        <div className="sa-field">
+          <label>Service categories</label>
+          <textarea className="sa-textarea" rows={2} value={bizServiceCategories} onChange={(e) => setBizServiceCategories(e.target.value)} placeholder="Comma or lines" />
+        </div>
+        <div className="sa-field">
+          <label>Business contact email</label>
+          <input type="email" value={bizContactEmail} onChange={(e) => setBizContactEmail(e.target.value)} placeholder="hello@business.com" />
+        </div>
+        <div className="sa-field">
+          <label>Business contact phone number</label>
+          <input type="tel" value={bizContactPhone} onChange={(e) => setBizContactPhone(e.target.value)} autoComplete="tel" />
         </div>
 
         <hr style={{ borderColor: 'var(--sa-border)' }} />

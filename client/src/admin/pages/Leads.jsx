@@ -1,7 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+
+async function toggleElementFullscreen(element) {
+  if (!element) return false;
+
+  if (document.fullscreenElement === element) {
+    await document.exitFullscreen();
+    return true;
+  }
+
+  if (document.fullscreenElement) {
+    await document.exitFullscreen();
+  }
+
+  if (typeof element.requestFullscreen !== 'function') {
+    return false;
+  }
+
+  await element.requestFullscreen();
+  return true;
+}
 
 const STATUS_OPTIONS = [
   'new',
@@ -135,7 +155,8 @@ export default function Leads() {
   const [ownerValue, setOwnerValue] = useState('');
   const [reminderAtValue, setReminderAtValue] = useState('');
   const [reminderNoteValue, setReminderNoteValue] = useState('');
-  const [showTranscriptModal, setShowTranscriptModal] = useState(false);
+  const [isTranscriptFullscreen, setIsTranscriptFullscreen] = useState(false);
+  const transcriptPanelRef = useRef(null);
 
   const selectedLead = detail?.lead || null;
   const isDetailRoute = Boolean(leadIdFromUrl);
@@ -239,8 +260,21 @@ export default function Leads() {
   }, [selectedLead?.id, selectedLead?.assigned_owner, selectedLead?.reminder_at, selectedLead?.reminder_note]);
 
   useEffect(() => {
-    if (!selectedLead?.id) {
-      setShowTranscriptModal(false);
+    const handleFullscreenChange = () => {
+      setIsTranscriptFullscreen(document.fullscreenElement === transcriptPanelRef.current);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    handleFullscreenChange();
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedLead?.id && document.fullscreenElement === transcriptPanelRef.current) {
+      document.exitFullscreen().catch(() => {});
     }
   }, [selectedLead?.id]);
 
@@ -270,6 +304,13 @@ export default function Leads() {
     setFilters((prev) => ({ ...prev, page: p }));
     setAppliedFilters((prev) => ({ ...prev, page: p }));
   };
+
+  const handleTranscriptFullscreen = useCallback(async () => {
+    const success = await toggleElementFullscreen(transcriptPanelRef.current);
+    if (!success) {
+      showToast('Fullscreen mode is not available in this browser.', 'error');
+    }
+  }, [showToast]);
 
   const totalPages = Math.max(1, Math.ceil(total / (appliedFilters.limit || LEADS_PAGE_SIZE)));
   const fromRow = total === 0 ? 0 : (appliedFilters.page - 1) * (appliedFilters.limit || LEADS_PAGE_SIZE) + 1;
@@ -846,7 +887,9 @@ export default function Leads() {
                       </div>
                     </div>
                     <div className="d-flex gap-2 flex-wrap">
-                      <button className="btn btn-outline-primary btn-sm" onClick={() => setShowTranscriptModal(true)}>Open Full Conversation</button>
+                      <button className="btn btn-outline-primary btn-sm" onClick={handleTranscriptFullscreen}>
+                        {isTranscriptFullscreen ? 'Exit Full Screen' : 'Open Full Conversation'}
+                      </button>
                       {selectedLead.session_id ? (
                         <button
                           className="btn btn-primary btn-sm"
@@ -945,6 +988,18 @@ export default function Leads() {
                     <div className="p-2 rounded" style={{ background: 'var(--chat-bg)', border: '1px solid var(--chat-border)' }}>
                       {selectedLead.requirement_summary || selectedLead.project_summary || 'No project summary available.'}
                     </div>
+                    {selectedLead.key_discussion_points && selectedLead.key_discussion_points.length > 0 && (
+                      <div className="mt-2">
+                        <label className="form-label small">Key discussion points</label>
+                        <ul className="mb-0 ps-4" style={{ color: 'var(--chat-text)' }}>
+                          {selectedLead.key_discussion_points.map((point, idx) => (
+                            <li key={idx} className="small" style={{ marginBottom: '6px' }}>
+                              {point}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mb-3">
@@ -1023,20 +1078,24 @@ export default function Leads() {
                     </div>
                   </div>
 
-                  <div className="mt-3" id="lead-transcript-panel">
+                  <div
+                    ref={transcriptPanelRef}
+                    className="mt-3"
+                    id="lead-transcript-panel"
+                  >
                     <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
                       <label className="form-label small mb-0">Full conversation transcript</label>
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
-                        onClick={() => setShowTranscriptModal(true)}
-                        title="Open transcript in full screen"
-                        aria-label="Open transcript in full screen"
+                        onClick={handleTranscriptFullscreen}
+                        title={isTranscriptFullscreen ? 'Exit full screen' : 'Open transcript in full screen'}
+                        aria-label={isTranscriptFullscreen ? 'Exit full screen' : 'Open transcript in full screen'}
                       >
                         <TranscriptExpandIcon />
                       </button>
                     </div>
-                    <div style={{ maxHeight: 260, overflowY: 'auto', background: '#0b0b0e', border: '1px solid var(--chat-border)', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={isTranscriptFullscreen ? { height: 'calc(100vh - 120px)', overflowY: 'auto', background: '#0b0b0e', border: '1px solid var(--chat-border)', borderRadius: 8, padding: '10px 12px' } : { maxHeight: 260, overflowY: 'auto', background: '#0b0b0e', border: '1px solid var(--chat-border)', borderRadius: 8, padding: '10px 12px' }}>
                       {(detail?.transcript || []).length ? (
                         detail.transcript.map((message, idx) => (
                           <div key={`${message.created_at}-${idx}`} className="mb-2" style={{ color: '#d1d5db' }}>
@@ -1058,41 +1117,7 @@ export default function Leads() {
         </div>
         )}
       </div>
-
-      {showTranscriptModal ? (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100"
-          style={{ background: 'rgba(0,0,0,0.65)', zIndex: 2000 }}
-          onClick={() => setShowTranscriptModal(false)}
-        >
-          <div
-            className="position-absolute top-50 start-50 translate-middle"
-            style={{ width: 'min(980px, 94vw)', maxHeight: '86vh' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="card" style={{ background: '#0b0b0e', borderColor: 'var(--chat-border)' }}>
-              <div className="card-header d-flex justify-content-between align-items-center" style={{ color: '#e5e7eb' }}>
-                <strong>Full Conversation</strong>
-                <button className="btn btn-sm btn-outline-light" onClick={() => setShowTranscriptModal(false)}>Close</button>
-              </div>
-              <div className="card-body" style={{ maxHeight: '74vh', overflowY: 'auto' }}>
-                {(detail?.transcript || []).length ? (
-                  detail.transcript.map((message, idx) => (
-                    <div key={`${message.created_at}-${idx}`} className="mb-3" style={{ color: '#d1d5db' }}>
-                      <div style={{ fontSize: 11, opacity: 0.75 }}>
-                        {String(message.role || '').toUpperCase()} • {formatDateTime(message.created_at)}
-                      </div>
-                      <div style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{message.content}</div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="small" style={{ color: '#9ca3af' }}>No transcript available.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
+
   );
 }

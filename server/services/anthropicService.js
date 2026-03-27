@@ -1,6 +1,13 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { loadCompanyContext } = require('./trainingLoader');
-const { buildBusinessProfilePrompt, buildDocxRulesPrompt, buildLanguageInstruction, enforceOutputRules, inferCompanyProfile } = require('./chatRules');
+const {
+  buildBusinessProfilePrompt,
+  buildConfiguredBusinessInfoPrompt,
+  buildDocxRulesPrompt,
+  buildLanguageInstruction,
+  enforceOutputRules,
+  inferCompanyProfile,
+} = require('./chatRules');
 const {
   buildConversationModePrompt,
   buildModeContext,
@@ -28,11 +35,18 @@ const BASE_SYSTEM_PROMPT_PREFIX =
   '- Use emojis naturally in your responses to make the conversation fun and engaging (e.g. 👍 😊 ✨ 🎯 💡). Do not overuse—1–3 per message is enough.\n' +
   '- Format important text using Markdown: **bold** for emphasis, *italic* for nuance, bullet points for lists, `code` for technical terms.\n\n';
 
-function buildBaseSystemPrompt(assistantName = '', languageInstruction = '', businessProfilePrompt = '', companyProfile = null) {
+function buildBaseSystemPrompt(
+  assistantName = '',
+  languageInstruction = '',
+  businessProfilePrompt = '',
+  companyProfile = null,
+  configuredBusinessInfoPrompt = ''
+) {
   return [
     BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName, companyProfile }),
     languageInstruction,
     businessProfilePrompt,
+    configuredBusinessInfoPrompt,
   ].filter(Boolean).join('\n');
 }
 
@@ -48,7 +62,15 @@ function buildBaseSystemPrompt(assistantName = '', languageInstruction = '', bus
  *
  * If there is no company context, the base persona block itself carries the cache marker.
  */
-function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext = null, assistantName = '', languageConfig = {}) {
+function buildSystemBlocks(
+  companyId,
+  userQuery = '',
+  modeId = null,
+  modeContext = null,
+  assistantName = '',
+  languageConfig = {},
+  configuredBusinessInfo = null
+) {
   const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const context = loadCompanyContext(companyId, userQuery);
   const companyProfile = inferCompanyProfile({ context });
@@ -60,11 +82,13 @@ function buildSystemBlocks(companyId, userQuery = '', modeId = null, modeContext
     languageExtraLocales: languageConfig?.extraLocales,
     context,
   });
+  const configuredBizPrompt = buildConfiguredBusinessInfoPrompt(configuredBusinessInfo);
   const baseSystemPrompt = buildBaseSystemPrompt(
     assistantName,
     languageInstruction,
     buildBusinessProfilePrompt(companyProfile),
-    companyProfile
+    companyProfile,
+    configuredBizPrompt
   );
 
   if (context) {
@@ -144,6 +168,7 @@ async function sendMessage(companyId, messages, options = {}) {
     model,
     assistantName,
     languageConfig,
+    configuredBusinessInfo,
     ...anthropicOptions
   } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
@@ -156,7 +181,15 @@ async function sendMessage(companyId, messages, options = {}) {
   const params = {
     model: model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 1024,
-    system: buildSystemBlocks(companyId, latestUserMessage, modeId, modeContext, assistantName, languageConfig),
+    system: buildSystemBlocks(
+      companyId,
+      latestUserMessage,
+      modeId,
+      modeContext,
+      assistantName,
+      languageConfig,
+      configuredBusinessInfo
+    ),
     messages: buildCachedMessages(messages),
     ...anthropicOptions,
   };
