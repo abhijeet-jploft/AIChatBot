@@ -13,8 +13,23 @@ function setLastTrainingCompleted(companyId) {
 function getLastTrainingCompleted(companyId) {
   const ts = store.get(companyId);
   if (!ts) return null;
-  if (Date.now() - ts > NOTIFICATION_TTL_MS) return null;
+  if (Date.now() - ts > NOTIFICATION_TTL_MS) {
+    store.delete(companyId);
+    return null;
+  }
   return ts;
 }
+
+function pruneExpired() {
+  const now = Date.now();
+  for (const [companyId, ts] of store.entries()) {
+    if (!ts || now - ts > NOTIFICATION_TTL_MS) {
+      store.delete(companyId);
+    }
+  }
+}
+
+const pruneTimer = setInterval(pruneExpired, 60 * 60 * 1000);
+if (typeof pruneTimer.unref === 'function') pruneTimer.unref();
 
 module.exports = { setLastTrainingCompleted, getLastTrainingCompleted };

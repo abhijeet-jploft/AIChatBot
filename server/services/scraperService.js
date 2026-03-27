@@ -9,6 +9,11 @@ const path = require('path');
 const MAX_PAGES_RAW = parseInt(process.env.SCRAPER_MAX_PAGES || '', 10);
 const MAX_PAGES = Number.isFinite(MAX_PAGES_RAW) && MAX_PAGES_RAW > 0 ? MAX_PAGES_RAW : Infinity;
 const MAX_EXTERNAL_PAGES = parseInt(process.env.SCRAPER_MAX_EXTERNAL_PAGES || '40', 10);
+const FINISHED_JOB_RETENTION_MS = parseInt(process.env.SCRAPER_FINISHED_JOB_RETENTION_MS || `${6 * 60 * 60 * 1000}`, 10);
+const MAX_FINISHED_JOBS = parseInt(process.env.SCRAPER_MAX_FINISHED_JOBS || '30', 10);
+const JOB_CLEANUP_INTERVAL_MS = parseInt(process.env.SCRAPER_JOB_CLEANUP_INTERVAL_MS || `${5 * 60 * 1000}`, 10);
+const MEMORY_STOP_THRESHOLD_PERCENT = parseInt(process.env.SCRAPER_MEMORY_STOP_THRESHOLD_PERCENT || '88', 10);
+const MEMORY_CHECK_INTERVAL_MS = parseInt(process.env.SCRAPER_MEMORY_CHECK_INTERVAL_MS || '3000', 10);
 const REQUEST_TIMEOUT = 20000;
 const REQUEST_DELAY = 350; // ms between requests — polite crawling
 const READER_FALLBACK_PREFIX = process.env.SCRAPER_READER_FALLBACK_PREFIX || 'https://r.jina.ai/http://';
@@ -188,6 +193,14 @@ function persistJob(job) {
   }
 }
 
+function removePersistedJob(jobId) {
+  try {
+    fs.unlinkSync(jobFilePath(jobId));
+  } catch {
+    // ignore missing/locked files - in-memory eviction is still valid
+  }
+}
+
 function loadPersistedJobs() {
   for (const directory of JOB_STORE_LOAD_DIRS) {
     let files = [];
@@ -226,6 +239,63 @@ function loadPersistedJobs() {
       }
     }
   }
+}
+
+function isFinishedStatus(status) {
+  return status === 'completed' || status === 'failed' || status === 'stopped';
+}
+
+function getJobSortTimestamp(job) {
+  return Number(job?.completedAt || job?.startedAt || 0);
+}
+
+function cleanupFinishedJobs() {
+  const now = Date.now();
+  const finished = [];
+  for (const [jobId, job] of jobs.entries()) {
+    if (!job || job.runnerActive || !isFinishedStatus(job.status)) continue;
+    finished.push([jobId, job]);
+  }
+
+  // TTL-based pruning of finished jobs
+  if (Number.isFinite(FINISHED_JOB_RETENTION_MS) && FINISHED_JOB_RETENTION_MS > 0) {
+    for (const [jobId, job] of finished) {
+      const age = now - getJobSortTimestamp(job);
+      if (age > FINISHED_JOB_RETENTION_MS) {
+        jobs.delete(jobId);
+        removePersistedJob(jobId);
+      }
+    }
+  }
+
+  // Count-based pruning keeps the newest finished jobs in memory
+  if (Number.isFinite(MAX_FINISHED_JOBS) && MAX_FINISHED_JOBS >= 0) {
+    const remainingFinished = [];
+    for (const [jobId, job] of jobs.entries()) {
+      if (!job || job.runnerActive || !isFinishedStatus(job.status)) continue;
+      remainingFinished.push([jobId, job]);
+    }
+    if (remainingFinished.length > MAX_FINISHED_JOBS) {
+      remainingFinished.sort((a, b) => getJobSortTimestamp(b[1]) - getJobSortTimestamp(a[1]));
+      for (const [jobId] of remainingFinished.slice(MAX_FINISHED_JOBS)) {
+        jobs.delete(jobId);
+        removePersistedJob(jobId);
+      }
+    }
+  }
+}
+
+function readMemoryPressure() {
+  const total = os.totalmem();
+  const rss = process.memoryUsage().rss;
+  const percent = total > 0 ? Math.round((rss / total) * 100) : 0;
+  return { total, rss, percent };
+}
+
+function shouldStopForMemoryPressure() {
+  if (!Number.isFinite(MEMORY_STOP_THRESHOLD_PERCENT) || MEMORY_STOP_THRESHOLD_PERCENT <= 0) return false;
+  const { percent } = readMemoryPressure();
+  return percent >= MEMORY_STOP_THRESHOLD_PERCENT;
 }
 
 // ─── URL utilities ────────────────────────────────────────────────────────────
@@ -763,6 +833,8 @@ async function runJob(jobId) {
     persistJob(job);
   };
 
+  let lastMemoryCheckAt = 0;
+
   try {
     const rootUrl = normalizeUrl(job.url, job.url);
     if (!rootUrl) throw new Error('Invalid root URL');
@@ -786,6 +858,20 @@ async function runJob(jobId) {
       job.jsonlContent = buildJobJsonlContent(job, scraped, rootUrl);
       job.progress = { queued: queue.length, done: scraped.length };
       persistJob(job);
+    };
+
+    const handleMemoryPressure = () => {
+      const now = Date.now();
+      if (now - lastMemoryCheckAt < MEMORY_CHECK_INTERVAL_MS) return false;
+      lastMemoryCheckAt = now;
+      if (!shouldStopForMemoryPressure()) return false;
+      const { percent } = readMemoryPressure();
+      job.status = 'paused';
+      job.error = `Paused automatically: memory usage is ${percent}% (threshold ${MEMORY_STOP_THRESHOLD_PERCENT}%).`;
+      log(`Auto-paused due to memory pressure (${percent}% used; threshold ${MEMORY_STOP_THRESHOLD_PERCENT}%).`);
+      syncState();
+      persistJob(job);
+      return true;
     };
 
     const handleUserControl = () => {
@@ -839,9 +925,15 @@ async function runJob(jobId) {
     if (handleUserControl()) {
       return;
     }
+    if (handleMemoryPressure()) {
+      return;
+    }
 
     while (queue.length > 0 && scraped.length < MAX_PAGES) {
       if (handleUserControl()) {
+        return;
+      }
+      if (handleMemoryPressure()) {
         return;
       }
       const url = queue.shift();
@@ -1027,6 +1119,7 @@ async function runJob(jobId) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 function createJob(url, companyId) {
+  cleanupFinishedJobs();
   const jobId = crypto.randomUUID();
   const job = {
     id: jobId,
@@ -1162,6 +1255,7 @@ function resumeJob(jobId) {
 }
 
 loadPersistedJobs();
+cleanupFinishedJobs();
 for (const job of jobs.values()) {
   if (job.status === 'pending' || job.status === 'running') {
     setTimeout(() => {
@@ -1171,6 +1265,11 @@ for (const job of jobs.values()) {
     }, 0);
   }
 }
+
+const cleanupTimer = setInterval(() => {
+  cleanupFinishedJobs();
+}, JOB_CLEANUP_INTERVAL_MS);
+if (typeof cleanupTimer.unref === 'function') cleanupTimer.unref();
 
 module.exports = {
   createJob,
