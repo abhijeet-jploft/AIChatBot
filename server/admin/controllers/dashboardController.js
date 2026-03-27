@@ -5,6 +5,7 @@ const ChatSession = require('../../models/ChatSession');
 const { getActiveForCompany } = require('../../services/activeVisitorsService');
 const { getActiveJobForCompany } = require('../../services/scraperService');
 const { getLastTrainingCompleted } = require('../../services/trainingNotificationStore');
+const { getNotificationPreferences, prefsAllowType } = require('../../services/notificationPreferencesService');
 
 /**
  * GET /admin/dashboard
@@ -133,6 +134,22 @@ async function getDashboard(req, res) {
     }
     if (getLastTrainingCompleted(companyId)) {
       notifications.push({ type: 'training_completed', message: 'Training completed. AI learned from your content.', link: '/admin/training' });
+    }
+
+    const notifyPrefs = await getNotificationPreferences(companyId);
+    if (!notifyPrefs.channelDashboard) {
+      notifications.length = 0;
+    } else {
+      const dashFiltered = notifications.filter((n) => {
+        const t = n.type;
+        if (t === 'training_completed') return prefsAllowType(notifyPrefs, 'training_completion');
+        if (t === 'new_lead' || t === 'reminder_overdue' || t === 'reminder_due') {
+          return prefsAllowType(notifyPrefs, 'new_lead');
+        }
+        return true;
+      });
+      notifications.length = 0;
+      notifications.push(...dashFiltered);
     }
 
     const aiInsights = [];

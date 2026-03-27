@@ -14,6 +14,8 @@ module.exports.MODULE_SETTINGS_TABLE_NAMES = [
   'safety_settings',
   'language_settings',
   'embed_settings',
+  'smtp_settings',
+  'notification_preferences',
 ];
 
 /** Previous single-table names; migrate splits these into module tables then DROP. */
@@ -149,6 +151,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_embed_settings_embed_slug_unique
   ON embed_settings(embed_slug) WHERE embed_slug IS NOT NULL AND embed_slug <> '';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_embed_settings_embed_secret_unique
   ON embed_settings(embed_secret) WHERE embed_secret IS NOT NULL AND embed_secret <> '';
+
+CREATE TABLE IF NOT EXISTS smtp_settings (
+  company_id VARCHAR(255) PRIMARY KEY REFERENCES chatbots(company_id) ON DELETE CASCADE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  smtp_host TEXT,
+  smtp_port INTEGER,
+  smtp_secure BOOLEAN NOT NULL DEFAULT FALSE,
+  smtp_user TEXT,
+  smtp_password TEXT,
+  smtp_from_email VARCHAR(320)
+);
+
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  company_id VARCHAR(255) PRIMARY KEY REFERENCES chatbots(company_id) ON DELETE CASCADE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  channel_email BOOLEAN NOT NULL DEFAULT TRUE,
+  channel_dashboard BOOLEAN NOT NULL DEFAULT TRUE,
+  notify_new_lead BOOLEAN NOT NULL DEFAULT TRUE,
+  notify_meeting_request BOOLEAN NOT NULL DEFAULT TRUE,
+  notify_training_completion BOOLEAN NOT NULL DEFAULT TRUE,
+  notify_payment BOOLEAN NOT NULL DEFAULT TRUE,
+  notify_system_alert BOOLEAN NOT NULL DEFAULT TRUE
+);
 `;
 
 /** Columns to drop from chatbots after data is copied to module settings */

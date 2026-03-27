@@ -265,11 +265,19 @@ function pushMessageToSession(companyId, sessionId, content) {
   }
 }
 
+const { shouldSendDashboardAlert } = require('./notificationPreferencesService');
+
 /**
  * Send a live alert to all admin dashboard subscribers for this company.
- * Payload: { kind, message, link? } — sent as { type: 'alert', ...payload }.
+ * Payload: { kind, message, link?, meetingRequested? } — sent as { type: 'alert', ...payload }.
  */
-function broadcastAlert(companyId, payload) {
+async function broadcastAlert(companyId, payload) {
+  try {
+    const ok = await shouldSendDashboardAlert(companyId, payload);
+    if (!ok) return;
+  } catch (e) {
+    console.error('[broadcastAlert] prefs:', e.message);
+  }
   const subs = subscribers.get(companyId);
   if (!subs || subs.size === 0) return;
   const msg = JSON.stringify({ type: 'alert', ...payload });

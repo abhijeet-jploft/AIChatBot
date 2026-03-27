@@ -2,6 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const authController = require('../controllers/authController');
 const settingsController = require('../controllers/settingsController');
+const notificationPreferencesController = require('../controllers/notificationPreferencesController');
+const emailSmtpController = require('../controllers/emailSmtpController');
 const themeController = require('../controllers/themeController');
 const dashboardController = require('../controllers/dashboardController');
 const agentController = require('../controllers/agentController');
@@ -39,6 +41,13 @@ router.get('/settings/modes', requireAuth, settingsController.getModeSettings);
 
 router.get('/theme', requireAuth, themeController.getTheme);
 router.put('/theme', requireAuth, themeController.updateTheme);
+
+router.get('/notification-preferences', requireAuth, notificationPreferencesController.getPrefs);
+router.put('/notification-preferences', requireAuth, notificationPreferencesController.putPrefs);
+
+router.get('/email-smtp', requireAuth, emailSmtpController.getSmtp);
+router.put('/email-smtp', requireAuth, emailSmtpController.putSmtp);
+router.post('/email-smtp/test', requireAuth, emailSmtpController.testSmtp);
 
 router.get('/dashboard', requireAuth, dashboardController.getDashboard);
 router.get('/dashboard/live', requireAuth, dashboardController.getLive);

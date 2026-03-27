@@ -9,6 +9,8 @@ import Conversations from './pages/Conversations';
 import LiveMonitoring from './pages/LiveMonitoring';
 import Settings from './pages/Settings';
 import AccountProfile from './pages/AccountProfile';
+import NotificationPreferences from './pages/NotificationPreferences';
+import EmailSmtpSettings from './pages/EmailSmtpSettings';
 import ApiSettings from './pages/ApiSettings';
 import VoiceSettings from './pages/VoiceSettings';
 import Theme from './pages/Theme';
@@ -51,6 +53,8 @@ function AdminLayout({ children }) {
       label: 'Configuration',
       items: [
         { to: '/admin/account-profile', label: 'Account profile' },
+        { to: '/admin/notification-preferences', label: 'Notifications' },
+        { to: '/admin/email-smtp', label: 'Email (SMTP)' },
         { to: '/admin/settings', label: 'Settings' },
         ...(canAccessVoiceSettings ? [{ to: '/admin/voice-settings', label: 'Voice Settings' }] : []),
         { to: '/admin/theme', label: 'Theme' },
@@ -237,6 +241,30 @@ export default function AdminApp() {
             token ? (
               <AdminLayout>
                 <AccountProfile />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="notification-preferences"
+          element={
+            token ? (
+              <AdminLayout>
+                <NotificationPreferences />
+              </AdminLayout>
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="email-smtp"
+          element={
+            token ? (
+              <AdminLayout>
+                <EmailSmtpSettings />
               </AdminLayout>
             ) : (
               <Navigate to="/admin/login" replace />

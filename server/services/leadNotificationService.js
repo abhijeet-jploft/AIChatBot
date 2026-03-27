@@ -1,32 +1,9 @@
-const nodemailer = require('nodemailer');
 const pool = require('../db/index');
-
-let cachedTransporter = null;
-
-function getTransporter() {
-  if (cachedTransporter) return cachedTransporter;
-
-  const host = process.env.SMTP_HOST;
-  const port = Number.parseInt(process.env.SMTP_PORT || '587', 10);
-  const secure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !port) return null;
-
-  const options = {
-    host,
-    port,
-    secure,
-  };
-
-  if (user && pass) {
-    options.auth = { user, pass };
-  }
-
-  cachedTransporter = nodemailer.createTransport(options);
-  return cachedTransporter;
-}
+const { shouldSendEmailFor } = require('./notificationPreferencesService');
+const {
+  getTransporterForCompany,
+  resolveLeadFromAddress,
+} = require('./smtpTransportService');
 
 function urgencyFromLead(lead = {}) {
   const category = String(lead.lead_score_category || '').toLowerCase();
@@ -45,10 +22,12 @@ async function getCompanyNotificationConfig(companyId) {
       c.company_id,
       COALESCE(NULLIF(BTRIM(c.name), ''), c.company_id) AS company_name,
       ld.lead_email_notifications_enabled,
-      ld.lead_notification_email
+      ld.lead_notification_email,
+      sm.smtp_from_email
      FROM chatbots c
      INNER JOIN chat_settings ch ON ch.company_id = c.company_id
      INNER JOIN lead_settings ld ON ld.company_id = c.company_id
+     LEFT JOIN smtp_settings sm ON sm.company_id = c.company_id
      WHERE c.company_id = $1`,
     [companyId]
   );
@@ -56,13 +35,10 @@ async function getCompanyNotificationConfig(companyId) {
   return rows[0] || null;
 }
 
-function canSendEmail(config) {
-  return Boolean(
-    config
-    && config.lead_email_notifications_enabled
-    && config.lead_notification_email
-    && getTransporter()
-  );
+async function canSendLeadEmail(companyId, config) {
+  if (!config?.lead_email_notifications_enabled || !config?.lead_notification_email) return false;
+  const t = await getTransporterForCompany(companyId);
+  return Boolean(t);
 }
 
 async function sendNewLeadNotification({ companyId, lead }) {
@@ -70,12 +46,17 @@ async function sendNewLeadNotification({ companyId, lead }) {
     return { sent: false, reason: 'missing_context' };
   }
 
+  const nType = (lead?.ai_detected_intent || '') === 'meeting_booking' ? 'meeting_request' : 'new_lead';
+  if (!(await shouldSendEmailFor(companyId, nType))) {
+    return { sent: false, reason: 'notification_preferences' };
+  }
+
   const config = await getCompanyNotificationConfig(companyId);
-  if (!canSendEmail(config)) {
+  if (!(await canSendLeadEmail(companyId, config))) {
     return { sent: false, reason: 'email_disabled_or_unconfigured' };
   }
 
-  const transporter = getTransporter();
+  const transporter = await getTransporterForCompany(companyId);
   const urgency = urgencyFromLead(lead);
   const leadName = formatLeadName(lead);
   const service = lead.service_requested || 'Not specified';
@@ -93,7 +74,7 @@ async function sendNewLeadNotification({ companyId, lead }) {
   ].join('\n');
 
   await transporter.sendMail({
-    from: process.env.LEAD_NOTIFICATION_FROM || process.env.SMTP_USER || 'no-reply@localhost',
+    from: resolveLeadFromAddress(config.smtp_from_email),
     to: config.lead_notification_email,
     subject,
     text,
@@ -107,8 +88,12 @@ async function sendDueReminderDigest(companyId) {
     return { sent: false, reason: 'missing_company' };
   }
 
+  if (!(await shouldSendEmailFor(companyId, 'new_lead'))) {
+    return { sent: false, reason: 'notification_preferences' };
+  }
+
   const config = await getCompanyNotificationConfig(companyId);
-  if (!canSendEmail(config)) {
+  if (!(await canSendLeadEmail(companyId, config))) {
     return { sent: false, reason: 'email_disabled_or_unconfigured' };
   }
 
@@ -157,9 +142,9 @@ async function sendDueReminderDigest(companyId) {
     ...lines,
   ].join('\n');
 
-  const transporter = getTransporter();
+  const transporter = await getTransporterForCompany(companyId);
   await transporter.sendMail({
-    from: process.env.LEAD_NOTIFICATION_FROM || process.env.SMTP_USER || 'no-reply@localhost',
+    from: resolveLeadFromAddress(config.smtp_from_email),
     to: config.lead_notification_email,
     subject,
     text,

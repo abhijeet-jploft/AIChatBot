@@ -278,7 +278,7 @@ async function postMessage(req, res) {
       if (isSupportRequest(userMsg.content)) {
         addSupportRequest(companyId, { sessionId: sid, message: userMsg.content });
         try {
-          broadcastAlert(companyId, {
+          await broadcastAlert(companyId, {
             kind: 'support_request',
             message: 'Support requested',
             link: '/admin/support-requests',
@@ -419,8 +419,9 @@ async function postMessage(req, res) {
           try {
             const lead = leadCaptureResult.lead;
             const meetingRequested = (lead?.ai_detected_intent || '') === 'meeting_booking';
-            broadcastAlert(companyId, {
+            await broadcastAlert(companyId, {
               kind: 'lead_captured',
+              meetingRequested,
               message: meetingRequested ? 'Meeting requested — new lead captured' : 'New lead captured',
               link: '/admin/leads',
             });
@@ -446,13 +447,13 @@ async function postMessage(req, res) {
         });
 
         if (escalation?.shouldEscalate && Array.isArray(escalation.alerts)) {
-          escalation.alerts.forEach((alert) => {
+          for (const alert of escalation.alerts) {
             try {
-              broadcastAlert(companyId, alert);
+              await broadcastAlert(companyId, alert);
             } catch {
               /* ignore */
             }
-          });
+          }
         }
       } catch (escErr) {
         // Escalation should never break chat responses
