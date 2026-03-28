@@ -376,7 +376,7 @@ export default function Settings() {
     `nav-link py-1 px-3 small ${generalSubTab === id ? 'active' : ''}`;
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="settings-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Company settings</h5>
       <form onSubmit={handleSubmit}>
         <ul

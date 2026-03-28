@@ -67,7 +67,7 @@ export default function Logs() {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="logs-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Logs</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
         Chat-related and system-related logs. Use tabs to filter by type.

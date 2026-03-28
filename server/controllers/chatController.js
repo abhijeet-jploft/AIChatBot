@@ -117,7 +117,8 @@ function buildVoiceConfig(chatbot = null) {
 }
 
 async function synthesizeCompanyVoice({ chatbot, aiLanguageConfig, voiceConfig, assistantText, userText = '' }) {
-  if (!voiceConfig?.enabled || !voiceConfig?.responseEnabled) {
+  // Assistant reply TTS follows "voice response" only; voice mode (mic) is independent.
+  if (!voiceConfig?.responseEnabled) {
     return null;
   }
 
@@ -249,7 +250,7 @@ async function postMessage(req, res) {
         await ChatMessage.create(sid, 'assistant', pausedMessage);
 
         let pausedVoice = null;
-        if (voiceConfig.enabled && voiceConfig.responseEnabled) {
+        if (voiceConfig.responseEnabled) {
           try {
             pausedVoice = await synthesizeCompanyVoice({
               chatbot,
@@ -345,7 +346,7 @@ async function postMessage(req, res) {
     const aiResponseMs = Date.now() - aiStartedAt;
     let voice = null;
 
-    if (voiceConfig.enabled && voiceConfig.responseEnabled) {
+    if (voiceConfig.responseEnabled) {
       try {
         const voiceStartedAt = Date.now();
         voice = await synthesizeCompanyVoice({
@@ -559,7 +560,7 @@ async function synthesizeMessageVoice(req, res) {
 
     const aiLanguageConfig = buildLanguageConfig(chatbot);
     const voiceConfig = buildVoiceConfig(chatbot);
-    if (!voiceConfig.enabled || !voiceConfig.responseEnabled) {
+    if (!voiceConfig.responseEnabled) {
       return res.status(409).json({ error: 'Voice responses are disabled for this chatbot' });
     }
 

@@ -225,6 +225,7 @@
   var responseAudio = null;
   var speechUtterance = null;
   var playingMessageIndex = null;
+  var assistantVoiceVisibilityHooked = false;
   var speechRecognition = null;
   var keepMicOpen = false;
   var micRecording = false;
@@ -1452,13 +1453,33 @@
     }
   }
 
-  function pauseAssistantVoice() {
+  function detachResponseAudioEvents(audio) {
+    if (!audio) return;
+    try {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.onstalled = null;
+    } catch (e) {}
+  }
+
+  function stopHtml5AssistantAudio() {
     try {
       if (responseAudio) {
+        detachResponseAudioEvents(responseAudio);
         responseAudio.pause();
+        responseAudio.removeAttribute('src');
         responseAudio.src = '';
+        try {
+          responseAudio.load();
+        } catch (e2) {}
         responseAudio = null;
       }
+    } catch (e) {}
+  }
+
+  function pauseAssistantVoice() {
+    stopHtml5AssistantAudio();
+    try {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -1470,15 +1491,41 @@
 
   function playAssistantVoice(audioDataUrl, messageIndex) {
     if (!audioDataUrl || typeof window === 'undefined') return;
-    pauseAssistantVoice();
+
+    // Avoid stopping/restarting the same clip (fixes abrupt cut when something double-invokes play).
+    if (
+      responseAudio
+      && playingMessageIndex === messageIndex
+      && !responseAudio.paused
+      && !responseAudio.ended
+    ) {
+      return;
+    }
+
+    stopHtml5AssistantAudio();
+    try {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      speechUtterance = null;
+    } catch (e) {}
 
     playingMessageIndex = messageIndex;
     renderMessages();
 
     try {
       var audio = new Audio(audioDataUrl);
+      try {
+        audio.playsInline = true;
+      } catch (ePl) {}
+      try {
+        audio.setAttribute('playsinline', '');
+        audio.setAttribute('webkit-playsinline', '');
+      } catch (eAttr) {}
+      audio.preload = 'auto';
       responseAudio = audio;
       var clearPlaying = function () {
+        detachResponseAudioEvents(audio);
         if (responseAudio === audio) responseAudio = null;
         if (playingMessageIndex === messageIndex) {
           playingMessageIndex = null;
@@ -1487,7 +1534,10 @@
       };
       audio.onended = clearPlaying;
       audio.onerror = clearPlaying;
-      audio.play().catch(clearPlaying);
+      var playAttempt = audio.play();
+      if (playAttempt !== undefined && typeof playAttempt.catch === 'function') {
+        playAttempt.catch(clearPlaying);
+      }
     } catch (e) {
       playingMessageIndex = null;
       renderMessages();
@@ -1531,8 +1581,6 @@
       return;
     }
 
-    // Fallback when server-side TTS was unavailable for this message.
-    if (!voiceEnabled) return;
     pauseAssistantVoice();
     playingMessageIndex = messageIndex;
     renderMessages();
@@ -1813,9 +1861,14 @@
         if (voiceResponseEnabled) {
           if (voiceUrl) {
             playAssistantVoice(voiceUrl, assistantIndex);
+          } else if (assistantText) {
+            playMessageVoice(assistantIndex);
           }
         }
-        loadSessions();
+        // Defer session list refresh so playback starts without an immediate extra DOM pass.
+        setTimeout(function () {
+          loadSessions();
+        }, 0);
         persistState();
         if (callback) callback();
       })
@@ -1993,6 +2046,23 @@
     }
 
     connectPresenceWs();
+    if (!assistantVoiceVisibilityHooked && typeof document !== 'undefined' && document.addEventListener) {
+      assistantVoiceVisibilityHooked = true;
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState !== 'visible') return;
+        try {
+          if (
+            responseAudio
+            && playingMessageIndex !== null
+            && responseAudio.paused
+            && !responseAudio.ended
+          ) {
+            var pr = responseAudio.play();
+            if (pr !== undefined && typeof pr.catch === 'function') pr.catch(function () {});
+          }
+        } catch (e) {}
+      });
+    }
     if (typeof window !== 'undefined') {
       window.addEventListener('popstate', sendPageUpdate);
       window.addEventListener('hashchange', sendPageUpdate);

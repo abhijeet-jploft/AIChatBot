@@ -592,7 +592,7 @@ export default function Leads() {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="leads-top">
       <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
         <div>
           <h5 className="mb-1" style={{ color: 'var(--chat-text-heading)' }}>{isDetailRoute ? 'Lead detail' : 'Leads'}</h5>

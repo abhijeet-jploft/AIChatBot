@@ -220,7 +220,7 @@ export default function TakeOver() {
     `/?sessionId=${encodeURIComponent(sid)}&companyId=${encodeURIComponent(company?.companyId || '')}`;
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="take-over-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Take over conversation</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
         <strong>Operate Chat</strong> opens the full visitor-style chat (theme, mic, voice playback) so you can read the thread and reply; messages are sent to the visitor in real time. Use <strong>Visitor preview</strong> to open the public site in a new tab. Quick <strong>Send</strong> below still works for one-line replies.
@@ -311,20 +311,22 @@ export default function TakeOver() {
                             <div className="d-flex flex-wrap gap-1 justify-content-end align-items-center">
                               {canSend ? (
                                 <>
-                                  <Link
-                                    to={`/admin/chat/${s.sessionId}`}
-                                    className="btn btn-sm btn-primary"
-                                  >
-                                    Operate Chat
-                                  </Link>
-                                  <a
-                                    href={visitorPreviewUrl(s.sessionId)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn btn-sm btn-outline-secondary"
-                                  >
-                                    Visitor preview
-                                  </a>
+                                  <div className="admin-action-stack">
+                                    <Link
+                                      to={`/admin/chat/${s.sessionId}`}
+                                      className="btn btn-sm btn-primary"
+                                    >
+                                      Operate Chat
+                                    </Link>
+                                    <a
+                                      href={visitorPreviewUrl(s.sessionId)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="btn btn-sm btn-outline-secondary"
+                                    >
+                                      Visitor preview
+                                    </a>
+                                  </div>
                                   <div className="d-flex gap-1 align-items-center mt-1 mt-md-0">
                                     <input
                                       type="text"
@@ -446,30 +448,32 @@ export default function TakeOver() {
                               {formatTimeAgo(conv.updatedAt)}
                             </td>
                             <td className="align-middle text-end">
-                              {conv.leadCaptured && (
-                                <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-secondary me-1">View lead</Link>
-                              )}
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-primary me-1"
-                                onClick={() => openReplyModal(conv)}
-                              >
-                                Send message
-                              </button>
-                              <Link
-                                to={`/admin/chat/${conv.id}`}
-                                className="btn btn-sm btn-primary"
-                              >
-                                Operate Chat
-                              </Link>
-                              <a
-                                href={visitorPreviewUrl(conv.id)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-sm btn-outline-secondary"
-                              >
-                                Visitor preview
-                              </a>
+                              <div className="admin-action-stack admin-action-stack-end">
+                                {conv.leadCaptured && (
+                                  <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-secondary">View lead</Link>
+                                )}
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => openReplyModal(conv)}
+                                >
+                                  Send message
+                                </button>
+                                <Link
+                                  to={`/admin/chat/${conv.id}`}
+                                  className="btn btn-sm btn-primary"
+                                >
+                                  Operate Chat
+                                </Link>
+                                <a
+                                  href={visitorPreviewUrl(conv.id)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-sm btn-outline-secondary"
+                                >
+                                  Visitor preview
+                                </a>
+                              </div>
                             </td>
                           </tr>
                         ))}

@@ -687,7 +687,7 @@ export default function Training() {
   };
 
   return (
-    <div className="flex-grow-1 overflow-auto" style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)' }}>
+    <div className="flex-grow-1 overflow-auto" id="training-top" style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)' }}>
       <div className="py-4 px-3 px-md-5 mx-auto" style={{ maxWidth: 960 }}>
         <h5 className="fw-bold mb-1" style={{ color: 'var(--chat-text-heading)' }}>
           Training — Knowledge base

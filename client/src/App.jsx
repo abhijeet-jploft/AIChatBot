@@ -806,17 +806,45 @@ export default function App() {
     if (!audioDataUrl || typeof window === 'undefined') return;
 
     try {
-      if (responseAudioRef.current) {
-        responseAudioRef.current.pause();
+      const prev = responseAudioRef.current;
+      if (prev) {
+        try {
+          prev.onended = null;
+          prev.onerror = null;
+          prev.pause();
+          prev.removeAttribute('src');
+          prev.src = '';
+          prev.load();
+        } catch {
+          // ignore
+        }
         responseAudioRef.current = null;
       }
 
       setPlayingMessageIndex(messageIndex ?? null);
 
       const audio = new Audio(audioDataUrl);
+      try {
+        audio.playsInline = true;
+      } catch {
+        // ignore
+      }
+      try {
+        audio.setAttribute('playsinline', '');
+        audio.setAttribute('webkit-playsinline', '');
+      } catch {
+        // ignore
+      }
+      audio.preload = 'auto';
       responseAudioRef.current = audio;
 
       const clearPlaying = () => {
+        try {
+          audio.onended = null;
+          audio.onerror = null;
+        } catch {
+          // ignore
+        }
         if (responseAudioRef.current === audio) {
           responseAudioRef.current = null;
         }
@@ -826,7 +854,10 @@ export default function App() {
       audio.onended = clearPlaying;
       audio.onerror = clearPlaying;
 
-      audio.play().catch(clearPlaying);
+      const p = audio.play();
+      if (p !== undefined) {
+        p.catch(clearPlaying);
+      }
     } catch {
       setPlayingMessageIndex(null);
     }

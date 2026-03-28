@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AdminToastProvider } from './context/AdminToastContext';
@@ -23,6 +23,33 @@ import TakeOver from './pages/TakeOver';
 import AdminOperatorChat from './pages/AdminOperatorChat';
 import './index.css';
 import { hasAnyTrainingModuleAccess, hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../constants/adminVisibility';
+
+const ADMIN_SEARCH_ENTRIES = [
+  { page: 'Dashboard', text: 'Key metrics', to: '/admin', hash: 'dashboard-key-metrics', keywords: 'kpi metrics conversion visitors leads' },
+  { page: 'Dashboard', text: 'Live activity', to: '/admin', hash: 'dashboard-live-activity', keywords: 'live activity current pages active visitors' },
+  { page: 'Dashboard', text: 'Lead snapshot', to: '/admin', hash: 'dashboard-lead-snapshot', keywords: 'recent leads view lead' },
+  { page: 'Dashboard', text: 'Conversation snapshot', to: '/admin', hash: 'dashboard-conversation-snapshot', keywords: 'recent conversations operate chat' },
+  { page: 'Leads', text: 'Lead list and details', to: '/admin/leads', hash: 'leads-top', keywords: 'crm lead status follow-up reminder update' },
+  { page: 'Conversations', text: 'Conversation filters', to: '/admin/conversations', hash: 'conversations-filters', keywords: 'search date status intent outcome' },
+  { page: 'Conversations', text: 'Conversation table', to: '/admin/conversations', hash: 'conversations-table', keywords: 'visitor id duration source page operate chat' },
+  { page: 'Live monitoring', text: 'Live session monitor', to: '/admin/live-monitoring', hash: 'live-monitoring-top', keywords: 'active sessions typing visitors' },
+  { page: 'Missed conversations', text: 'Missed visitor chats', to: '/admin/missed-conversations', hash: 'missed-conversations-top', keywords: 'left chats follow up' },
+  { page: 'Support requests', text: 'Support tickets queue', to: '/admin/support-requests', hash: 'support-requests-top', keywords: 'ticket support request' },
+  { page: 'Take over', text: 'Operator takeover controls', to: '/admin/take-over', hash: 'take-over-top', keywords: 'take over operator send message' },
+  { page: 'Training', text: 'Knowledge and training', to: '/admin/training', hash: 'training-top', keywords: 'documents website scrape retrain ai' },
+  { page: 'Logs', text: 'System and audit logs', to: '/admin/logs', hash: 'logs-top', keywords: 'logs events admin actions' },
+  { page: 'Account profile', text: 'Company profile', to: '/admin/account-profile', hash: 'account-profile-top', keywords: 'name domain company profile' },
+  { page: 'Notifications', text: 'Notification preferences', to: '/admin/notification-preferences', hash: 'notification-preferences-top', keywords: 'alerts email whatsapp' },
+  { page: 'Email (SMTP)', text: 'SMTP configuration', to: '/admin/email-smtp', hash: 'email-smtp-top', keywords: 'smtp sender email settings' },
+  { page: 'Settings', text: 'Chatbot settings', to: '/admin/settings', hash: 'settings-top', keywords: 'agent language tone prompts' },
+  { page: 'Theme', text: 'Theme customization', to: '/admin/theme', hash: 'theme-top', keywords: 'colors widget theme' },
+  { page: 'Voice settings', text: 'Voice provider settings', to: '/admin/voice-settings', hash: 'voice-settings-top', keywords: 'voice tts elevenlabs' },
+  { page: 'AI Mode', text: 'AI mode controls', to: '/admin/modes', hash: 'modes-top', keywords: 'ai mode automation response mode' },
+];
+
+function normalizeSearch(value) {
+  return String(value || '').trim().toLowerCase();
+}
 
 function AdminLayout({ children }) {
   const { company, logout, loading } = useAuth();
@@ -78,11 +105,46 @@ function AdminLayout({ children }) {
       )?.label ||
     hiddenPageTitles[location.pathname] ||
     'Dashboard';
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef(null);
+
+  const searchResults = useMemo(() => {
+    const q = normalizeSearch(searchQuery);
+    if (!q) return [];
+    return ADMIN_SEARCH_ENTRIES
+      .filter((entry) => {
+        const haystack = `${entry.page} ${entry.text} ${entry.keywords}`.toLowerCase();
+        return haystack.includes(q);
+      })
+      .slice(0, 10);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.title = `${companyName} Admin · ${currentPageLabel}`;
   }, [companyName, currentPageLabel]);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (!searchRef.current) return;
+      if (!searchRef.current.contains(event.target)) setSearchOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (!location.hash) return;
+    const sectionId = decodeURIComponent(location.hash.slice(1));
+    const timer = setTimeout(() => {
+      const node = document.getElementById(sectionId);
+      if (node) {
+        node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 40);
+    return () => clearTimeout(timer);
+  }, [location.pathname, location.hash]);
 
   if (loading) {
     return (
@@ -95,6 +157,12 @@ function AdminLayout({ children }) {
   const handleLogout = () => {
     logout();
     navigate('/admin/login', { replace: true });
+  };
+
+  const handleSearchResultClick = (entry) => {
+    const to = `${entry.to}${entry.hash ? `#${entry.hash}` : ''}`;
+    navigate(to);
+    setSearchOpen(false);
   };
 
   return (
@@ -160,13 +228,48 @@ function AdminLayout({ children }) {
               <p className="admin-welcome mb-1">Welcome,</p>
               <h5 className="mb-0 admin-page-title">{currentPageLabel}</h5>
             </div>
-            <div className="admin-topbar-search-wrap">
+            <div className="admin-topbar-search-wrap" ref={searchRef}>
               <input
                 className="admin-topbar-search"
                 type="search"
                 placeholder="Find settings, leads, or pages"
                 aria-label="Search admin pages"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setSearchOpen(false);
+                    return;
+                  }
+                  if (e.key === 'Enter' && searchResults.length > 0) {
+                    e.preventDefault();
+                    handleSearchResultClick(searchResults[0]);
+                  }
+                }}
               />
+              {searchOpen && searchQuery.trim() ? (
+                <div className="admin-search-popup" role="listbox" aria-label="Admin search results">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((entry, index) => (
+                      <button
+                        key={`${entry.to}-${entry.hash || 'top'}-${index}`}
+                        type="button"
+                        className="admin-search-popup-item"
+                        onClick={() => handleSearchResultClick(entry)}
+                      >
+                        <span className="admin-search-popup-page">{entry.page}</span>
+                        <span className="admin-search-popup-text">{entry.text}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="admin-search-popup-empty">No page or text found.</div>
+                  )}
+                </div>
+              ) : null}
             </div>
           </header>
           <div className="admin-content">{children}</div>

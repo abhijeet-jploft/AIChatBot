@@ -120,7 +120,7 @@ export default function SupportRequests() {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="support-requests-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Support requests</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
         Visitors who asked for a human or support. Open the chat to take over.
@@ -205,18 +205,18 @@ export default function SupportRequests() {
                           {formatDateTime(row.requestedAt)}
                         </td>
                         <td className="align-middle text-end">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-primary me-1"
-                            onClick={() => openTicketThread(row)}
-                          >
-                            View ticket
-                          </button>
                           {row.sessionId ? (
-                            <>
+                            <div className="admin-action-stack admin-action-stack-end">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() => openTicketThread(row)}
+                              >
+                                View ticket
+                              </button>
                               <Link
                                 to={`/admin/chat/${row.sessionId}`}
-                                className="btn btn-sm btn-primary me-1"
+                                className="btn btn-sm btn-primary"
                               >
                                 Operate Chat
                               </Link>
@@ -228,9 +228,15 @@ export default function SupportRequests() {
                               >
                                 Visitor preview
                               </a>
-                            </>
+                            </div>
                           ) : (
-                            <span className="small text-muted">No live session</span>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() => openTicketThread(row)}
+                            >
+                              View ticket
+                            </button>
                           )}
                         </td>
                       </tr>

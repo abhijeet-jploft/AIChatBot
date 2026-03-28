@@ -452,7 +452,7 @@ export default function VoiceSettings() {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="voice-settings-top">
       <h5 className="mb-4" style={{ color: 'var(--chat-text-heading)' }}>Voice settings</h5>
 
       <form onSubmit={handleSubmit}>

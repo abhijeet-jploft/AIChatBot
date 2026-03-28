@@ -76,7 +76,7 @@ export default function AccountProfile() {
   const showOtherInput = industrySelect === OTHER_VALUE;
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="account-profile-top">
       <div className="mb-3">
         <h5 className="mb-1" style={{ color: 'var(--chat-text-heading)' }}>Account profile</h5>
         <p className="small mb-0" style={{ color: 'var(--chat-muted)' }}>

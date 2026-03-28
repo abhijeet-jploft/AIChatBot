@@ -1,5 +1,5 @@
 const pool = require('../../db/index');
-const { normalizeCalendarRangeQuery } = require('../../utils/dateRangeQuery');
+const { normalizeCalendarRangeQuery, ISO_DATE } = require('../../utils/dateRangeQuery');
 const ChatMessage = require('../../models/ChatMessage');
 const ChatSession = require('../../models/ChatSession');
 const Lead = require('../../models/Lead');
@@ -51,6 +51,29 @@ function inferConversationStatus({ updatedAt, leadStatus, activeCutoffMs }) {
   return updatedMs >= activeCutoffMs ? 'active' : 'closed';
 }
 
+function nextDayStartIso(isoDate) {
+  const d = new Date(`${isoDate}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
+}
+
+function formatDurationLabel(durationSeconds) {
+  const minutes = Math.max(0, Math.round((Number(durationSeconds) || 0) / 60));
+  if (minutes < 60) return `${minutes}m`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 168) return `${hours}h`;
+
+  const weeks = Math.round(hours / 168);
+  if (weeks < 4) return `${weeks}w`;
+
+  const months = Math.round(weeks / 4);
+  if (months < 12) return `${months}mnt`;
+
+  const years = Math.round(months / 12);
+  return `${years}y`;
+}
+
 /**
  * GET /admin/conversations
  * Query: search, limit, page, dateFrom, dateTo, leadStatus, status, intent, outcome
@@ -68,6 +91,8 @@ async function listConversations(req, res) {
       req.query.dateFrom,
       req.query.dateTo
     );
+    const dateFromBound = ISO_DATE.test(dateFrom) ? `${dateFrom}T00:00:00.000Z` : dateFrom;
+    const dateToExclusiveBound = ISO_DATE.test(dateTo) ? nextDayStartIso(dateTo) : null;
     const leadStatus = (req.query.leadStatus || 'all').toLowerCase();
     const statusFilter = (req.query.status || 'all').toLowerCase();
     const intentFilter = humanizeToken(req.query.intent).toLowerCase().replace(/\s+/g, '_');
@@ -80,16 +105,22 @@ async function listConversations(req, res) {
     const listValues = [companyId];
     let paramIndex = 2;
 
-    if (dateFrom) {
-      countWhere.push(`(cs.updated_at >= $${paramIndex}::timestamptz)`);
-      listWhere.push(`(cs.updated_at >= $${paramIndex}::timestamptz)`);
-      countValues.push(dateFrom);
-      listValues.push(dateFrom);
+    if (dateFromBound) {
+      countWhere.push(`(cs.created_at >= $${paramIndex}::timestamptz)`);
+      listWhere.push(`(cs.created_at >= $${paramIndex}::timestamptz)`);
+      countValues.push(dateFromBound);
+      listValues.push(dateFromBound);
       paramIndex += 1;
     }
-    if (dateTo) {
-      countWhere.push(`(cs.updated_at <= $${paramIndex}::timestamptz)`);
-      listWhere.push(`(cs.updated_at <= $${paramIndex}::timestamptz)`);
+    if (dateToExclusiveBound) {
+      countWhere.push(`(cs.created_at < $${paramIndex}::timestamptz)`);
+      listWhere.push(`(cs.created_at < $${paramIndex}::timestamptz)`);
+      countValues.push(dateToExclusiveBound);
+      listValues.push(dateToExclusiveBound);
+      paramIndex += 1;
+    } else if (dateTo) {
+      countWhere.push(`(cs.created_at <= $${paramIndex}::timestamptz)`);
+      listWhere.push(`(cs.created_at <= $${paramIndex}::timestamptz)`);
       countValues.push(dateTo);
       listValues.push(dateTo);
       paramIndex += 1;
@@ -311,7 +342,7 @@ async function listConversations(req, res) {
           activeCutoffMs,
         }),
         durationSeconds,
-        durationLabel: `${Math.max(0, Math.round(durationSeconds / 60))}m`,
+        durationLabel: formatDurationLabel(durationSeconds),
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       };

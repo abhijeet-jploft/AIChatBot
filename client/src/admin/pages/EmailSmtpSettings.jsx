@@ -111,7 +111,7 @@ export default function EmailSmtpSettings() {
   }
 
   return (
-    <div className="p-4 mx-auto" style={{ maxWidth: 720 }}>
+    <div className="p-4 mx-auto" id="email-smtp-top" style={{ maxWidth: 720 }}>
       <h5 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>
         Email — SMTP
       </h5>

@@ -128,7 +128,7 @@ export default function LiveMonitoring() {
   const sessions = Array.isArray(live.sessions) ? live.sessions : [];
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="live-monitoring-top">
       <h5 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Live chat monitoring</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
         Real-time visitor tracking with typing indicators, current page and instant message preview.
@@ -208,22 +208,24 @@ export default function LiveMonitoring() {
                       <td className="align-middle">{formatDuration(session.durationSeconds)}</td>
                       <td className="align-middle">
                         <div className="small" style={{ color: 'var(--chat-muted)' }}>
-                          {session.lastMessageRole ? String(session.lastMessageRole).toUpperCase() : 'N/A'} • {formatTimeAgo(session.lastMessageAt || session.lastSeen)}
+                          {session.lastMessageRole ? String(session.lastMessageRole).toUpperCase() : 'No Message'} • {formatTimeAgo(session.lastMessageAt || session.lastSeen)}
                         </div>
                         <div className="small">
                           {session.lastMessagePreview || '-'}
                         </div>
                       </td>
                       <td className="align-middle text-end">
-                        <Link to={`/admin/chat/${session.sessionId}`} className="btn btn-sm btn-primary me-1">Operate Chat</Link>
-                        <a
-                          href={`/?sessionId=${encodeURIComponent(session.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-outline-secondary"
-                        >
-                          Visitor preview
-                        </a>
+                        <div className="admin-action-stack admin-action-stack-end">
+                          <Link to={`/admin/chat/${session.sessionId}`} className="btn btn-sm btn-primary">Operate Chat</Link>
+                          <a
+                            href={`/?sessionId=${encodeURIComponent(session.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-sm btn-outline-secondary"
+                          >
+                            Visitor preview
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   ))}

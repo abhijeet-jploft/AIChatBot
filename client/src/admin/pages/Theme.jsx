@@ -84,7 +84,7 @@ export default function Theme() {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="theme-top">
       <h5 className="mb-4" style={{ color: 'var(--chat-text-heading)' }}>Theme</h5>
       <p className="text-muted small mb-2" style={{ color: 'var(--chat-muted)' }}>
         Control the chatbot header, colors, and accent shown to visitors. Changes apply to the main chat and embed widget.

@@ -156,6 +156,7 @@
 }
 
 .admin-topbar-search-wrap {
+  position: relative;
   width: min(520px, 55%);
 }
 
@@ -173,6 +174,128 @@
   outline: none;
   border-color: #b8bfce;
   box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.12);
+}
+
+.admin-search-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #d9dce4;
+  border-radius: 12px;
+  box-shadow: 0 14px 30px -24px rgba(17, 21, 32, 0.7);
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.admin-search-popup-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+}
+
+.admin-search-popup-item:hover {
+  background: #f2f4f9;
+}
+
+.admin-search-popup-page {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4d5263;
+}
+
+.admin-search-popup-text {
+  font-size: 13px;
+  color: #171923;
+}
+
+.admin-search-popup-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: #6e7487;
+}
+
+.admin-inline-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  white-space: nowrap;
+}
+
+.admin-action-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 132px;
+}
+
+.admin-action-stack-end {
+  margin-left: auto;
+}
+
+.admin-action-stack .btn {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.admin-conversations-table {
+  table-layout: fixed;
+}
+
+.admin-conversations-table th,
+.admin-conversations-table td {
+  vertical-align: middle;
+}
+
+.admin-conversations-table th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-conversations-table th:nth-child(1) {
+  width: 13%;
+}
+
+.admin-conversations-table th:nth-child(2) {
+  width: 12%;
+}
+
+.admin-conversations-table th:nth-child(3) {
+  width: 12%;
+}
+
+.admin-conversations-table th:nth-child(4) {
+  width: 11%;
+}
+
+.admin-conversations-table th:nth-child(5) {
+  width: 9%;
+}
+
+.admin-conversations-table th:nth-child(6) {
+  width: 14%;
+}
+
+.admin-conversations-table th:nth-child(7) {
+  width: 10%;
+}
+
+.admin-conversations-table th:nth-child(8) {
+  width: 9%;
+}
+
+.admin-conversations-table th:nth-child(9) {
+  width: 10%;
 }
 
 .admin-content {

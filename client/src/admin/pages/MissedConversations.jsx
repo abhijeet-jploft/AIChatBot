@@ -48,7 +48,7 @@ export default function MissedConversations() {
   const toRow = Math.min(data.page * data.limit, data.total);
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="missed-conversations-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Missed conversations</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
         Visitors who chatted but left without becoming a lead. Open the chat to follow up.
@@ -101,20 +101,22 @@ export default function MissedConversations() {
                           {formatDateTime(row.disconnectedAt)}
                         </td>
                         <td className="align-middle text-end">
-                          <Link
-                            to={`/admin/chat/${row.sessionId}`}
-                            className="btn btn-sm btn-primary me-1"
-                          >
-                            Operate Chat
-                          </Link>
-                          <a
-                            href={`/?sessionId=${encodeURIComponent(row.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-sm btn-outline-secondary"
-                          >
-                            Visitor preview
-                          </a>
+                          <div className="admin-action-stack admin-action-stack-end">
+                            <Link
+                              to={`/admin/chat/${row.sessionId}`}
+                              className="btn btn-sm btn-primary"
+                            >
+                              Operate Chat
+                            </Link>
+                            <a
+                              href={`/?sessionId=${encodeURIComponent(row.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-sm btn-outline-secondary"
+                            >
+                              Visitor preview
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     ))}

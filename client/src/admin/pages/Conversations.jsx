@@ -261,13 +261,13 @@ export default function Conversations() {
   const toRow = Math.min(data.page * data.limit, data.total);
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="conversations-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Conversations</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
         All chat sessions. Filter by date range, lead status, active/closed; search by visitor name, email, phone, or first message.
       </p>
 
-      <form onSubmit={handleSearchSubmit} className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
+      <form id="conversations-filters" onSubmit={handleSearchSubmit} className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
         <div className="card-body">
           <div className="row g-2 align-items-end">
             <div className="col-12 col-md-4 col-lg-3">
@@ -356,7 +356,7 @@ export default function Conversations() {
         </div>
       </form>
 
-      <div className="card" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
+      <div className="card" id="conversations-table" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
         <div className="card-body p-0">
           {loading ? (
             <div className="p-4 text-center small" style={{ color: 'var(--chat-muted)' }}>Loading...</div>
@@ -367,7 +367,7 @@ export default function Conversations() {
           ) : (
             <>
               <div className="table-responsive">
-                <table className="table table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
+                <table className="table table-hover mb-0 admin-conversations-table" style={{ color: 'var(--chat-text)' }}>
                   <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
                     <tr>
                       <th className="border-0 py-2">Visitor ID</th>
@@ -427,28 +427,30 @@ export default function Conversations() {
                           {humanize(conv.intentTag)}
                         </td>
                         <td className="align-middle text-end">
-                          {conv.leadCaptured ? (
-                            <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-primary me-1">View lead</Link>
-                          ) : null}
-                          <button type="button" className="btn btn-sm btn-outline-primary me-1" onClick={() => openDetail(conv.id)}>
-                            Details
-                          </button>
-                          {!conv.leadCaptured ? (
-                            <button type="button" className="btn btn-sm btn-outline-success me-1" onClick={() => openConvertLeadModal(conv)}>
-                              Convert Lead
+                          <div className="admin-action-stack admin-action-stack-end">
+                            {conv.leadCaptured ? (
+                              <Link to={`/admin/leads/${conv.leadId}`} className="btn btn-sm btn-outline-primary">View lead</Link>
+                            ) : null}
+                            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openDetail(conv.id)}>
+                              Details
                             </button>
-                          ) : null}
-                          <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary me-1">
-                            Operate Chat
-                          </Link>
-                          <a
-                            href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-sm btn-outline-secondary"
-                          >
-                            Visitor preview
-                          </a>
+                            {!conv.leadCaptured ? (
+                              <button type="button" className="btn btn-sm btn-outline-success" onClick={() => openConvertLeadModal(conv)}>
+                                Convert Lead
+                              </button>
+                            ) : null}
+                            <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary">
+                              Operate Chat
+                            </Link>
+                            <a
+                              href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-sm btn-outline-secondary"
+                            >
+                              Visitor preview
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     ))}

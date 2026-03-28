@@ -37,13 +37,14 @@ export default function Dashboard() {
   const [noteModalLead, setNoteModalLead] = useState(null);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const liveWsRef = useRef(null);
   const liveReconnectRef = useRef(null);
   const prevLiveDataRef = useRef({ activeCount: 0, currentlyChatting: 0 });
   const liveDataInitializedRef = useRef(false);
 
   const fetchDashboard = useCallback(() => {
-    authFetch('/dashboard')
+    return authFetch('/dashboard')
       .then(async (res) => {
         if (!res.ok) throw new Error('Failed to load dashboard');
         const json = await res.json();
@@ -126,6 +127,15 @@ export default function Dashboard() {
       .catch(() => {})
       .finally(() => setAgentPausedUpdating(false));
   }, [authFetch, fetchDashboard]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchDashboard();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchDashboard]);
 
   useEffect(() => {
     fetchDashboard();
@@ -238,7 +248,7 @@ export default function Dashboard() {
   const systemStatusLine = systemStatusParts.length > 0 ? systemStatusParts.join(' · ') : null;
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="dashboard-top">
       {/* System Status Header */}
       <div
         className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-3 border-bottom"
@@ -276,7 +286,14 @@ export default function Dashboard() {
               {agentPausedUpdating ? '…' : 'Pause AI'}
             </button>
           )}
-          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={fetchDashboard} title="Refresh dashboard data">
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
+            onClick={handleRefresh}
+            title="Refresh dashboard data"
+            disabled={refreshing}
+          >
+            {refreshing ? <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" /> : null}
             Refresh
           </button>
           <Link to="/admin/training" className="btn btn-sm btn-primary" title="Refresh training / Open knowledge base">Training</Link>
@@ -301,7 +318,7 @@ export default function Dashboard() {
       )}
 
       {/* Key Performance Metrics (KPI Cards) */}
-      <h6 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Key metrics</h6>
+      <h6 className="mb-3" id="dashboard-key-metrics" style={{ color: 'var(--chat-text-heading)' }}>Key metrics</h6>
       <div className="row g-3 mb-4">
         <div className="col-6 col-md-4 col-lg-2">
           <div className="card h-100" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
@@ -361,7 +378,7 @@ export default function Dashboard() {
       </div>
 
       {/* Live Activity Panel */}
-      <h6 className="mb-3 mt-2" style={{ color: 'var(--chat-text-heading)' }}>Live activity</h6>
+      <h6 className="mb-3 mt-2" id="dashboard-live-activity" style={{ color: 'var(--chat-text-heading)' }}>Live activity</h6>
       <div className="card mb-4" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
         <div className="card-body py-3">
           <div className="row g-3 small">
@@ -401,7 +418,7 @@ export default function Dashboard() {
         <div className="col-lg-6">
           <div className="card h-100" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
             <div className="card-header d-flex align-items-center justify-content-between py-2" style={{ background: 'var(--chat-sidebar)', borderColor: 'var(--chat-border)', color: 'var(--chat-text-heading)' }}>
-              <span>Lead snapshot</span>
+              <span id="dashboard-lead-snapshot">Lead snapshot</span>
               <Link to="/admin/leads" className="btn btn-sm btn-link p-0" style={{ color: 'var(--chat-accent)' }}>View all</Link>
             </div>
             <div className="card-body p-0">
@@ -444,8 +461,8 @@ export default function Dashboard() {
                           Received: {formatTimeAgo(lead.timeReceived)}
                         </div>
                       </div>
-                      <div className="ms-2">
-                        <Link to={`/admin/leads/${lead.id}`} className="btn btn-sm btn-outline-secondary">View lead</Link>
+                      <div className="ms-2 d-flex align-items-start">
+                        <Link to={`/admin/leads/${lead.id}`} className="btn btn-sm btn-outline-secondary admin-inline-action-btn">View lead</Link>
                       </div>
                     </li>
                   ))}
@@ -459,7 +476,7 @@ export default function Dashboard() {
         <div className="col-lg-6">
           <div className="card h-100" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
             <div className="card-header d-flex align-items-center justify-content-between py-2" style={{ background: 'var(--chat-sidebar)', borderColor: 'var(--chat-border)', color: 'var(--chat-text-heading)' }}>
-              <span>Conversation snapshot</span>
+              <span id="dashboard-conversation-snapshot">Conversation snapshot</span>
               <Link to="/admin/conversations" className="btn btn-sm btn-link p-0" style={{ color: 'var(--chat-accent)' }}>View all</Link>
             </div>
             <div className="card-body p-0">
@@ -479,12 +496,12 @@ export default function Dashboard() {
                           Duration: {conv.duration} · Lead: {conv.leadCaptured ? 'Yes' : 'No'} · Status: {conv.status}
                         </div>
                       </div>
-                      <div className="d-flex flex-column gap-1 ms-2">
-                        <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-outline-secondary">
+                      <div className="d-flex flex-column gap-1 ms-2 align-items-start">
+                        <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-outline-secondary admin-inline-action-btn">
                           Operate Chat
                         </Link>
                         {isLive ? (
-                          <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary">
+                          <Link to={`/admin/chat/${conv.id}`} className="btn btn-sm btn-primary admin-inline-action-btn">
                             Take over
                           </Link>
                         ) : null}

@@ -50,7 +50,7 @@ export default function ConversationMode() {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4" id="modes-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>AI mode</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)', maxWidth: 760 }}>
         Select the primary conversation goal from the specification: Lead Generation, Meeting Booking, Product Recommendation,
