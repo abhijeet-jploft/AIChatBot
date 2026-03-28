@@ -1,4 +1,5 @@
 const Lead = require('../../models/Lead');
+const { normalizeCalendarRangeQuery } = require('../../utils/dateRangeQuery');
 const { sendDueReminderDigest } = require('../../services/leadNotificationService');
 const {
   buildLeadRequirementSummary,
@@ -20,13 +21,17 @@ function toArrayIds(idsParam) {
 }
 
 function parseListFilters(query = {}) {
+  const { from: fromDate, to: toDate } = normalizeCalendarRangeQuery(
+    query.fromDate,
+    query.toDate
+  );
   return {
     status: query.status,
     scoreCategory: query.scoreCategory,
     reminderState: query.reminderState,
     search: query.search,
-    fromDate: query.fromDate,
-    toDate: query.toDate,
+    fromDate,
+    toDate,
     sort: query.sort,
     limit: query.limit,
     offset: query.offset,

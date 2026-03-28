@@ -1,4 +1,5 @@
 const pool = require('../../db/index');
+const { normalizeCalendarRangeQuery } = require('../../utils/dateRangeQuery');
 const ChatMessage = require('../../models/ChatMessage');
 const ChatSession = require('../../models/ChatSession');
 const Lead = require('../../models/Lead');
@@ -63,8 +64,10 @@ async function listConversations(req, res) {
     const page = Math.max(1, Number(req.query.page) || 1);
     const offset = (page - 1) * limit;
     const search = (req.query.search || '').trim();
-    const dateFrom = (req.query.dateFrom || '').trim();
-    const dateTo = (req.query.dateTo || '').trim();
+    const { from: dateFrom, to: dateTo } = normalizeCalendarRangeQuery(
+      req.query.dateFrom,
+      req.query.dateTo
+    );
     const leadStatus = (req.query.leadStatus || 'all').toLowerCase();
     const statusFilter = (req.query.status || 'all').toLowerCase();
     const intentFilter = humanizeToken(req.query.intent).toLowerCase().replace(/\s+/g, '_');

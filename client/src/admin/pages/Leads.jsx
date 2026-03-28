@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import {
+  clampFromNotAfterTo,
+  clampToNotBeforeFrom,
+  nextToAfterFromChange,
+} from '../../utils/dateRangeFields';
 
 async function toggleElementFullscreen(element) {
   if (!element) return false;
@@ -669,7 +674,15 @@ export default function Leads() {
                 type="date"
                 className="form-control form-control-sm"
                 value={filters.fromDate}
-                onChange={(e) => setFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+                max={filters.toDate || undefined}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFilters((prev) => ({
+                    ...prev,
+                    fromDate: clampFromNotAfterTo(prev.toDate, v),
+                    toDate: nextToAfterFromChange(v, prev.toDate),
+                  }));
+                }}
               />
             </div>
             <div className="col-md-2">
@@ -678,7 +691,14 @@ export default function Leads() {
                 type="date"
                 className="form-control form-control-sm"
                 value={filters.toDate}
-                onChange={(e) => setFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+                min={filters.fromDate || undefined}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFilters((prev) => ({
+                    ...prev,
+                    toDate: clampToNotBeforeFrom(prev.fromDate, v),
+                  }));
+                }}
               />
             </div>
             <div className="col-md-2">

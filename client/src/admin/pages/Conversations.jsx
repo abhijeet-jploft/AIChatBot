@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import {
+  clampFromNotAfterTo,
+  clampToNotBeforeFrom,
+  nextToAfterFromChange,
+} from '../../utils/dateRangeFields';
 
 async function toggleElementFullscreen(element) {
   if (!element) return;
@@ -281,7 +286,12 @@ export default function Conversations() {
                 type="date"
                 className="form-control form-control-sm"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                max={dateTo || undefined}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDateFrom(clampFromNotAfterTo(dateTo, v));
+                  setDateTo((t) => nextToAfterFromChange(v, t));
+                }}
               />
             </div>
             <div className="col-6 col-md-2 col-lg-2">
@@ -290,7 +300,8 @@ export default function Conversations() {
                 type="date"
                 className="form-control form-control-sm"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(clampToNotBeforeFrom(dateFrom, e.target.value))}
               />
             </div>
             <div className="col-6 col-md-2 col-lg-2">

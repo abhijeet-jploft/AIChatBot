@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import {
+  clampFromNotAfterTo,
+  clampToNotBeforeFrom,
+  nextToAfterFromChange,
+} from '../../utils/dateRangeFields';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   CategoryScale,
@@ -139,9 +144,25 @@ export default function Reports() {
       <div className="sa-page-header">
         <h2 className="sa-page-title">Reports</h2>
         <div className="sa-filter-row">
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="sa-input-sm" />
+          <input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFrom(clampFromNotAfterTo(to, v));
+              setTo((t) => nextToAfterFromChange(v, t));
+            }}
+            className="sa-input-sm"
+          />
           <span>to</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="sa-input-sm" />
+          <input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(clampToNotBeforeFrom(from, e.target.value))}
+            className="sa-input-sm"
+          />
           <button className="sa-btn sa-btn-primary sa-btn-sm" onClick={load}>Run</button>
         </div>
       </div>

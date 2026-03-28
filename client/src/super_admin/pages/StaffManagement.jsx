@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ACCESS_LEVELS, PERMISSION_MODULES, normalizePermissionMatrix } from '../lib/permissions';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import {
+  clampFromNotAfterTo,
+  clampToNotBeforeFrom,
+  nextToAfterFromChange,
+} from '../../utils/dateRangeFields';
 
 const AUDIT_PAGE_SIZE = 20;
 const AUDIT_DEBOUNCE_MS = 400;
@@ -797,7 +802,12 @@ export default function StaffManagement() {
               <input
                 type="date"
                 value={auditDateFrom}
-                onChange={(e) => setAuditDateFrom(e.target.value)}
+                max={auditDateTo || undefined}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setAuditDateFrom(clampFromNotAfterTo(auditDateTo, v));
+                  setAuditDateTo((t) => nextToAfterFromChange(v, t));
+                }}
                 style={{ color: 'var(--sa-text)', background: 'var(--sa-surface)' }}
               />
             </div>
@@ -806,7 +816,8 @@ export default function StaffManagement() {
               <input
                 type="date"
                 value={auditDateTo}
-                onChange={(e) => setAuditDateTo(e.target.value)}
+                min={auditDateFrom || undefined}
+                onChange={(e) => setAuditDateTo(clampToNotBeforeFrom(auditDateFrom, e.target.value))}
                 style={{ color: 'var(--sa-text)', background: 'var(--sa-surface)' }}
               />
             </div>

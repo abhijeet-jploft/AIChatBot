@@ -1,4 +1,5 @@
 const pool = require('../../db/index');
+const { normalizeCalendarRangeQuery } = require('../../utils/dateRangeQuery');
 const { getLogs } = require('../../services/adminLogStore');
 
 function percentile(values, p) {
@@ -109,9 +110,9 @@ async function deleteAlertRule(req, res) {
 // GET /super-admin/reports
 async function getReports(req, res) {
   try {
-    const { from, to } = req.query;
-    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
-    const toDate = to ? new Date(to) : new Date();
+    const { from: fromQ, to: toQ } = normalizeCalendarRangeQuery(req.query.from, req.query.to);
+    const fromDate = fromQ ? new Date(fromQ) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const toDate = toQ ? new Date(toQ) : new Date();
 
     const [byCompany, leadsByStatus, convsByDay] = await Promise.all([
       pool.query(

@@ -1,4 +1,5 @@
 const pool = require('../../db/index');
+const { normalizeCalendarRangeQuery } = require('../../utils/dateRangeQuery');
 
 function resolveActor(actorOrReq) {
   const actor = actorOrReq?.authUser || actorOrReq || {};
@@ -55,6 +56,10 @@ function ilikeContainsPattern(raw) {
  * @param {string} [opts.dateTo] — inclusive end calendar day
  */
 async function listAuditLogs(opts = {}) {
+  const range = normalizeCalendarRangeQuery(opts.dateFrom, opts.dateTo);
+  const dateFromOpt = range.from;
+  const dateToOpt = range.to;
+
   const safeLimit = Math.max(1, Math.min(200, Number(opts.limit) || 50));
   const safeOffset = Math.max(0, Number(opts.offset) || 0);
 
@@ -92,8 +97,8 @@ async function listAuditLogs(opts = {}) {
     i += 1;
   }
 
-  if (opts.dateFrom) {
-    const d = new Date(opts.dateFrom);
+  if (dateFromOpt) {
+    const d = new Date(dateFromOpt);
     if (!Number.isNaN(d.getTime())) {
       parts.push(`created_at >= $${i}::timestamptz`);
       params.push(d.toISOString());
@@ -101,8 +106,8 @@ async function listAuditLogs(opts = {}) {
     }
   }
 
-  if (opts.dateTo) {
-    const d = new Date(opts.dateTo);
+  if (dateToOpt) {
+    const d = new Date(dateToOpt);
     if (!Number.isNaN(d.getTime())) {
       parts.push(`created_at < ($${i}::date + INTERVAL '1 day')::timestamptz`);
       params.push(d.toISOString().slice(0, 10));
