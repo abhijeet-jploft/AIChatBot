@@ -4,10 +4,13 @@ const URL_RE = /(^|[^/\w])((?:https?:\/\/|www\.)[^\s<>()]+)/g;
 const WHATSAPP_RE = /(\b(?:whats\s*app|whatsapp|wa)\b(?:\s+(?:number|no\.?|contact))?\s*[:=-]?\s*)((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)/gi;
 const UNICODE_BULLET_RE = /^([ \t]*)[•●▪◦‣⁃]\s+/;
 const NAME_PATTERNS = [
-  /\bmy name is\s+([a-z][a-z\s.'-]{1,60})/i,
-  /\bi am\s+([a-z][a-z\s.'-]{1,60})/i,
-  /\bthis is\s+([a-z][a-z\s.'-]{1,60})/i,
-  /\bname\s*[:=-]\s*([a-z][a-z\s.'-]{1,60})/i,
+  /\bmy name is\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bi am\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bthis is\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bname\s*[:=-]\s*([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bi(?:'|’|')m\s+(?!at\b)([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bcall me\s+(?!at\b)([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\byou can call me\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
 ];
 
 function protectSegments(text) {
@@ -183,11 +186,17 @@ export function extractLeadDraftFromMessages(messages = []) {
   const phoneMatch = userText.match(/(?:^|[^\w])((?:\+|00)?\d[\d\s().-]{6,}\d)(?=$|[^\w])/);
 
   let name = '';
-  for (const pattern of NAME_PATTERNS) {
-    const match = userText.match(pattern);
-    if (match?.[1]) {
-      name = match[1].trim().replace(/\s+/g, ' ').slice(0, 80);
-      break;
+  const structuredName = userText.match(/^\s*name\s*:\s*(.+)$/im);
+  if (structuredName?.[1]) {
+    name = structuredName[1].trim().replace(/\s+/g, ' ').slice(0, 80);
+  }
+  if (!name) {
+    for (const pattern of NAME_PATTERNS) {
+      const match = userText.match(pattern);
+      if (match?.[1]) {
+        name = match[1].trim().replace(/\s+/g, ' ').slice(0, 80);
+        break;
+      }
     }
   }
 

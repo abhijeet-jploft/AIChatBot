@@ -120,7 +120,6 @@ async function listLeads(req, res) {
       ...result,
       rows: (result.rows || []).map((row) => ({
         ...row,
-        display_name: pickVisitorDisplayName(row.name, row.email, row.phone),
         requirement_summary: buildLeadRequirementSummary({ lead: row }),
         key_discussion_points: extractKeyDiscussionPoints({ projectSummary: row.project_summary || '' }),
       })),

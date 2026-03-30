@@ -1,6 +1,7 @@
 const Lead = require('../models/Lead');
 const {
   buildLeadRequirementSummary,
+  normalizeWhitespace,
   sanitizeLocation,
   sanitizeVisitorName,
 } = require('./conversationInsights');
@@ -15,12 +16,48 @@ const URGENCY_RE = /\b(urgent|asap|immediately|priority|deadline|this week|today
 const BUDGET_RE = /(?:[$€£₹]\s?\d[\d,]*(?:\.\d+)?(?:\s*(?:-|to)\s*(?:[$€£₹])?\s?\d[\d,]*(?:\.\d+)?)?|\b\d[\d,]*(?:\.\d+)?\s?(?:usd|inr|eur|gbp|k|m)\b)/i;
 const TIMELINE_RE = /\b(?:\d+\s*(?:day|days|week|weeks|month|months)|asap|urgent|this week|next week|next month)\b/i;
 
+// Note: `/i` does not make `[a-z]` match A–Z; first letter must allow uppercase (e.g. "Name: John").
+// `(?!at\b)` avoids "I'm at…" / "call me at…" matching as a name.
 const NAME_PATTERNS = [
-  /\bmy name is\s+([a-z][a-z\s.'-]{1,60})/i,
-  /\bi am\s+([a-z][a-z\s.'-]{1,60})/i,
-  /\bthis is\s+([a-z][a-z\s.'-]{1,60})/i,
-  /\bname\s*[:=-]\s*([a-z][a-z\s.'-]{1,60})/i,
+  /\bmy name is\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bi am\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bthis is\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bname\s*[:=-]\s*([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bi(?:'|’|')m\s+(?!at\b)([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\bcall me\s+(?!at\b)([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+  /\byou can call me\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
 ];
+
+const LOOSE_NAME_REJECT = new Set(['at', 'the', 'a', 'an', 'or', 'and', 'to', 'in', 'on', 'for', 'me', 'it', 'is', 'be', 'as']);
+
+function looseLeadNameFromRaw(raw) {
+  let s = normalizeWhitespace(String(raw || '').split(/[,:;|/\n]/)[0]);
+  if (!s || /@/.test(s)) return '';
+
+  s = s
+    .replace(EMAIL_RE, ' ')
+    .replace(PHONE_RE, ' ');
+  s = normalizeWhitespace(s.replace(/[^\p{L}\s.'-]/gu, ' '));
+  const words = s.split(/\s+/).filter(Boolean).slice(0, 4);
+  if (!words.length) return '';
+  const letters = words.join('').replace(/[^\p{L}]/gu, '');
+  if (letters.length < 2) return '';
+  if (words.length === 1 && LOOSE_NAME_REJECT.has(words[0].toLowerCase())) return '';
+
+  return words
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function finalizeExtractedName(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return '';
+
+  const strict = sanitizeVisitorName(trimmed);
+  if (strict) return strict;
+
+  return looseLeadNameFromRaw(trimmed);
+}
 
 function normalizePhone(raw = '') {
   const cleaned = String(raw).replace(/[^\d+]/g, '');
@@ -45,10 +82,18 @@ function extractPhone(text = '') {
 
 function extractName(text = '') {
   const source = String(text || '');
+
+  const structured = source.match(/^\s*name\s*:\s*(.+)$/im);
+  if (structured?.[1]) {
+    const fromLine = finalizeExtractedName(structured[1].trim());
+    if (fromLine) return fromLine;
+  }
+
   for (const pattern of NAME_PATTERNS) {
     const match = source.match(pattern);
     if (match && match[1]) {
-      return sanitizeVisitorName(match[1]);
+      const resolved = finalizeExtractedName(match[1]);
+      if (resolved) return resolved;
     }
   }
   return '';

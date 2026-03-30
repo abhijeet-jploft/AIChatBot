@@ -1,4 +1,5 @@
 const pool = require('../db/index');
+const { pickVisitorDisplayName } = require('../services/conversationInsights');
 
 const LEAD_STATUSES = Object.freeze([
   'new',
@@ -290,11 +291,15 @@ async function listByCompany(companyId, filters = {}) {
     pagedValues
   );
 
-  const maskedRows = rows.map((row) => ({
-    ...row,
-    phone: maskPhone(row.phone),
-    email: maskEmail(row.email),
-  }));
+  const maskedRows = rows.map((row) => {
+    const display_name = pickVisitorDisplayName(row.name, row.email, row.phone);
+    return {
+      ...row,
+      display_name,
+      phone: maskPhone(row.phone),
+      email: maskEmail(row.email),
+    };
+  });
 
   return {
     rows: maskedRows,
