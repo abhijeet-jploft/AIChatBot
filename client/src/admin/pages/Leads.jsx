@@ -74,6 +74,7 @@ function formatDateTimeInput(value) {
 }
 
 const LEADS_PAGE_SIZE = 20;
+const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
 function buildQuery(filters = {}) {
   const params = new URLSearchParams();
@@ -857,7 +858,25 @@ export default function Leads() {
                     <div className="small" style={{ color: 'var(--chat-muted)' }}>
                       Showing {fromRow}–{toRow} of {total}
                     </div>
-                    <div className="d-flex gap-1">
+                    <div className="d-flex gap-2 align-items-center flex-wrap">
+                      <label className="small d-flex align-items-center gap-1" style={{ color: 'var(--chat-muted)' }}>
+                        Per page
+                        <select
+                          className="form-select form-select-sm"
+                          value={appliedFilters.limit || LEADS_PAGE_SIZE}
+                          onChange={(e) => {
+                            const nextLimit = Number(e.target.value) || LEADS_PAGE_SIZE;
+                            setFilters((prev) => ({ ...prev, page: 1, limit: nextLimit }));
+                            setAppliedFilters((prev) => ({ ...prev, page: 1, limit: nextLimit }));
+                          }}
+                          style={{ width: 88 }}
+                        >
+                          {PER_PAGE_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="d-flex gap-1">
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-secondary"
@@ -877,6 +896,7 @@ export default function Leads() {
                       >
                         Next
                       </button>
+                      </div>
                     </div>
                   </div>
                 )}

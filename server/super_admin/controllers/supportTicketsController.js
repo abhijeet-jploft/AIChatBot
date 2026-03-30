@@ -13,7 +13,7 @@ async function listSupportTickets(req, res) {
     const source = String(req.query.source || 'all').trim().toLowerCase();
     const search = ilikeContainsPattern(req.query.search);
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 20));
     const offset = req.query.offset !== undefined
       ? Math.max(0, Number(req.query.offset) || 0)
       : (page - 1) * limit;

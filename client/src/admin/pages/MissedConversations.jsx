@@ -8,6 +8,7 @@ import {
 } from '../../utils/dateRangeFields';
 
 const PAGE_SIZE = 20;
+const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
 function formatDateTime(value) {
   if (!value) return '—';
@@ -18,6 +19,7 @@ function formatDateTime(value) {
 
 export default function MissedConversations() {
   const { authFetch, company } = useAuth();
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [filters, setFilters] = useState({
     search: '',
     fromDate: '',
@@ -41,7 +43,7 @@ export default function MissedConversations() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('limit', String(PAGE_SIZE));
+      params.set('limit', String(pageSize));
       params.set('page', String(appliedFilters.page));
       if (appliedFilters.search.trim()) params.set('search', appliedFilters.search.trim());
       if (appliedFilters.fromDate) params.set('fromDate', appliedFilters.fromDate);
@@ -54,15 +56,15 @@ export default function MissedConversations() {
       setData({
         rows: json.rows || [],
         total: json.total ?? 0,
-        limit: json.limit ?? PAGE_SIZE,
+        limit: json.limit ?? pageSize,
         page: json.page ?? appliedFilters.page,
       });
     } catch {
-      setData({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
+      setData({ rows: [], total: 0, limit: pageSize, page: 1 });
     } finally {
       setLoading(false);
     }
-  }, [authFetch, appliedFilters]);
+  }, [authFetch, appliedFilters, pageSize]);
 
   useEffect(() => {
     load();
@@ -235,7 +237,24 @@ export default function MissedConversations() {
                   <div className="small" style={{ color: 'var(--chat-muted)' }}>
                     Showing {fromRow}–{toRow} of {data.total}
                   </div>
-                  <div className="d-flex gap-1">
+                  <div className="d-flex gap-2 align-items-center flex-wrap">
+                    <label className="small d-flex align-items-center gap-1" style={{ color: 'var(--chat-muted)' }}>
+                      Per page
+                      <select
+                        className="form-select form-select-sm"
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value) || PAGE_SIZE);
+                          setAppliedFilters((prev) => ({ ...prev, page: 1 }));
+                        }}
+                        style={{ width: 88 }}
+                      >
+                        {PER_PAGE_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="d-flex gap-1">
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-secondary"
@@ -255,6 +274,7 @@ export default function MissedConversations() {
                     >
                       Next
                     </button>
+                    </div>
                   </div>
                 </div>
               )}

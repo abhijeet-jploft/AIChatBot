@@ -4,7 +4,7 @@ const pool = require('../../db/index');
 async function getCompanyApiTracking(req, res) {
   try {
     const { companyId } = req.params;
-    const limit = Math.max(10, Math.min(300, Number(req.query.limit) || 50));
+    const limit = Math.max(10, Math.min(500, Number(req.query.limit) || 50));
     const page = Math.max(1, Number(req.query.page) || 1);
     const offset = (page - 1) * limit;
     const search = String(req.query.search || '').trim();

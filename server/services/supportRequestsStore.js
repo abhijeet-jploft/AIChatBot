@@ -57,7 +57,7 @@ function add(companyId, {
 }
 
 function list(companyId, options = {}) {
-  const limit = Math.max(1, Math.min(100, Number(options.limit) || 20));
+  const limit = Math.max(1, Math.min(500, Number(options.limit) || 20));
   const offset = Math.max(0, Number(options.offset) || 0);
   const list = getList(companyId);
   const total = list.length;

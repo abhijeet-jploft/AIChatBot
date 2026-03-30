@@ -60,7 +60,7 @@ async function listAuditLogs(opts = {}) {
   const dateFromOpt = range.from;
   const dateToOpt = range.to;
 
-  const safeLimit = Math.max(1, Math.min(200, Number(opts.limit) || 50));
+  const safeLimit = Math.max(1, Math.min(500, Number(opts.limit) || 50));
   const safeOffset = Math.max(0, Number(opts.offset) || 0);
 
   const parts = [];

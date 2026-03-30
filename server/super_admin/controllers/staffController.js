@@ -262,7 +262,7 @@ function sanitizeStaffSearchQ(raw) {
 
 async function listStaffUsers(req, res) {
   try {
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 20));
     let page = Math.max(1, Number(req.query.page) || 1);
     const qClean = sanitizeStaffSearchQ(req.query.q);
     const status = String(req.query.status || 'all').toLowerCase();
@@ -665,7 +665,7 @@ async function getOverview(req, res) {
 
 async function getAuditLogs(req, res) {
   try {
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 20));
     const page = Math.max(1, Number(req.query.page) || 1);
     let offset = Math.max(0, Number(req.query.offset) || 0);
     if (req.query.page != null && req.query.offset == null) {

@@ -11,6 +11,7 @@ import {
 const AUDIT_PAGE_SIZE = 20;
 const AUDIT_DEBOUNCE_MS = 400;
 const STAFF_PAGE_SIZE = 20;
+const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
 const TABS = [
   { id: 'roles', label: 'Role Management' },
@@ -120,6 +121,7 @@ export default function StaffManagement() {
   const [roles, setRoles] = useState([]);
   const [staffRows, setStaffRows] = useState([]);
   const [staffPage, setStaffPage] = useState(1);
+  const [staffPageSize, setStaffPageSize] = useState(STAFF_PAGE_SIZE);
   const [staffTotal, setStaffTotal] = useState(0);
   const [staffTotalPages, setStaffTotalPages] = useState(1);
   const [loadingStaff, setLoadingStaff] = useState(false);
@@ -136,6 +138,7 @@ export default function StaffManagement() {
   const [auditRows, setAuditRows] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(AUDIT_PAGE_SIZE);
   const [auditTotalPages, setAuditTotalPages] = useState(1);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [auditQ, setAuditQ] = useState('');
@@ -191,7 +194,7 @@ export default function StaffManagement() {
     const roleId = overrides.roleId !== undefined ? overrides.roleId : staffRoleFilter;
 
     const params = new URLSearchParams();
-    params.set('limit', String(STAFF_PAGE_SIZE));
+    params.set('limit', String(staffPageSize));
     params.set('page', String(page));
     if (q.trim()) params.set('q', q.trim());
     if (status && status !== 'all') params.set('status', status);
@@ -213,7 +216,7 @@ export default function StaffManagement() {
     } finally {
       setLoadingStaff(false);
     }
-  }, [saFetch, showToast, staffQDebounced, staffStatus, staffRoleFilter]);
+  }, [saFetch, showToast, staffQDebounced, staffStatus, staffRoleFilter, staffPageSize]);
 
   const fetchAuditLogs = useCallback(async (page, overrides = {}) => {
     const q = overrides.q !== undefined ? overrides.q : auditQDebounced;
@@ -224,7 +227,7 @@ export default function StaffManagement() {
     const dateTo = overrides.dateTo !== undefined ? overrides.dateTo : auditDateTo;
 
     const params = new URLSearchParams();
-    params.set('limit', String(AUDIT_PAGE_SIZE));
+    params.set('limit', String(auditPageSize));
     params.set('page', String(page));
     if (q.trim()) params.set('q', q.trim());
     if (actorType) params.set('actorType', actorType);
@@ -249,7 +252,7 @@ export default function StaffManagement() {
     } finally {
       setLoadingAudit(false);
     }
-  }, [saFetch, showToast, auditQDebounced, auditActorType, auditAction, auditTargetType, auditDateFrom, auditDateTo]);
+  }, [saFetch, showToast, auditQDebounced, auditActorType, auditAction, auditTargetType, auditDateFrom, auditDateTo, auditPageSize]);
 
   useEffect(() => {
     loadCore();
@@ -280,7 +283,7 @@ export default function StaffManagement() {
     setStaffPage(1);
     fetchStaffUsers(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, staffQDebounced, staffStatus, staffRoleFilter]);
+  }, [activeTab, staffQDebounced, staffStatus, staffRoleFilter, staffPageSize]);
 
   useEffect(() => {
     if (activeTab !== 'audit') {
@@ -297,7 +300,7 @@ export default function StaffManagement() {
     }
     // fetchAuditLogs intentionally omitted — using latest closure for filter state
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, auditQDebounced]);
+  }, [activeTab, auditQDebounced, auditPageSize]);
 
   const roleOptions = useMemo(() => roles.map((role) => ({ id: role.id, label: role.name })), [roles]);
 
@@ -695,6 +698,21 @@ export default function StaffManagement() {
           </div>
 
           <div className="sa-pagination-bar" style={{ marginBottom: 16 }}>
+            <label className="sa-text-muted" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+              Per page
+              <select
+                value={staffPageSize}
+                onChange={(e) => {
+                  const next = Number(e.target.value) || STAFF_PAGE_SIZE;
+                  setStaffPageSize(next);
+                  setStaffPage(1);
+                }}
+              >
+                {PER_PAGE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </label>
             <button type="button" className="sa-btn sa-btn-ghost sa-btn-sm" disabled={loadingStaff || staffPage <= 1} onClick={() => goStaffPage(staffPage - 1)}>
               Previous
             </button>
@@ -857,6 +875,21 @@ export default function StaffManagement() {
           </div>
 
           <div className="sa-pagination-bar">
+            <label className="sa-text-muted" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+              Per page
+              <select
+                value={auditPageSize}
+                onChange={(e) => {
+                  const next = Number(e.target.value) || AUDIT_PAGE_SIZE;
+                  setAuditPageSize(next);
+                  setAuditPage(1);
+                }}
+              >
+                {PER_PAGE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </label>
             <button type="button" className="sa-btn sa-btn-ghost sa-btn-sm" disabled={loadingAudit || auditPage <= 1} onClick={() => goAuditPage(auditPage - 1)}>
               Previous
             </button>

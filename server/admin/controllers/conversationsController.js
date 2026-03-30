@@ -12,7 +12,7 @@ const {
 } = require('../../services/conversationInsights');
 
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 500;
 
 function humanizeToken(value) {
   return String(value || '')

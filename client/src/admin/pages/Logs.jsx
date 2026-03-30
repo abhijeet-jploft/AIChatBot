@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const PAGE_SIZE = 50;
+const PER_PAGE_OPTIONS = [10, 50, 100, 500];
 const TYPES = [
   { value: 'all', label: 'All' },
   { value: 'chat', label: 'Chat' },
@@ -25,6 +26,7 @@ function levelBadge(level) {
 export default function Logs() {
   const { authFetch } = useAuth();
   const [type, setType] = useState('all');
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, offset: 0 });
   const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ export default function Logs() {
     try {
       const params = new URLSearchParams();
       params.set('type', type);
-      params.set('limit', String(PAGE_SIZE));
+      params.set('limit', String(pageSize));
       params.set('offset', String(offset));
       const res = await authFetch(`/logs?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load logs');
@@ -43,15 +45,15 @@ export default function Logs() {
       setData({
         rows: json.rows || [],
         total: json.total ?? 0,
-        limit: json.limit ?? PAGE_SIZE,
+        limit: json.limit ?? pageSize,
         offset: json.offset ?? offset,
       });
     } catch {
-      setData({ rows: [], total: 0, limit: PAGE_SIZE, offset: 0 });
+      setData({ rows: [], total: 0, limit: pageSize, offset: 0 });
     } finally {
       setLoading(false);
     }
-  }, [authFetch, type, offset]);
+  }, [authFetch, type, offset, pageSize]);
 
   useEffect(() => {
     loadLogs();
@@ -173,12 +175,29 @@ export default function Logs() {
                   <div className="small" style={{ color: 'var(--chat-muted)' }}>
                     Showing {fromRow}–{toRow} of {data.total}
                   </div>
-                  <div className="d-flex gap-1">
+                  <div className="d-flex gap-2 align-items-center flex-wrap">
+                    <label className="small d-flex align-items-center gap-1" style={{ color: 'var(--chat-muted)' }}>
+                      Per page
+                      <select
+                        className="form-select form-select-sm"
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value) || PAGE_SIZE);
+                          setOffset(0);
+                        }}
+                        style={{ width: 88 }}
+                      >
+                        {PER_PAGE_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="d-flex gap-1">
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-secondary"
                       disabled={offset <= 0}
-                      onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+                      onClick={() => setOffset((o) => Math.max(0, o - (data.limit || pageSize)))}
                     >
                       Previous
                     </button>
@@ -188,11 +207,12 @@ export default function Logs() {
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-secondary"
-                      disabled={offset + PAGE_SIZE >= data.total}
-                      onClick={() => setOffset((o) => Math.min(data.total - 1, o + PAGE_SIZE))}
+                      disabled={offset + (data.limit || pageSize) >= data.total}
+                      onClick={() => setOffset((o) => Math.min(data.total - 1, o + (data.limit || pageSize)))}
                     >
                       Next
                     </button>
+                    </div>
                   </div>
                 </div>
               )}

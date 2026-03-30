@@ -38,7 +38,7 @@ function appendSystemLog(level, message, meta = null) {
 
 function getLogs(options = {}) {
   const type = options.type || 'all';
-  const limit = Math.max(1, Math.min(200, Number(options.limit) || 50));
+  const limit = Math.max(1, Math.min(500, Number(options.limit) || 50));
   const offset = Math.max(0, Number(options.offset) || 0);
 
   let list = [];

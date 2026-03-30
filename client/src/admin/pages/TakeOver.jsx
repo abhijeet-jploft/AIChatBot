@@ -6,6 +6,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const LIVE_POLL_MS = 8000;
 const WS_RECONNECT_MS = 5000;
 const PAGE_SIZE = 20;
+const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
 const TAB_LIVE = 'live';
 const TAB_ALL = 'all';
@@ -42,6 +43,7 @@ export default function TakeOver() {
   const [search, setSearch] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [allData, setAllData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [allLoading, setAllLoading] = useState(false);
 
@@ -140,7 +142,7 @@ export default function TakeOver() {
     setAllLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('limit', String(PAGE_SIZE));
+      params.set('limit', String(pageSize));
       params.set('page', String(page));
       if (appliedSearch) params.set('search', appliedSearch);
       const res = await authFetch(`/conversations?${params.toString()}`);
@@ -149,15 +151,15 @@ export default function TakeOver() {
       setAllData({
         rows: json.rows || [],
         total: json.total ?? 0,
-        limit: json.limit ?? PAGE_SIZE,
+        limit: json.limit ?? pageSize,
         page: json.page ?? page,
       });
     } catch {
-      setAllData({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
+      setAllData({ rows: [], total: 0, limit: pageSize, page: 1 });
     } finally {
       setAllLoading(false);
     }
-  }, [authFetch, page, appliedSearch]);
+  }, [authFetch, page, appliedSearch, pageSize]);
 
   useEffect(() => {
     if (activeTab === TAB_ALL) loadAllConversations();
@@ -485,7 +487,24 @@ export default function TakeOver() {
                       <div className="small" style={{ color: 'var(--chat-muted)' }}>
                         Showing {fromRow}–{toRow} of {allData.total}
                       </div>
-                      <div className="d-flex gap-1 align-items-center">
+                      <div className="d-flex gap-2 align-items-center flex-wrap">
+                        <label className="small d-flex align-items-center gap-1" style={{ color: 'var(--chat-muted)' }}>
+                          Per page
+                          <select
+                            className="form-select form-select-sm"
+                            value={pageSize}
+                            onChange={(e) => {
+                              setPageSize(Number(e.target.value) || PAGE_SIZE);
+                              setPage(1);
+                            }}
+                            style={{ width: 88 }}
+                          >
+                            {PER_PAGE_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="d-flex gap-1 align-items-center">
                         <button
                           type="button"
                           className="btn btn-sm btn-outline-secondary"
@@ -505,6 +524,7 @@ export default function TakeOver() {
                         >
                           Next
                         </button>
+                        </div>
                       </div>
                     </div>
                   )}

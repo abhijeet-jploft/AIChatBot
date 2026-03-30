@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
 
+const PER_PAGE_OPTIONS = [10, 50, 100, 500];
+
 function dt(v) {
   if (!v) return '-';
   const d = new Date(v);
@@ -264,7 +266,19 @@ export default function CompanyApiTracking() {
           <div className="sa-text-muted">
             Showing page {recentMeta.page} of {recentMeta.totalPages} ({recentMeta.total} rows)
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="sa-text-muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              Per page
+              <select
+                className="sa-input-sm"
+                value={query.limit}
+                onChange={(e) => setQuery((prev) => ({ ...prev, page: 1, limit: Number(e.target.value) || 50 }))}
+              >
+                {PER_PAGE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               className="sa-btn sa-btn-secondary sa-btn-sm"

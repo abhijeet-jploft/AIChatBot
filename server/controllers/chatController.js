@@ -15,10 +15,26 @@ const { normalizeVoiceGender, normalizeVoiceProfile, synthesizeTextResponse } = 
 const { parseLanguageExtraLocalesJson, resolveSpeechLanguageCode } = require('../services/supportedChatLanguages');
 const { detectNaturalLanguageFromText } = require('../services/chatRules');
 const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
+const { findProjectLinks } = require('../services/trainingLoader');
 const pool = require('../db/index');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
+
+const PROJECT_LINK_INTENT_RE = /\b(project|projects|portfolio|case\s*stud(y|ies)|have\s+you\s+done|similar\s+app|related\s+app|i\s+want\s+to\s+develop|want\s+to\s+develop|developed?)\b/i;
+
+function shouldReturnProjectLinks(query = '') {
+  return PROJECT_LINK_INTENT_RE.test(String(query || ''));
+}
+
+function buildProjectLinksReply(query = '', links = []) {
+  if (!Array.isArray(links) || links.length === 0) return '';
+  const intro = /fuel/i.test(String(query || ''))
+    ? 'Yes, we have done fuel delivery related projects. Here are relevant project links:'
+    : 'Here are relevant projects with links:';
+  const lines = links.map((item) => `- ${item.title}: ${item.url}`);
+  return [intro, '', ...lines].join('\n');
+}
 
 async function trackApiUsage({
   companyId,
@@ -294,57 +310,67 @@ async function postMessage(req, res) {
       appendChatLog('error', `Chat DB pre-write: ${dbErr.message}`, { sessionId: sid, companyId });
     }
 
-    const aiStartedAt = Date.now();
-    const effectiveAiModel = resolveEffectiveModel(aiConfig.provider, aiConfig.model);
-    const configuredBusinessInfo = pickConfiguredBusinessInfo(chatbot);
     let response = '';
-    try {
-      response = aiConfig.provider === 'gemini'
-        ? await sendGeminiMessage(companyId, messages, {
-          modeId: selectedModeId,
-          safetyConfig,
-          model: aiConfig.model,
-          apiKey: aiConfig.geminiApiKey,
-          assistantName: aiConfig.assistantName,
-          languageConfig: aiConfig.language,
-          configuredBusinessInfo,
-        })
-        : await sendAnthropicMessage(companyId, messages, {
-          modeId: selectedModeId,
-          safetyConfig,
-          model: aiConfig.model,
-          apiKey: aiConfig.anthropicApiKey,
-          assistantName: aiConfig.assistantName,
-          languageConfig: aiConfig.language,
-          configuredBusinessInfo,
-        });
-      await trackApiUsage({
-        companyId,
-        sessionId: sid,
-        provider: aiConfig.provider,
-        category: 'chat',
-        model: effectiveAiModel,
-        requestContext: 'training_loader_context',
-        latencyMs: Date.now() - aiStartedAt,
-        success: true,
-        metadata: { modeId: selectedModeId || null },
-      });
-    } catch (aiErr) {
-      await trackApiUsage({
-        companyId,
-        sessionId: sid,
-        provider: aiConfig.provider,
-        category: 'chat',
-        model: effectiveAiModel,
-        requestContext: 'training_loader_context',
-        latencyMs: Date.now() - aiStartedAt,
-        success: false,
-        errorMessage: aiErr?.message || 'AI call failed',
-        metadata: { modeId: selectedModeId || null },
-      });
-      throw aiErr;
+    const configuredBusinessInfo = pickConfiguredBusinessInfo(chatbot);
+    let aiResponseMs = 0;
+    if (shouldReturnProjectLinks(userMsg?.content)) {
+      const matchedLinks = findProjectLinks(companyId, userMsg?.content || '', { max: 50 });
+      if (matchedLinks.length > 0) {
+        response = buildProjectLinksReply(userMsg?.content || '', matchedLinks);
+      }
     }
-    const aiResponseMs = Date.now() - aiStartedAt;
+
+    if (!response) {
+      const aiStartedAt = Date.now();
+      const effectiveAiModel = resolveEffectiveModel(aiConfig.provider, aiConfig.model);
+      try {
+        response = aiConfig.provider === 'gemini'
+          ? await sendGeminiMessage(companyId, messages, {
+            modeId: selectedModeId,
+            safetyConfig,
+            model: aiConfig.model,
+            apiKey: aiConfig.geminiApiKey,
+            assistantName: aiConfig.assistantName,
+            languageConfig: aiConfig.language,
+            configuredBusinessInfo,
+          })
+          : await sendAnthropicMessage(companyId, messages, {
+            modeId: selectedModeId,
+            safetyConfig,
+            model: aiConfig.model,
+            apiKey: aiConfig.anthropicApiKey,
+            assistantName: aiConfig.assistantName,
+            languageConfig: aiConfig.language,
+            configuredBusinessInfo,
+          });
+        await trackApiUsage({
+          companyId,
+          sessionId: sid,
+          provider: aiConfig.provider,
+          category: 'chat',
+          model: effectiveAiModel,
+          requestContext: 'training_loader_context',
+          latencyMs: Date.now() - aiStartedAt,
+          success: true,
+          metadata: { modeId: selectedModeId || null },
+        });
+      } catch (aiErr) {
+        await trackApiUsage({
+          companyId,
+          sessionId: sid,
+          provider: aiConfig.provider,
+          category: 'chat',
+          model: effectiveAiModel,
+          requestContext: 'training_loader_context',
+          latencyMs: Date.now() - aiStartedAt,
+          success: false,
+          errorMessage: aiErr?.message || 'AI call failed',
+          metadata: { modeId: selectedModeId || null },
+        });
+        throw aiErr;
+      }
+      aiResponseMs = Date.now() - aiStartedAt;
+    }
     let voice = null;
 
     if (voiceConfig.responseEnabled) {

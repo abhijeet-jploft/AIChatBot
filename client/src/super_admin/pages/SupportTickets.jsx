@@ -6,6 +6,7 @@ const STATUS_OPTIONS = ['pending', 'resolved', 'closed'];
 const PRIORITY_OPTIONS = ['all', 'low', 'normal', 'high', 'urgent'];
 const SOURCE_OPTIONS = ['all', 'admin', 'visitor'];
 const PAGE_SIZE = 20;
+const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
 export default function SupportTickets() {
   const { saFetch } = useSuperAuth();
@@ -16,6 +17,7 @@ export default function SupportTickets() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [loading, setLoading] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState(null);
@@ -37,7 +39,7 @@ export default function SupportTickets() {
       params.set('status', nextStatus);
       params.set('priority', nextPriority);
       params.set('source', nextSource);
-      params.set('limit', String(PAGE_SIZE));
+      params.set('limit', String(pageSize));
       params.set('page', String(nextPage));
       if (nextSearch.trim()) params.set('search', nextSearch.trim());
 
@@ -49,7 +51,7 @@ export default function SupportTickets() {
       setData({
         rows,
         total: Number(json.total || 0),
-        limit: Number(json.limit || PAGE_SIZE),
+        limit: Number(json.limit || pageSize),
         page: Number(json.page || nextPage || 1),
       });
 
@@ -84,7 +86,7 @@ export default function SupportTickets() {
   useEffect(() => {
     loadTickets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, priority, source, search, page]);
+  }, [status, priority, source, search, page, pageSize]);
 
   useEffect(() => {
     loadMessages(selectedTicketId);
@@ -281,7 +283,22 @@ export default function SupportTickets() {
                 <div className="sa-text-muted" style={{ fontSize: 12 }}>
                   Showing {fromRow} - {toRow} of {data.total}
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label className="sa-text-muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Per page
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value) || PAGE_SIZE);
+                        setPage(1);
+                      }}
+                      style={{ minWidth: 84 }}
+                    >
+                      {PER_PAGE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </label>
                   <button
                     type="button"
                     className="sa-btn sa-btn-ghost sa-btn-sm"

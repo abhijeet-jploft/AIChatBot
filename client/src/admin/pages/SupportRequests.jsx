@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const PAGE_SIZE = 20;
+const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
 function formatDateTime(value) {
   if (!value) return '—';
@@ -14,6 +15,7 @@ function formatDateTime(value) {
 export default function SupportRequests() {
   const { authFetch, company } = useAuth();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -29,7 +31,7 @@ export default function SupportRequests() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('limit', String(PAGE_SIZE));
+      params.set('limit', String(pageSize));
       params.set('page', String(page));
       const res = await authFetch(`/support-requests?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load support requests');
@@ -37,15 +39,15 @@ export default function SupportRequests() {
       setData({
         rows: json.rows || [],
         total: json.total ?? 0,
-        limit: json.limit ?? PAGE_SIZE,
+        limit: json.limit ?? pageSize,
         page: json.page ?? page,
       });
     } catch {
-      setData({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
+      setData({ rows: [], total: 0, limit: pageSize, page: 1 });
     } finally {
       setLoading(false);
     }
-  }, [authFetch, page]);
+  }, [authFetch, page, pageSize]);
 
   useEffect(() => {
     load();
@@ -253,7 +255,24 @@ export default function SupportRequests() {
                   <div className="small" style={{ color: 'var(--chat-muted)' }}>
                     Showing {fromRow}–{toRow} of {data.total}
                   </div>
-                  <div className="d-flex gap-1">
+                  <div className="d-flex gap-2 align-items-center flex-wrap">
+                    <label className="small d-flex align-items-center gap-1" style={{ color: 'var(--chat-muted)' }}>
+                      Per page
+                      <select
+                        className="form-select form-select-sm"
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value) || PAGE_SIZE);
+                          setPage(1);
+                        }}
+                        style={{ width: 88 }}
+                      >
+                        {PER_PAGE_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="d-flex gap-1">
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-secondary"
@@ -273,6 +292,7 @@ export default function SupportRequests() {
                     >
                       Next
                     </button>
+                    </div>
                   </div>
                 </div>
               )}

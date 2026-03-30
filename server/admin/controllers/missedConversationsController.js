@@ -117,7 +117,7 @@ function buildMissedBaseCte() {
 async function listMissedConversations(req, res) {
   try {
     const companyId = req.adminCompanyId;
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 20));
     const page = Math.max(1, Number(req.query.page) || 1);
     const offset = (page - 1) * limit;
     const filters = parseFilters(req.query);

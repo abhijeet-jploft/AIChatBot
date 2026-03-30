@@ -4,6 +4,7 @@ const path = require('path');
 const TRAIN_DATA_DIR = path.join(__dirname, '../../train_data');
 const MAX_CONTEXT_CHARS = parseInt(process.env.TRAINING_CONTEXT_MAX_CHARS || '60000', 10);
 const MAX_JSONL_MATCHES = parseInt(process.env.TRAINING_JSONL_TOP_K || '5', 10);
+const SCRAPED_LINKS_FILE = 'scraped_website_links.txt';
 const RESERVED_TRAINING_DIRS = new Set(['_default', '_scrape_jobs']);
 
 const STOP_WORDS = new Set([
@@ -424,8 +425,98 @@ function loadCompanyContext(companyId, userQuery = '') {
   return context ? clip(context, MAX_CONTEXT_CHARS).trim() : null;
 }
 
+function parseLinksFileLine(line) {
+  const trimmed = String(line || '').trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(.*)\|\s*(https?:\/\/\S+)\s*$/i);
+  if (!match) return null;
+  return {
+    title: normalizeWhitespace(match[1]),
+    url: normalizeWhitespace(match[2]),
+  };
+}
+
+function buildQueryVariants(tokens = []) {
+  const variants = new Set();
+  for (const token of tokens) {
+    const t = String(token || '').trim().toLowerCase();
+    if (!t) continue;
+    variants.add(t);
+    if (t === 'app') variants.add('apps');
+    if (t === 'apps') variants.add('app');
+    if (t === 'fuel') {
+      variants.add('fueled');
+      variants.add('refuel');
+      variants.add('refueling');
+    }
+    if (t === 'delivery') {
+      variants.add('deliveries');
+      variants.add('on-demand');
+      variants.add('ondemand');
+    }
+  }
+  return [...variants];
+}
+
+/**
+ * Return relevant project/case-study links for a user query.
+ */
+function findProjectLinks(companyId, userQuery = '', options = {}) {
+  const companyPath = path.join(TRAIN_DATA_DIR, companyId);
+  const linksPath = path.join(companyPath, SCRAPED_LINKS_FILE);
+  if (!fs.existsSync(linksPath)) return [];
+
+  const content = fs.readFileSync(linksPath, 'utf8');
+  const rows = content
+    .split(/\r?\n/)
+    .map(parseLinksFileLine)
+    .filter(Boolean);
+  if (!rows.length) return [];
+
+  const max = Math.max(1, Number(options.max) || 50);
+  const tokens = tokenizeQuery(userQuery);
+  const wantsFuel = /\bfuel\b/i.test(String(userQuery || ''));
+  const tokenVariants = buildQueryVariants(tokens);
+  const phrases = buildPhrases(tokenVariants);
+
+  const scored = rows
+    .map((row) => {
+      const hay = `${row.title} ${row.url}`.toLowerCase();
+      const isBlogUrl = /\/blog\//i.test(row.url);
+      const isProjectLikeUrl = /casestud|case-studies|portfolio|app-development|software-development|development-services/i.test(row.url);
+      const score = scoreTextForQuery(hay, tokenVariants, phrases);
+      const projectSignal = /(case\s*stud|portfolio|project|app|platform|delivery|solution)/i.test(hay);
+      return {
+        ...row,
+        isBlogUrl,
+        isProjectLikeUrl,
+        score: score + (projectSignal ? 2 : 0),
+      };
+    })
+    .filter((row) => {
+      if (!(row.score > 0 && !row.isBlogUrl && row.isProjectLikeUrl)) return false;
+      if (!wantsFuel) return true;
+      const hay = `${row.title} ${row.url}`.toLowerCase();
+      return /(fuel|fueled|refuel|2u\s*fuel|juicedfuel|stayfueled)/i.test(hay);
+    })
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+
+  const unique = [];
+  const seen = new Set();
+  for (const row of scored) {
+    const key = row.url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ title: row.title, url: row.url });
+    if (unique.length >= max) break;
+  }
+
+  return unique;
+}
+
 module.exports = {
   getCompanies,
   loadCompanyContext,
+  findProjectLinks,
   TRAIN_DATA_DIR,
 };
