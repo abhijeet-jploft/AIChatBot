@@ -25,6 +25,7 @@ const {
   normalizeVoiceProfile,
   synthesizeTextResponse,
 } = require('../../services/elevenlabsService');
+const { logVoiceApiFailure } = require('../../services/voiceApiErrorLog');
 const {
   buildAdminVisibilityPayload,
   buildPresetVoiceAccessKey,
@@ -783,11 +784,12 @@ async function previewVoice(req, res) {
       ...voice,
     });
   } catch (err) {
-    console.error('[admin settings] preview voice:', err);
-    if (err.status === 402) {
-      return res.status(402).json({ error: err.message });
+    logVoiceApiFailure('admin_voice_preview', err, { companyId: req.adminCompanyId });
+    const status = Number(err?.status || 0);
+    if ([400, 401, 402, 403, 404, 409, 413, 422, 429].includes(status)) {
+      return res.status(status).json({ error: err.message });
     }
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Voice preview failed.' });
   }
 }
 

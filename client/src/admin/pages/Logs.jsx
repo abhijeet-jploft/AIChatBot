@@ -70,7 +70,9 @@ export default function Logs() {
     <div className="p-4" id="logs-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Logs</h5>
       <p className="small mb-4" style={{ color: 'var(--chat-muted)' }}>
-        Chat-related and system-related logs. Use tabs to filter by type.
+        Chat tab: session and chat DB events. System tab: chat/voice API errors (including ElevenLabs 401 bodies),
+        client-reported failures (/chat/client-error), and server-side handler errors. Expand Meta for full JSON.
+        All: both streams sorted by time.
       </p>
 
       <div className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>

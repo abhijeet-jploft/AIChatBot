@@ -8,7 +8,8 @@ const {
   broadcastAlert,
 } = require('../services/activeVisitorsService');
 const { evaluateEscalation } = require('../services/escalationService');
-const { appendChatLog } = require('../services/adminLogStore');
+const { appendChatLog, appendSystemLog } = require('../services/adminLogStore');
+const { buildVoiceApiErrorMeta, buildHttpClientErrorMeta, logVoiceApiFailure } = require('../services/voiceApiErrorLog');
 const { add: addSupportRequest, isSupportRequest } = require('../services/supportRequestsStore');
 const { normalizeVoiceGender, normalizeVoiceProfile, synthesizeTextResponse } = require('../services/elevenlabsService');
 const { parseLanguageExtraLocalesJson, resolveSpeechLanguageCode } = require('../services/supportedChatLanguages');
@@ -260,8 +261,7 @@ async function postMessage(req, res) {
               userText: userMsg?.content || '',
             });
           } catch (voiceErr) {
-            console.error('[voice] paused message non-fatal:', voiceErr.message);
-            appendChatLog('warn', `Voice synthesis failed: ${voiceErr.message}`, { sessionId: sid, companyId });
+            logVoiceApiFailure('paused_agent_reply', voiceErr, { companyId, sessionId: sid });
           }
         }
 
@@ -373,7 +373,7 @@ async function postMessage(req, res) {
           appendChatLog('warn', 'Voice synthesis returned no audio (text may be empty after sanitization)', { sessionId: sid, companyId });
         }
       } catch (voiceErr) {
-        console.error('[voice] response non-fatal:', voiceErr.message);
+        logVoiceApiFailure('assistant_reply_tts', voiceErr, { companyId, sessionId: sid });
         await trackApiUsage({
           companyId,
           sessionId: sid,
@@ -383,8 +383,8 @@ async function postMessage(req, res) {
           requestContext: 'assistant_reply_tts',
           success: false,
           errorMessage: voiceErr?.message || 'Voice synthesis failed',
+          metadata: { voiceError: buildVoiceApiErrorMeta(voiceErr) },
         });
-        appendChatLog('warn', `Voice synthesis failed: ${voiceErr.message}`, { sessionId: sid, companyId });
       }
     }
 
@@ -472,9 +472,77 @@ async function postMessage(req, res) {
     });
     res.json({ content: response, sessionId: sid, voice });
   } catch (err) {
+    const message = err?.message || 'Failed to get AI response';
     console.error('[chat] error:', err);
-    appendChatLog('error', `Chat error: ${err.message || 'Failed to get AI response'}`, { companyId, stack: err.stack });
-    res.status(500).json({ error: err.message || 'Failed to get AI response' });
+    const httpMeta = buildHttpClientErrorMeta(err);
+    appendSystemLog('error', `Chat message API error: ${message}`, {
+      companyId,
+      sessionId: sid || undefined,
+      ...httpMeta,
+    });
+    res.status(500).json({ error: message });
+  }
+}
+
+/**
+ * POST /api/chat/client-error
+ * Public endpoint: widget / app report when the user sees the generic technical-issue message.
+ * Logs to admin chat log + stderr so operators can see network/HTTP failures that never hit postMessage.
+ */
+function reportClientChatFailure(req, res) {
+  try {
+    const body = req.body || {};
+    const companyId = String(body.companyId || '').trim() || '_unknown';
+    const sessionId = body.sessionId ? String(body.sessionId).trim() : null;
+    const reason = String(body.reason || 'unknown').slice(0, 4000);
+    const detail = body.detail ? String(body.detail).slice(0, 12000) : '';
+    const pageUrl = body.pageUrl ? String(body.pageUrl).slice(0, 2000) : '';
+    const source = body.source ? String(body.source).slice(0, 80) : 'client';
+    const httpStatusRaw = body.httpStatus;
+    const httpStatus = httpStatusRaw != null && httpStatusRaw !== '' ? Number(httpStatusRaw) : undefined;
+    const errorName = body.errorName ? String(body.errorName).slice(0, 120) : undefined;
+    const networkError = Boolean(body.networkError);
+    const embedIframePage = body.embedIframePage === true;
+
+    let serverResponseBody = body.serverResponseBody;
+    if (typeof serverResponseBody === 'string' && serverResponseBody.length) {
+      try {
+        serverResponseBody = JSON.parse(serverResponseBody);
+      } catch {
+        serverResponseBody = { raw: serverResponseBody.slice(0, 12000) };
+      }
+    }
+    if (serverResponseBody != null && typeof serverResponseBody === 'object') {
+      const s = JSON.stringify(serverResponseBody);
+      if (s.length > 16000) {
+        serverResponseBody = { _truncated: true, preview: s.slice(0, 16000) };
+      }
+    }
+
+    const statusPart = Number.isFinite(httpStatus) ? ` (HTTP ${httpStatus})` : '';
+    const line = `Client reported chat failure [${source}]${statusPart}: ${reason}`;
+
+    const meta = {
+      companyId,
+      sessionId: sessionId || undefined,
+      httpStatus: Number.isFinite(httpStatus) ? httpStatus : undefined,
+      pageUrl: pageUrl || undefined,
+      clientStack: detail || undefined,
+      source,
+      errorName: errorName || undefined,
+      networkError: networkError || undefined,
+      embedIframePage: embedIframePage || undefined,
+      serverResponseBody: serverResponseBody != null ? serverResponseBody : undefined,
+    };
+
+    console.error(`[chat] ${line}`, meta);
+
+    appendSystemLog('error', line, meta);
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[chat] client-error handler failed:', e);
+    res.status(500).json({ ok: false });
   }
 }
 
@@ -578,7 +646,11 @@ async function synthesizeMessageVoice(req, res) {
 
     res.json({ voice });
   } catch (err) {
-    console.error('[chat] synthesize voice:', err);
+    logVoiceApiFailure('chat_voice_endpoint', err, {
+      companyId: String(req.body?.companyId || '').trim() || undefined,
+      sessionId: req.body?.sessionId || undefined,
+      messageIndex: req.body?.messageIndex,
+    });
     if (err.status === 402) {
       return res.status(402).json({ error: err.message });
     }
@@ -586,4 +658,4 @@ async function synthesizeMessageVoice(req, res) {
   }
 }
 
-module.exports = { postMessage, ping, synthesizeMessageVoice };
+module.exports = { postMessage, ping, synthesizeMessageVoice, reportClientChatFailure };

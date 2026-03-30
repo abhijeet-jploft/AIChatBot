@@ -755,9 +755,18 @@ function sanitizeTextForSpeech(text, options = {}) {
   return plainText.slice(0, Math.max(120, MAX_TTS_CHARACTERS));
 }
 
+function buildApiKeyCandidates(explicitApiKey) {
+  const explicit = String(explicitApiKey || '').trim();
+  const fallback = String(process.env.ELEVENLABS_API_KEY || '').trim();
+  const list = [];
+  if (explicit) list.push({ source: 'company', value: explicit });
+  if (fallback && fallback !== explicit) list.push({ source: 'env', value: fallback });
+  return list;
+}
+
 async function synthesizeTextResponse(text, options = {}) {
-  const apiKey = String(options.apiKey || process.env.ELEVENLABS_API_KEY || '').trim();
-  if (!apiKey) {
+  const apiKeyCandidates = buildApiKeyCandidates(options.apiKey);
+  if (!apiKeyCandidates.length) {
     console.warn('[ElevenLabs] ELEVENLABS_API_KEY is not set. Response voice will not be generated. Set it in .env to enable TTS.');
     return null;
   }
@@ -779,50 +788,83 @@ async function synthesizeTextResponse(text, options = {}) {
   const modelId = String(options.modelId || DEFAULT_MODEL_ID || '').trim() || DEFAULT_MODEL_ID;
   const preferredLanguageCode = String(options.languageCode || '').trim().toLowerCase();
   const reqUrl = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`;
-  const requestConfig = {
-    headers: {
-      'xi-api-key': apiKey,
-      'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
-    },
-    responseType: 'arraybuffer',
-    timeout: 30000,
-  };
   const candidateModels = Array.from(new Set([modelId, 'eleven_multilingual_v2'].filter(Boolean)));
 
   let response;
   let lastErr = null;
-  for (const candidateModel of candidateModels) {
-    const attempts = preferredLanguageCode
-      ? [{ includeLanguage: true }, { includeLanguage: false }]
-      : [{ includeLanguage: false }];
-    for (const attempt of attempts) {
-      const payload = {
-        text: speechText,
-        model_id: candidateModel,
-        voice_settings: {
-          stability: 0.45,
-          similarity_boost: 0.8,
-        },
-      };
-      if (attempt.includeLanguage) payload.language_code = preferredLanguageCode;
-      try {
-        response = await axios.post(reqUrl, payload, requestConfig);
-        lastErr = null;
-        break;
-      } catch (err) {
-        if (err.response?.status === 402) {
-          const e = new Error('ElevenLabs quota exceeded or payment required. Upgrade your plan at elevenlabs.io.');
-          e.status = 402;
-          throw e;
+  const attemptedSources = [];
+  for (const candidate of apiKeyCandidates) {
+    const apiKey = candidate.value;
+    attemptedSources.push(candidate.source);
+    const requestConfig = {
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg',
+      },
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    };
+
+    for (const candidateModel of candidateModels) {
+      const attempts = preferredLanguageCode
+        ? [{ includeLanguage: true }, { includeLanguage: false }]
+        : [{ includeLanguage: false }];
+      for (const attempt of attempts) {
+        const payload = {
+          text: speechText,
+          model_id: candidateModel,
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.8,
+          },
+        };
+        if (attempt.includeLanguage) payload.language_code = preferredLanguageCode;
+        try {
+          response = await axios.post(reqUrl, payload, requestConfig);
+          lastErr = null;
+          break;
+        } catch (err) {
+          if (err.response?.status === 402) {
+            const e = new Error('ElevenLabs quota exceeded or payment required. Upgrade your plan at elevenlabs.io.');
+            e.status = 402;
+            throw e;
+          }
+          lastErr = err;
         }
-        lastErr = err;
       }
+      if (response) break;
     }
     if (response) break;
+
+    const status = Number(lastErr?.response?.status || 0);
+    if (status !== 401 && status !== 403) {
+      break;
+    }
   }
   if (!response) {
-    throw lastErr || new Error('Failed to synthesize speech with ElevenLabs.');
+    const status = Number(lastErr?.response?.status || 0);
+    const apiMessage = extractElevenLabsErrorMessage(lastErr?.response?.data, lastErr?.message || 'Failed to synthesize speech with ElevenLabs.');
+
+    if (status === 401 || status === 403) {
+      const sourceHint = attemptedSources.length
+        ? `attempted key source(s): ${Array.from(new Set(attemptedSources)).join(', ')}`
+        : 'no API key source available';
+      const detail = apiMessage ? ` Provider says: ${apiMessage}` : '';
+      const e = new Error(`ElevenLabs authentication failed (${sourceHint}). Update your ElevenLabs API key in Settings -> AI Provider Keys.${detail}`);
+      e.status = 401;
+      throw e;
+    }
+
+    if (status === 429) {
+      const e = new Error('ElevenLabs rate limit reached. Please retry in a moment.');
+      e.status = 429;
+      throw e;
+    }
+
+    const e = new Error(apiMessage || 'Failed to synthesize speech with ElevenLabs.');
+    if (status) e.status = status;
+    throw e;
   }
 
   const audioBase64 = Buffer.from(response.data).toString('base64');

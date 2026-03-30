@@ -1344,8 +1344,21 @@ export default function App() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to get response');
+        const text = await res.text();
+        let serverResponseBody = null;
+        try {
+          serverResponseBody = text ? JSON.parse(text) : null;
+        } catch {
+          serverResponseBody = text ? { raw: text.slice(0, 8000) } : null;
+        }
+        const msg =
+          (serverResponseBody && typeof serverResponseBody === 'object' && serverResponseBody.error) ||
+          (typeof text === 'string' && text.trim() ? text.trim().slice(0, 500) : '') ||
+          `HTTP ${res.status}`;
+        const e = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        e.httpStatus = res.status;
+        e.serverResponseBody = serverResponseBody;
+        throw e;
       }
 
       const data = await res.json();
@@ -1382,6 +1395,28 @@ export default function App() {
       loadSessions(); // refresh history list
     } catch (err) {
       if (requestGeneration !== requestGenerationRef.current) return;
+      const reason = err?.message || String(err);
+      console.error('[chat] sendMessage failed (user shown technical issue):', reason, err);
+      try {
+        void fetch(`${API_BASE}/chat/client-error`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyId: companyId || DEFAULT_COMPANY_ID,
+            sessionId: sessionId || undefined,
+            reason,
+            detail: err?.stack ? String(err.stack).slice(0, 12000) : '',
+            pageUrl: typeof window !== 'undefined' ? window.location.href : '',
+            source: 'react-app',
+            httpStatus: err?.httpStatus,
+            serverResponseBody: err?.serverResponseBody,
+            errorName: err?.name,
+            networkError: typeof navigator !== 'undefined' && err?.message === 'Failed to fetch',
+          }),
+        }).catch(() => {});
+      } catch {
+        /* ignore */
+      }
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: 'We are facing some technical issue.' },

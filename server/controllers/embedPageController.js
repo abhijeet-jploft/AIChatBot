@@ -41,7 +41,7 @@ async function renderEmbedPage(req, res) {
       return res.status(404).type('text/plain').send('Not found');
     }
     // Use a relative /api path so the widget resolves against the iframe's actual origin.
-    // This works correctly both through a dev proxy and in production.
+    // chat-widget.js posts failures to /api/chat/client-error (source: embed-iframe-page in admin Logs → System).
     const apiUrl = '/api';
 
     const html = `<!DOCTYPE html>

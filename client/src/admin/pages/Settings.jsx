@@ -634,7 +634,8 @@ export default function Settings() {
                 <p className="small mb-2" style={mutedStyle}>
                   Third‑party sites use either the <strong>script</strong> snippet (floating widget) or an <strong>iframe</strong> pointing at{' '}
                   <code>/embed/{'{slug}'}/{'{embed secret}'}?companyId={'{company id}'}</code> on your app host. The secret is validated server-side; the
-                  company id in the query must match the company linked to that embed.
+                  company id in the query must match the company linked to that embed. When debugging, Admin → Logs → System tags iframe traffic as{' '}
+                  <code className="text-nowrap">embed-iframe-page</code> and script embeds as <code className="text-nowrap">embed-script</code>.
                 </p>
                 <div className="small mb-1" style={labelStyle}>Slug</div>
                 <code className="small d-block mb-2" style={{ wordBreak: 'break-all' }}>{embed.slug}</code>

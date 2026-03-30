@@ -18,7 +18,9 @@
   var companyLegalName = companyName;
   var chatbotDisplayName = '';
   var apiKey = (script && script.getAttribute('data-api-key')) || config.apiKey || '';
+  /** True for GET /embed/:slug/:token (server HTML); false for script tag on a third-party site. */
   var forceOpen = Boolean(config.forceOpen || (script && script.getAttribute('data-force-open') === 'true'));
+  var clientErrorSource = forceOpen ? 'embed-iframe-page' : 'embed-script';
   var explicitWidgetSide = (script && script.getAttribute('data-widget-side')) || config.widgetSide || '';
   var widgetSide = String(explicitWidgetSide || 'right').toLowerCase() === 'left' ? 'left' : 'right';
   var avatarLetter = ((companyName || '').trim().charAt(0) || 'J').toUpperCase();
@@ -1835,8 +1837,21 @@
     })
       .then(function (r) {
         if (!r.ok) {
-          return r.json().catch(function () { return {}; }).then(function (err) {
-            throw new Error(err.error || 'Failed to get response');
+          return r.text().then(function (text) {
+            var serverResponseBody = null;
+            try {
+              serverResponseBody = text ? JSON.parse(text) : null;
+            } catch (e2) {
+              serverResponseBody = text ? { raw: text.slice(0, 8000) } : null;
+            }
+            var msg =
+              (serverResponseBody && serverResponseBody.error) ||
+              (typeof text === 'string' && text.trim() ? text.trim().slice(0, 500) : '') ||
+              ('HTTP ' + r.status);
+            var errObj = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            errObj.httpStatus = r.status;
+            errObj.serverResponseBody = serverResponseBody;
+            throw errObj;
           });
         }
         return r.json();
@@ -1872,8 +1887,29 @@
         persistState();
         if (callback) callback();
       })
-      .catch(function () {
+      .catch(function (err) {
         if (gen !== requestGeneration) return;
+        var reason = err && err.message ? err.message : String(err);
+        console.error('[JPLoft Chat] send failed (user shown technical issue):', reason, err);
+        try {
+          fetch(apiUrl + '/chat/client-error', {
+            method: 'POST',
+            headers: mergeHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              companyId: companyId,
+              sessionId: sessionId || undefined,
+              reason: reason,
+              detail: err && err.stack ? String(err.stack).slice(0, 12000) : '',
+              pageUrl: pageUrl,
+              source: clientErrorSource,
+              embedIframePage: Boolean(forceOpen),
+              httpStatus: err && err.httpStatus,
+              serverResponseBody: err && err.serverResponseBody,
+              errorName: err && err.name,
+              networkError: Boolean(err && (err.message === 'Failed to fetch' || err.name === 'TypeError')),
+            }),
+          }).catch(function () {});
+        } catch (ignore) {}
         // User message was already pushed optimistically — just add error assistant message.
         messages.push({ role: 'assistant', content: 'We are facing some technical issue. Please try again.' });
         loading = false;
