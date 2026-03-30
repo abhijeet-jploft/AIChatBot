@@ -251,6 +251,8 @@
   var maxBtn = null;
   var bootstrapRetryTimer = null;
   var hideWidgetUntilThemeReady = true;
+  /** Server embed HTML includes #jploft-embed-page-loading; removed after /train/companies completes for theme. */
+  var EMBED_PAGE_LOADING_ID = 'jploft-embed-page-loading';
 
   var isFullscreen = false;
   var ignoreButtonClick = false;
@@ -1013,9 +1015,11 @@
     return (startsWithPlus ? '+' : '') + digits;
   }
 
+  /** WhatsApp chat/deep link using +<countrycode><number> format. */
   function normalizeWhatsappForHref(rawPhone) {
-    var normalized = normalizePhoneForHref(rawPhone).replace(/^\+/, '');
-    return normalized ? 'https://wa.me/' + normalized : '';
+    var normalized = normalizePhoneForHref(rawPhone);
+    if (!normalized) return '';
+    return 'https://wa.me/+' + normalized.replace(/^\+/, '');
   }
 
   function trimTrailingUrlPunctuation(url) {
@@ -1086,6 +1090,19 @@
       .join('\n');
   }
 
+  /** Plain `tel:` linkify must not touch numbers already inside <a>...</a> (e.g. WhatsApp wa.me links). */
+  function linkifyTelOutsideAnchors(htmlFragment) {
+    var phoneRe = /(^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/g;
+    return htmlFragment.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/gi).map(function (chunk) {
+      if (/^<a\b/i.test(chunk)) return chunk;
+      return chunk.replace(phoneRe, function (fullMatch, prefix, phoneText) {
+        var safePhone = normalizePhoneForHref(phoneText);
+        if (!safePhone) return fullMatch;
+        return prefix + renderSafeLink(phoneText.trim(), 'tel:' + safePhone);
+      });
+    }).join('');
+  }
+
   function renderInlineAssistantText(source) {
     var tokens = [];
     var text = String(source || '').replace(/\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`/g, function (_match, label, url, inlineCode) {
@@ -1108,18 +1125,15 @@
         return prefix + renderSafeLink(parts.cleanUrl, 'https://' + parts.cleanUrl) + escapeHtml(parts.trailing);
       })
       .replace(/(\b(?:whats\s*app|whatsapp|wa)\b(?:\s+(?:number|no\.?|contact))?\s*[:=-]?\s*)((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)/gi, function (fullMatch, label, phoneText) {
-        var whatsappHref = normalizeWhatsappForHref(phoneText);
-        if (!whatsappHref) return fullMatch;
-        return escapeHtml(label) + renderSafeLink(phoneText.trim(), whatsappHref);
+        var waHref = normalizeWhatsappForHref(phoneText);
+        if (!waHref) return fullMatch;
+        return escapeHtml(label) + renderSafeLink(phoneText.trim(), waHref);
       })
       .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, function (email) {
         return renderSafeLink(email, 'mailto:' + email);
-      })
-      .replace(/(^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/g, function (fullMatch, prefix, phoneText) {
-        var safePhone = normalizePhoneForHref(phoneText);
-        if (!safePhone) return fullMatch;
-        return prefix + renderSafeLink(phoneText.trim(), 'tel:' + safePhone);
-      })
+      });
+    html = linkifyTelOutsideAnchors(html);
+    html = html
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
 
@@ -2401,6 +2415,21 @@
     }
   }
 
+  function hideEmbedPageLoadingScreen() {
+    if (!forceOpen || typeof document === 'undefined') return;
+    var el = document.getElementById(EMBED_PAGE_LOADING_ID);
+    if (!el) return;
+    try {
+      el.removeAttribute('aria-busy');
+    } catch (e) {}
+    try {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    } catch (e2) {
+      el.style.display = 'none';
+      el.setAttribute('hidden', '');
+    }
+  }
+
   function fetchThemeAndApply(widgetRoot) {
     fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
       .then(function (r) {
@@ -2473,6 +2502,7 @@
         if (widgetRoot) setWidgetRootAwaitingCompanies(widgetRoot, false);
         resetActivationWatchers();
         if (!activated) runActivation();
+        hideEmbedPageLoadingScreen();
       });
   }
 
