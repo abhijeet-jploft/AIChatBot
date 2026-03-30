@@ -8,13 +8,20 @@ import {
   parseIndustryFromApi,
   buildIndustryToSave,
 } from '../../lib/accountProfileIndustry';
+import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
+import {
+  normalizeUrlForSubmit,
+  splitPhoneForForm,
+  validatePhone,
+} from '../../lib/contactValidation';
 
 export default function AccountProfile() {
   const { company, authFetch, refreshProfile } = useAuth();
   const { showToast } = useAdminToast();
   const [ownerName, setOwnerName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+1');
+  const [phoneLocal, setPhoneLocal] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [companyWebsite, setCompanyWebsite] = useState('');
   const [industrySelect, setIndustrySelect] = useState('');
@@ -25,7 +32,9 @@ export default function AccountProfile() {
     if (!company) return;
     setOwnerName(company.ownerName || '');
     setEmail(company.adminEmail || '');
-    setPhone(company.phone || '');
+    const phoneParsed = splitPhoneForForm(company.phone || '', '+1');
+    setPhoneCountryCode(phoneParsed.countryCode);
+    setPhoneLocal(phoneParsed.localNumber);
     setCompanyName(company.displayName || '');
     setCompanyWebsite(company.companyWebsite || '');
     const { select, other } = parseIndustryFromApi(company.industryCategory);
@@ -47,6 +56,16 @@ export default function AccountProfile() {
     }
 
     const industryCategory = buildIndustryToSave(industrySelect, specify);
+    const phoneCheck = validatePhone(phoneCountryCode, phoneLocal);
+    if (!phoneCheck.valid) {
+      showToast(phoneCheck.error, 'error');
+      return;
+    }
+    const normalizedWebsite = normalizeUrlForSubmit(companyWebsite);
+    if (normalizedWebsite === null) {
+      showToast('Please enter a valid company website URL.', 'error');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -56,9 +75,9 @@ export default function AccountProfile() {
         body: JSON.stringify({
           ownerName: ownerName.trim(),
           email: email.trim(),
-          phone: phone.trim(),
+          phone: phoneCheck.normalized,
           companyName: companyName.trim(),
-          companyWebsite: companyWebsite.trim(),
+          companyWebsite: normalizedWebsite,
           industryCategory,
         }),
       });
@@ -114,11 +133,13 @@ export default function AccountProfile() {
             </div>
             <div className="col-md-6">
               <label className="form-label small" style={{ color: 'var(--chat-text)' }}>Phone number</label>
-              <input
-                type="tel"
-                className="form-control form-control-sm"
-                value={phone}
-                onChange={(ev) => setPhone(ev.target.value)}
+              <PhoneInputWithCountryCode
+                countryCode={phoneCountryCode}
+                onCountryCodeChange={setPhoneCountryCode}
+                localNumber={phoneLocal}
+                onLocalNumberChange={setPhoneLocal}
+                selectClassName="form-select form-select-sm"
+                inputClassName="form-control form-control-sm"
                 autoComplete="tel"
               />
             </div>

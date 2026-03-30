@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { hashPassword, generateToken, getSessionExpiry } = require('../../admin/utils/auth');
 const CompanyAdmin = require('../../admin/models/CompanyAdmin');
 const { MODULE_SETTINGS_TABLE_NAMES } = require('../../db/companySettingsSchema');
+const { normalizeHttpUrl, normalizePhoneWithCountryCode } = require('../../utils/contactValidation');
 
 const TRAIN_DATA_DIR = path.join(__dirname, '../../../train_data');
 
@@ -25,10 +26,7 @@ function normalizeAdminEmail(raw) {
 }
 
 function normalizeCompanyWebsite(raw) {
-  const s = String(raw || '').trim().slice(0, 512);
-  if (!s) return null;
-  if (/^https?:\/\//i.test(s)) return s;
-  return `https://${s}`;
+  return normalizeHttpUrl(raw);
 }
 
 // GET /super-admin/companies
@@ -229,7 +227,7 @@ async function updateCompany(req, res) {
     const phoneVal = adminPhone !== undefined ? adminPhone : phone;
     if (phoneVal !== undefined) {
       updates.push(`admin_phone = $${params.length + 1}`);
-      params.push(String(phoneVal || '').trim().slice(0, 64) || null);
+      params.push(normalizePhoneWithCountryCode(phoneVal));
     }
 
     if (companyWebsite !== undefined) {
@@ -252,6 +250,12 @@ async function updateCompany(req, res) {
     if (!rowCount) return res.status(404).json({ error: 'Company not found' });
     return res.json({ ok: true });
   } catch (err) {
+    if (err?.code === 'INVALID_PHONE') {
+      return res.status(400).json({ error: 'Phone number must include country code and contain 6 to 15 digits.' });
+    }
+    if (err?.code === 'INVALID_URL') {
+      return res.status(400).json({ error: 'Company website must be a valid URL.' });
+    }
     console.error('[super admin] updateCompany:', err);
     return res.status(500).json({ error: err.message });
   }

@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
+import {
+  normalizeUrlForSubmit,
+  splitPhoneForForm,
+  validatePhone,
+} from '../../lib/contactValidation';
 
 function defaultAutoTrigger() {
   return {
@@ -62,7 +68,8 @@ export default function CompanySettings() {
   const [bizIndustryType, setBizIndustryType] = useState('');
   const [bizServiceCategories, setBizServiceCategories] = useState('');
   const [bizContactEmail, setBizContactEmail] = useState('');
-  const [bizContactPhone, setBizContactPhone] = useState('');
+  const [bizContactPhoneCode, setBizContactPhoneCode] = useState('+1');
+  const [bizContactPhoneLocal, setBizContactPhoneLocal] = useState('');
   const [languagePrimary, setLanguagePrimary] = useState('en');
   const [languageCatalog, setLanguageCatalog] = useState([]);
   const [languageMulti, setLanguageMulti] = useState(false);
@@ -93,7 +100,9 @@ export default function CompanySettings() {
       setBizIndustryType(bi.industryType || '');
       setBizServiceCategories(bi.serviceCategories || '');
       setBizContactEmail(bi.contactEmail || '');
-      setBizContactPhone(bi.contactPhone || '');
+      const parsedBizPhone = splitPhoneForForm(bi.contactPhone || '', '+1');
+      setBizContactPhoneCode(parsedBizPhone.countryCode);
+      setBizContactPhoneLocal(parsedBizPhone.localNumber);
       setWidgetPosition(d.widget?.position === 'left' ? 'left' : 'right');
       setLeadEmailNotificationsEnabled(Boolean(d.leadNotifications?.emailEnabled));
       setLeadNotificationEmail(d.leadNotifications?.email || '');
@@ -132,6 +141,16 @@ export default function CompanySettings() {
       showToast('Company name is required', 'error');
       return;
     }
+    const phoneCheck = validatePhone(bizContactPhoneCode, bizContactPhoneLocal);
+    if (!phoneCheck.valid) {
+      showToast(phoneCheck.error, 'error');
+      return;
+    }
+    const normalizedIconUrl = normalizeUrlForSubmit(iconUrl);
+    if (normalizedIconUrl === null) {
+      showToast('Please enter a valid Icon URL.', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const res = await saFetch(`/companies/${companyId}/settings`, {
@@ -140,7 +159,7 @@ export default function CompanySettings() {
         body: JSON.stringify({
           companyName: coName,
           chatbotName: chatbotName.trim(),
-          iconUrl: iconUrl.trim() || undefined,
+          iconUrl: normalizedIconUrl || undefined,
           greetingMessage: greetingMessage.trim(),
           businessInformation: {
             businessName: bizName.trim(),
@@ -148,7 +167,7 @@ export default function CompanySettings() {
             industryType: bizIndustryType.trim(),
             serviceCategories: bizServiceCategories.trim(),
             contactEmail: bizContactEmail.trim(),
-            contactPhone: bizContactPhone.trim(),
+            contactPhone: phoneCheck.normalized,
           },
           widget: { position: widgetPosition },
           leadNotifications: {
@@ -259,7 +278,13 @@ export default function CompanySettings() {
         </div>
         <div className="sa-field">
           <label>Business contact phone number</label>
-          <input type="tel" value={bizContactPhone} onChange={(e) => setBizContactPhone(e.target.value)} autoComplete="tel" />
+          <PhoneInputWithCountryCode
+            countryCode={bizContactPhoneCode}
+            onCountryCodeChange={setBizContactPhoneCode}
+            localNumber={bizContactPhoneLocal}
+            onLocalNumberChange={setBizContactPhoneLocal}
+            autoComplete="tel"
+          />
         </div>
 
         <hr style={{ borderColor: 'var(--sa-border)' }} />

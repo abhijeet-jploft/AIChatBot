@@ -23,6 +23,7 @@ export default function SupportRequests() {
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadRows, setThreadRows] = useState([]);
   const [reply, setReply] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,7 +103,8 @@ export default function SupportRequests() {
 
   const sendReply = async (e) => {
     e.preventDefault();
-    if (!activeTicket?.id || !reply.trim()) return;
+    if (!activeTicket?.id || !reply.trim() || sendingReply) return;
+    setSendingReply(true);
     try {
       const res = await authFetch(`/support-requests/${activeTicket.id}/messages`, {
         method: 'POST',
@@ -116,6 +118,8 @@ export default function SupportRequests() {
       load();
     } catch {
       // keep current UX silent
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -286,8 +290,9 @@ export default function SupportRequests() {
                 <button type="button" className="btn-close" onClick={() => setActiveTicket(null)} />
               </div>
               <div className="modal-body">
-                <div className="small mb-2" style={{ color: 'var(--chat-muted)' }}>
-                  <strong>Message:</strong> {activeTicket.message}
+                <div className="mb-2" style={{ color: 'var(--chat-muted)' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--chat-text-heading)' }}>Message:</span>{' '}
+                  <span style={{ fontSize: '0.82rem', lineHeight: 1.45, wordBreak: 'break-word' }}>{activeTicket.message || '—'}</span>
                 </div>
                 <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--chat-border)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
                   {threadLoading ? (
@@ -300,20 +305,28 @@ export default function SupportRequests() {
                         <div className="small" style={{ color: 'var(--chat-muted)' }}>
                           {m.senderRole} {m.senderName ? `(${m.senderName})` : ''} • {formatDateTime(m.createdAt)}
                         </div>
-                        <div>{m.message}</div>
+                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.message}</div>
                       </div>
                     ))
                   )}
                 </div>
                 <form onSubmit={sendReply}>
+                  {sendingReply ? (
+                    <div className="small mb-2" style={{ color: 'var(--chat-muted)' }}>
+                      Sending message...
+                    </div>
+                  ) : null}
                   <div className="input-group">
                     <input
                       className="form-control"
                       value={reply}
                       onChange={(e) => setReply(e.target.value)}
                       placeholder="Reply to super admin..."
+                      disabled={sendingReply}
                     />
-                    <button className="btn btn-primary" type="submit" disabled={!reply.trim()}>Send</button>
+                    <button className="btn btn-primary" type="submit" disabled={!reply.trim() || sendingReply}>
+                      {sendingReply ? 'Sending...' : 'Send'}
+                    </button>
                   </div>
                 </form>
               </div>

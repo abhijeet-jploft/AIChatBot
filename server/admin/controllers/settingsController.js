@@ -36,6 +36,7 @@ const {
   filterModeCatalogForAdmin,
   isPresetVoiceAllowed,
 } = require('../../services/adminSettingsAccess');
+const { normalizeHttpUrl, normalizePhoneWithCountryCode } = require('../../utils/contactValidation');
 
 function normalizeNotificationEmail(value) {
   if (value === undefined) return undefined;
@@ -577,20 +578,39 @@ async function updateSettings(req, res) {
       if (bizEmail && !isValidEmail(bizEmail)) {
         return res.status(400).json({ error: 'Invalid business contact email' });
       }
+      let bizPhone;
+      try {
+        bizPhone = normalizePhoneWithCountryCode(bi.contactPhone);
+      } catch (err) {
+        if (err.code === 'INVALID_PHONE') {
+          return res.status(400).json({ error: 'Business contact phone must include country code and contain 6 to 15 digits.' });
+        }
+        throw err;
+      }
       businessInfoPatch = {
         business_name: String(bi.businessName || '').trim().slice(0, 255) || null,
         business_description: String(bi.businessDescription || '').trim() || null,
         business_industry_type: String(bi.industryType || '').trim().slice(0, 255) || null,
         business_service_categories: String(bi.serviceCategories || '').trim() || null,
         business_contact_email: bizEmail || null,
-        business_contact_phone: String(bi.contactPhone || '').trim().slice(0, 64) || null,
+        business_contact_phone: bizPhone || null,
       };
+    }
+
+    let normalizedIconUrl;
+    try {
+      normalizedIconUrl = normalizeHttpUrl(iconUrl);
+    } catch (err) {
+      if (err.code === 'INVALID_URL') {
+        return res.status(400).json({ error: 'Icon URL must be a valid URL.' });
+      }
+      throw err;
     }
 
     await CompanyAdmin.updateSettings(req.adminCompanyId, {
       company_name: resolvedCompanyName,
       display_name: chatbotTitle,
-      icon_url: iconUrl !== undefined ? (String(iconUrl).trim() || null) : undefined,
+      icon_url: normalizedIconUrl,
       greeting_message: greetingMessage !== undefined
         ? (String(greetingMessage).trim() || null)
         : undefined,

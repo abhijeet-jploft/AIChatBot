@@ -9,6 +9,12 @@ import {
   parseIndustryFromApi,
   buildIndustryToSave,
 } from '../../lib/accountProfileIndustry';
+import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
+import {
+  normalizeUrlForSubmit,
+  splitPhoneForForm,
+  validatePhone,
+} from '../../lib/contactValidation';
 
 const TRAINING_PERMISSION_CHECKS = [
   ...buildAiModePermissionChecks('view'),
@@ -34,7 +40,8 @@ export default function CompanyDetail() {
   const [editDesc, setEditDesc] = useState('');
   const [editAdminEmail, setEditAdminEmail] = useState('');
   const [editOwnerName, setEditOwnerName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
+  const [editPhoneCode, setEditPhoneCode] = useState('+1');
+  const [editPhoneLocal, setEditPhoneLocal] = useState('');
   const [editCompanyWebsite, setEditCompanyWebsite] = useState('');
   const [industrySelect, setIndustrySelect] = useState('');
   const [industryOtherSpecify, setIndustryOtherSpecify] = useState('');
@@ -65,7 +72,9 @@ export default function CompanyDetail() {
       setEditDesc(c.description || '');
       setEditAdminEmail(c.admin_email || '');
       setEditOwnerName(c.owner_name || '');
-      setEditPhone(c.admin_phone || '');
+      const parsedPhone = splitPhoneForForm(c.admin_phone || '', '+1');
+      setEditPhoneCode(parsedPhone.countryCode);
+      setEditPhoneLocal(parsedPhone.localNumber);
       setEditCompanyWebsite(c.company_website || '');
       const { select, other } = parseIndustryFromApi(c.industry_category);
       setIndustrySelect(select);
@@ -92,6 +101,16 @@ export default function CompanyDetail() {
       return;
     }
     const industryCategory = buildIndustryToSave(industrySelect, specify);
+    const phoneCheck = validatePhone(editPhoneCode, editPhoneLocal);
+    if (!phoneCheck.valid) {
+      showToast(phoneCheck.error, 'error');
+      return;
+    }
+    const normalizedCompanyWebsite = normalizeUrlForSubmit(editCompanyWebsite);
+    if (normalizedCompanyWebsite === null) {
+      showToast('Please enter a valid company website URL.', 'error');
+      return;
+    }
 
     setEditBusy(true);
     try {
@@ -103,8 +122,8 @@ export default function CompanyDetail() {
           description: editDesc,
           adminEmail: editAdminEmail.trim(),
           ownerName: editOwnerName.trim(),
-          phone: editPhone.trim(),
-          companyWebsite: editCompanyWebsite.trim(),
+          phone: phoneCheck.normalized,
+          companyWebsite: normalizedCompanyWebsite,
           industryCategory,
         }),
       });
@@ -308,12 +327,13 @@ export default function CompanyDetail() {
             </div>
             <div className="sa-field">
               <label>Phone number</label>
-              <input
-                type="tel"
-                value={editPhone}
-                onChange={(e) => setEditPhone(e.target.value)}
-                placeholder="e.g. +1 555 0100"
+              <PhoneInputWithCountryCode
+                countryCode={editPhoneCode}
+                onCountryCodeChange={setEditPhoneCode}
+                localNumber={editPhoneLocal}
+                onLocalNumberChange={setEditPhoneLocal}
                 disabled={!canEditCompanyInfo}
+                placeholder="e.g. 5550100"
                 autoComplete="tel"
               />
             </div>

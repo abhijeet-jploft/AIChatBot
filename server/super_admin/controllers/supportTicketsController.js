@@ -1,10 +1,22 @@
 const pool = require('../../db/index');
 
+function ilikeContainsPattern(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  return `%${s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
+}
+
 async function listSupportTickets(req, res) {
   try {
     const status = String(req.query.status || 'all').trim().toLowerCase();
-    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
-    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const priority = String(req.query.priority || 'all').trim().toLowerCase();
+    const source = String(req.query.source || 'all').trim().toLowerCase();
+    const search = ilikeContainsPattern(req.query.search);
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+    const offset = req.query.offset !== undefined
+      ? Math.max(0, Number(req.query.offset) || 0)
+      : (page - 1) * limit;
 
     const where = [];
     const params = [];
@@ -12,10 +24,30 @@ async function listSupportTickets(req, res) {
       where.push(`t.status = $${params.length + 1}`);
       params.push(status);
     }
+    if (priority !== 'all') {
+      where.push(`t.priority = $${params.length + 1}`);
+      params.push(priority);
+    }
+    if (source !== 'all') {
+      where.push(`t.source = $${params.length + 1}`);
+      params.push(source);
+    }
+    if (search) {
+      where.push(`(
+        COALESCE(t.message, '') ILIKE $${params.length + 1} ESCAPE '\\'
+        OR COALESCE(c.name, '') ILIKE $${params.length + 1} ESCAPE '\\'
+        OR COALESCE(t.company_id, '') ILIKE $${params.length + 1} ESCAPE '\\'
+        OR COALESCE(t.requested_by, '') ILIKE $${params.length + 1} ESCAPE '\\'
+      )`);
+      params.push(search);
+    }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const countQ = await pool.query(
-      `SELECT COUNT(*)::int AS n FROM support_tickets t ${whereSql}`,
+      `SELECT COUNT(*)::int AS n
+       FROM support_tickets t
+       JOIN chatbots c ON c.company_id = t.company_id
+       ${whereSql}`,
       params
     );
     const listQ = await pool.query(
@@ -35,7 +67,11 @@ async function listSupportTickets(req, res) {
       total: Number(countQ.rows[0]?.n || 0),
       limit,
       offset,
+      page: Math.floor(offset / limit) + 1,
       status,
+      priority,
+      source,
+      search: String(req.query.search || '').trim(),
     });
   } catch (err) {
     console.error('[super admin] listSupportTickets:', err);

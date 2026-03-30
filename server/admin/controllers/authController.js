@@ -134,6 +134,12 @@ async function updateProfile(req, res) {
       if (e.code === 'COMPANY_NAME_REQUIRED') {
         return res.status(400).json({ error: 'Company name is required.' });
       }
+      if (e.code === 'INVALID_PHONE') {
+        return res.status(400).json({ error: 'Phone number must include country code and contain 6 to 15 digits.' });
+      }
+      if (e.code === 'INVALID_URL') {
+        return res.status(400).json({ error: 'Company website must be a valid URL.' });
+      }
       throw e;
     }
 

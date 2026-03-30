@@ -43,6 +43,8 @@
   var WIDGET_BUTTON_MARGIN_MOBILE = 14;
   var DRAG_DISTANCE_THRESHOLD = 6;
   var PANEL_GAP = 12;
+  var COMPANY_BOOTSTRAP_CACHE_KEY = 'ai-chat-company-bootstrap-v1';
+  var COMPANY_BOOTSTRAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
   if (!apiUrl) {
     console.warn('[JPLoft Chat] data-api-url or JPLoftChatConfig.apiUrl required');
@@ -247,6 +249,8 @@
   var sendBtn = null;
   var micBtn = null;
   var maxBtn = null;
+  var bootstrapRetryTimer = null;
+  var hideWidgetUntilThemeReady = true;
 
   var isFullscreen = false;
   var ignoreButtonClick = false;
@@ -1211,12 +1215,20 @@
     var name = '';
     var phone = '';
     var email = '';
+    var structuredName = userText.match(/^\s*name\s*:\s*(.+)$/im);
+    if (structuredName && structuredName[1]) {
+      name = structuredName[1].trim().replace(/\s+/g, ' ').slice(0, 80);
+    }
     [
-      /\bmy name is\s+([a-z][a-z\s.'-]{1,60})/i,
-      /\bi am\s+([a-z][a-z\s.'-]{1,60})/i,
-      /\bthis is\s+([a-z][a-z\s.'-]{1,60})/i,
-      /\bname\s*[:=-]\s*([a-z][a-z\s.'-]{1,60})/i,
+      /\bmy name is\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+      /\bi am\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+      /\bthis is\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+      /\bname\s*[:=-]\s*([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+      /\bi(?:'|’|')m\s+(?!at\b)([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+      /\bcall me\s+(?!at\b)([A-Za-z][A-Za-z\s.'-]{1,60})/i,
+      /\byou can call me\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i,
     ].some(function (pattern) {
+      if (name) return true;
       var match = userText.match(pattern);
       if (match && match[1]) {
         name = match[1].trim().replace(/\s+/g, ' ').slice(0, 80);
@@ -1250,7 +1262,7 @@
       /\b(email|email address|e-mail)\b/i,
     ].filter(function (pattern) { return pattern.test(source); }).length;
     if (fieldMentions < 2) return false;
-    return /\b(contact information|please share|please provide|provide these details|share these details|let me know|reach you|preferred contact method|time zone|what are you looking to build|specific technologies|technical discussion|scheduling)\b/i.test(source);
+    return /\b(contact information|contact details|please share|please provide|provide these details|share these details|let me know|reach you|preferred contact method|time zone|what are you looking to build|specific technologies|technical discussion|scheduling)\b/i.test(source);
   }
 
   function buildLeadCaptureMessage(fields) {
@@ -1825,16 +1837,19 @@
     renderMessages();
 
     var pageUrl = typeof window !== 'undefined' && window.location ? window.location.href : '';
-    fetch(apiUrl + '/chat/message', {
-      method: 'POST',
-      headers: mergeHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        companyId: companyId,
-        sessionId: sessionId || undefined,
-        messages: msgs.map(function (m) { return { role: m.role, content: m.content }; }),
-        pageUrl: pageUrl,
-      }),
-    })
+    var payload = {
+      companyId: companyId,
+      sessionId: sessionId || undefined,
+      messages: msgs.map(function (m) { return { role: m.role, content: m.content }; }),
+      pageUrl: pageUrl,
+    };
+
+    function requestChatMessage(attempt) {
+      return fetch(apiUrl + '/chat/message', {
+        method: 'POST',
+        headers: mergeHeaders({ 'Content-Type': 'application/json', 'X-Page-Url': pageUrl }),
+        body: JSON.stringify(payload),
+      })
       .then(function (r) {
         if (!r.ok) {
           return r.text().then(function (text) {
@@ -1856,6 +1871,18 @@
         }
         return r.json();
       })
+      .catch(function (err) {
+        var status = Number(err && err.httpStatus);
+        var retryable = !status || status >= 500 || status === 429;
+        if (attempt < 1 && retryable) {
+          return new Promise(function (resolve) { setTimeout(resolve, 700); })
+            .then(function () { return requestChatMessage(attempt + 1); });
+        }
+        throw err;
+      })
+    }
+
+    requestChatMessage(0)
       .then(function (data) {
         if (gen !== requestGeneration) return;
         if (data.sessionId) sessionId = data.sessionId;
@@ -2063,6 +2090,7 @@
     root.appendChild(panel);
     root.appendChild(closeFab);
     document.body.appendChild(root);
+    setWidgetRootAwaitingCompanies(root, hideWidgetUntilThemeReady);
 
     applyWidgetButtonPosition();
     if (persistedWidgetOpen) {
@@ -2220,6 +2248,141 @@
     } catch (e) {}
   }
 
+  function readCompanyBootstrapCache() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      var raw = localStorage.getItem(COMPANY_BOOTSTRAP_CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      var entry = parsed[companyId];
+      if (!entry || typeof entry !== 'object') return null;
+      var fetchedAt = Number(entry.fetchedAt || 0);
+      if (!fetchedAt || (Date.now() - fetchedAt) > COMPANY_BOOTSTRAP_MAX_AGE_MS) return null;
+      if (!entry.company || typeof entry.company !== 'object') return null;
+      return entry.company;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeCompanyBootstrapCache(company) {
+    if (!company || typeof company !== 'object') return;
+    try {
+      if (typeof localStorage === 'undefined') return;
+      var raw = localStorage.getItem(COMPANY_BOOTSTRAP_CACHE_KEY);
+      var parsed = raw ? JSON.parse(raw) : {};
+      if (!parsed || typeof parsed !== 'object') parsed = {};
+      parsed[companyId] = {
+        fetchedAt: Date.now(),
+        hash: JSON.stringify(company),
+        company: company,
+      };
+      localStorage.setItem(COMPANY_BOOTSTRAP_CACHE_KEY, JSON.stringify(parsed));
+    } catch (e) {}
+  }
+
+  function findCompanyRecord(companies) {
+    if (!Array.isArray(companies)) return null;
+    for (var i = 0; i < companies.length; i += 1) {
+      var c = companies[i];
+      if (c && c.id === companyId) return c;
+    }
+    return null;
+  }
+
+  function applyCompanyRuntimeConfig(company) {
+    if (!company || typeof company !== 'object') return;
+    if (company.companyName) companyLegalName = company.companyName;
+    if (company.chatbotName) chatbotDisplayName = company.chatbotName;
+    if (company.displayName) companyName = company.displayName;
+    companyIconUrl = resolvePublicMediaUrl(company.iconUrl || config.iconUrl);
+    companyGreetingMessage = company.greetingMessage || null;
+    companyPrimaryLanguage = (company.language && company.language.primary) || 'en';
+    companyContentLocaleHint = (company.language && company.language.contentLocaleHint) || '';
+    companyBusinessProfile = company.businessProfile || { id: 'generic_business' };
+    refreshLegacyOpeningMessage();
+    if (company.voice && typeof company.voice === 'object') {
+      voiceEnabled = Boolean(company.voice.enabled);
+      voiceResponseEnabled = company.voice.responseEnabled !== false;
+      voiceGender = company.voice.gender === 'male' ? 'male' : 'female';
+      companyVoiceTtsLanguage = (company.voice.ttsLanguageCode && String(company.voice.ttsLanguageCode)) || '';
+      voiceIgnoreEmoji = Boolean(company.voice.ignoreEmoji);
+    } else {
+      voiceEnabled = false;
+      voiceResponseEnabled = true;
+      voiceGender = 'female';
+      companyVoiceTtsLanguage = '';
+      voiceIgnoreEmoji = false;
+    }
+    if (company.autoTrigger && typeof company.autoTrigger === 'object') {
+      var nextAutoTriggerMode = resolveAutoTriggerOpenMode(company.autoTrigger);
+      autoTrigger.openMode = nextAutoTriggerMode;
+      autoTrigger.enabled = nextAutoTriggerMode === 'auto';
+      autoTrigger.afterSeconds = Math.max(0, Math.min(120, Number(company.autoTrigger.afterSeconds != null ? company.autoTrigger.afterSeconds : AUTO_TRIGGER_DEFAULT_SECONDS)));
+      autoTrigger.afterScrollPercent = Math.max(0, Math.min(100, Number(company.autoTrigger.afterScrollPercent != null ? company.autoTrigger.afterScrollPercent : AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT)));
+      autoTrigger.onlySelectedPages = Boolean(company.autoTrigger.onlySelectedPages);
+      autoTrigger.onPricingPage = Boolean(company.autoTrigger.onPricingPage);
+      autoTrigger.onPortfolioPage = Boolean(company.autoTrigger.onPortfolioPage);
+      autoTrigger.selectedPages = String(company.autoTrigger.selectedPages || '');
+    }
+    widgetSide = company.widgetPosition === 'left' ? 'left' : 'right';
+    try {
+      var rawSide = typeof localStorage !== 'undefined' && localStorage.getItem(WIDGET_SIDE_BY_COMPANY_KEY);
+      var parsedSide = rawSide ? JSON.parse(rawSide) : {};
+      var nextSide = {};
+      var key;
+      if (parsedSide && typeof parsedSide === 'object') {
+        for (key in parsedSide) {
+          if (Object.prototype.hasOwnProperty.call(parsedSide, key)) nextSide[key] = parsedSide[key];
+        }
+      }
+      nextSide[companyId] = widgetSide;
+      if (typeof localStorage !== 'undefined') localStorage.setItem(WIDGET_SIDE_BY_COMPANY_KEY, JSON.stringify(nextSide));
+    } catch (e) {}
+  }
+
+  /** Iframe /embed only: must get HTTP 200 + valid JSON + company row — no cache to show UI. */
+  function loadCompanyBootstrapFromApiStrict() {
+    return fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
+      .then(function (r) {
+        if (!r.ok) throw new Error('train/companies HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (companies) {
+        if (!Array.isArray(companies)) throw new Error('train/companies invalid payload');
+        var company = findCompanyRecord(companies);
+        if (!company) throw new Error('train/companies missing company ' + companyId);
+        writeCompanyBootstrapCache(company);
+        return company;
+      });
+  }
+
+  /** Script embed: wait for live /train/companies to finish (no early cache while fetch is still pending). */
+  function loadCompanyBootstrapConfig() {
+    return fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
+      .then(function (r) {
+        if (!r.ok) throw new Error('train/companies HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (companies) {
+        if (!Array.isArray(companies)) return null;
+        var company = findCompanyRecord(companies);
+        if (company) {
+          writeCompanyBootstrapCache(company);
+          return company;
+        }
+        return null;
+      })
+      .catch(function () {
+        return null;
+      })
+      .then(function (company) {
+        if (company) return company;
+        return readCompanyBootstrapCache();
+      });
+  }
+
   function resetActivationWatchers() {
     if (typeof stopActivationWatchers === 'function') {
       stopActivationWatchers();
@@ -2227,65 +2390,32 @@
     }
   }
 
+  function setWidgetRootAwaitingCompanies(widgetRoot, awaiting) {
+    if (!widgetRoot) return;
+    if (awaiting) {
+      widgetRoot.style.visibility = 'hidden';
+      widgetRoot.style.pointerEvents = 'none';
+    } else {
+      widgetRoot.style.visibility = 'visible';
+      widgetRoot.style.pointerEvents = '';
+    }
+  }
+
   function fetchThemeAndApply(widgetRoot) {
     fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('train/companies HTTP ' + r.status);
+        return r.json();
+      })
       .then(function (companies) {
         if (!widgetRoot) return;
-        if (!Array.isArray(companies)) {
-          resetActivationWatchers();
-          if (!activated) runActivation();
-          return;
-        }
-        var company = companies.find(function (c) { return c.id === companyId; });
+        if (!Array.isArray(companies)) return;
+        var company = findCompanyRecord(companies);
         if (company) {
-          if (company.companyName) companyLegalName = company.companyName;
-          if (company.chatbotName) chatbotDisplayName = company.chatbotName;
-          if (company.displayName) companyName = company.displayName;
-          companyIconUrl = resolvePublicMediaUrl(company.iconUrl || config.iconUrl);
-          companyGreetingMessage = company.greetingMessage || null;
-          companyPrimaryLanguage = (company.language && company.language.primary) || 'en';
-          companyContentLocaleHint = (company.language && company.language.contentLocaleHint) || '';
-          companyBusinessProfile = company.businessProfile || { id: 'generic_business' };
-          refreshLegacyOpeningMessage();
-          if (company.voice && typeof company.voice === 'object') {
-            voiceEnabled = Boolean(company.voice.enabled);
-            voiceResponseEnabled = company.voice.responseEnabled !== false;
-            voiceGender = company.voice.gender === 'male' ? 'male' : 'female';
-            companyVoiceTtsLanguage = (company.voice.ttsLanguageCode && String(company.voice.ttsLanguageCode)) || '';
-            voiceIgnoreEmoji = Boolean(company.voice.ignoreEmoji);
-          } else {
-            voiceEnabled = false;
-            voiceResponseEnabled = true;
-            voiceGender = 'female';
-            companyVoiceTtsLanguage = '';
-            voiceIgnoreEmoji = false;
-          }
-          if (company.autoTrigger && typeof company.autoTrigger === 'object') {
-            var nextAutoTriggerMode = resolveAutoTriggerOpenMode(company.autoTrigger);
-            autoTrigger.openMode = nextAutoTriggerMode;
-            autoTrigger.enabled = nextAutoTriggerMode === 'auto';
-            autoTrigger.afterSeconds = Math.max(0, Math.min(120, Number(company.autoTrigger.afterSeconds != null ? company.autoTrigger.afterSeconds : AUTO_TRIGGER_DEFAULT_SECONDS)));
-            autoTrigger.afterScrollPercent = Math.max(0, Math.min(100, Number(company.autoTrigger.afterScrollPercent != null ? company.autoTrigger.afterScrollPercent : AUTO_TRIGGER_DEFAULT_SCROLL_PERCENT)));
-            autoTrigger.onlySelectedPages = Boolean(company.autoTrigger.onlySelectedPages);
-            autoTrigger.onPricingPage = Boolean(company.autoTrigger.onPricingPage);
-            autoTrigger.onPortfolioPage = Boolean(company.autoTrigger.onPortfolioPage);
-            autoTrigger.selectedPages = String(company.autoTrigger.selectedPages || '');
-          }
-          widgetSide = company.widgetPosition === 'left' ? 'left' : 'right';
-          try {
-            var rawSide = typeof localStorage !== 'undefined' && localStorage.getItem(WIDGET_SIDE_BY_COMPANY_KEY);
-            var parsedSide = rawSide ? JSON.parse(rawSide) : {};
-            var nextSide = {};
-            var key;
-            if (parsedSide && typeof parsedSide === 'object') {
-              for (key in parsedSide) {
-                if (Object.prototype.hasOwnProperty.call(parsedSide, key)) nextSide[key] = parsedSide[key];
-              }
-            }
-            nextSide[companyId] = widgetSide;
-            if (typeof localStorage !== 'undefined') localStorage.setItem(WIDGET_SIDE_BY_COMPANY_KEY, JSON.stringify(nextSide));
-          } catch (e) {}
+          writeCompanyBootstrapCache(company);
+        }
+        if (company) {
+          applyCompanyRuntimeConfig(company);
           var vp = getViewport();
           widgetButtonPos = clampWidgetButtonPosition(widgetButtonPos, vp.width, vp.height);
           applyWidgetButtonPosition();
@@ -2327,10 +2457,20 @@
             document.documentElement.style.setProperty('--embed-header-bg', vars['--chat-header-bg'] || '');
           }
         }
-        resetActivationWatchers();
-        if (!activated) runActivation();
       })
       .catch(function () {
+        if (!widgetRoot) return;
+        companyIconUrl = resolvePublicMediaUrl(config.iconUrl || null);
+        avatarLetter = (companyName || '').trim().charAt(0) || 'J';
+        var avatarFallback = widgetRoot.querySelector('.jploft-avatar');
+        if (avatarFallback) setAvatarContents(avatarFallback);
+        setLauncherIconContents();
+        setSendButtonState();
+        applyVoiceFeatureState();
+        renderMessages();
+      })
+      .then(function () {
+        if (widgetRoot) setWidgetRootAwaitingCompanies(widgetRoot, false);
         resetActivationWatchers();
         if (!activated) runActivation();
       });
@@ -2388,6 +2528,29 @@
     };
   }
 
-  createStyles();
-  createWidget();
+  function bootstrapAndCreateWidget() {
+    if (bootstrapRetryTimer) {
+      clearTimeout(bootstrapRetryTimer);
+      bootstrapRetryTimer = null;
+    }
+
+    var bootstrapPromise = forceOpen ? loadCompanyBootstrapFromApiStrict() : loadCompanyBootstrapConfig();
+
+    bootstrapPromise
+      .then(function (company) {
+        if (!company) throw new Error('bootstrap config unavailable');
+        applyCompanyRuntimeConfig(company);
+        hideWidgetUntilThemeReady = true;
+        if (!root) {
+          createStyles();
+          createWidget();
+        }
+      })
+      .catch(function () {
+        if (bootstrapRetryTimer) clearTimeout(bootstrapRetryTimer);
+        bootstrapRetryTimer = setTimeout(bootstrapAndCreateWidget, 5000);
+      });
+  }
+
+  bootstrapAndCreateWidget();
 })();

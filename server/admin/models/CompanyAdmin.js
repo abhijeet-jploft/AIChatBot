@@ -1,5 +1,6 @@
 const pool = require('../../db/index');
 const { MODULE_SETTINGS_TABLE_NAMES } = require('../../db/companySettingsSchema');
+const { normalizeHttpUrl, normalizePhoneWithCountryCode } = require('../../utils/contactValidation');
 
 const ALLOWED_MODULE_TABLES = new Set(MODULE_SETTINGS_TABLE_NAMES);
 
@@ -129,10 +130,7 @@ async function setPassword(companyId, passwordHash) {
 }
 
 function normalizeCompanyWebsite(raw) {
-  const s = String(raw || '').trim().slice(0, 512);
-  if (!s) return null;
-  if (/^https?:\/\//i.test(s)) return s;
-  return `https://${s}`;
+  return normalizeHttpUrl(raw);
 }
 
 /**
@@ -177,7 +175,7 @@ async function updateAccountProfile(companyId, {
   }
 
   const owner = String(ownerName ?? '').trim().slice(0, 255) || null;
-  const phone = String(adminPhone ?? '').trim().slice(0, 64) || null;
+  const phone = normalizePhoneWithCountryCode(adminPhone);
   const websiteVal = normalizeCompanyWebsite(companyWebsite);
   const industry = String(industryCategory ?? '').trim().slice(0, 128) || null;
 

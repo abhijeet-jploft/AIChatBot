@@ -150,6 +150,7 @@ async function synthesizeCompanyVoice({ chatbot, aiLanguageConfig, voiceConfig, 
  */
 async function postMessage(req, res) {
   let companyId = '_default';
+  let sid = null;
   const requestStartedAt = Date.now();
   try {
     const { messages, companyId: requestCompanyId = '_default', sessionId } = req.body;
@@ -159,7 +160,7 @@ async function postMessage(req, res) {
       return res.status(400).json({ error: 'messages array is required' });
     }
 
-    let sid = sessionId || null;
+    sid = sessionId || null;
     let selectedModeId = null;
     let safetyConfig = {};
     let escalationConfig = {};
