@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import {
+  clampFromNotAfterTo,
+  clampToNotBeforeFrom,
+  nextToAfterFromChange,
+} from '../../utils/dateRangeFields';
 
 const PAGE_SIZE = 20;
 
@@ -13,7 +18,22 @@ function formatDateTime(value) {
 
 export default function MissedConversations() {
   const { authFetch, company } = useAuth();
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState({
+    search: '',
+    fromDate: '',
+    toDate: '',
+    minMessages: '1',
+    maxMessages: '',
+    page: 1,
+  });
+  const [appliedFilters, setAppliedFilters] = useState({
+    search: '',
+    fromDate: '',
+    toDate: '',
+    minMessages: '1',
+    maxMessages: '',
+    page: 1,
+  });
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +42,12 @@ export default function MissedConversations() {
     try {
       const params = new URLSearchParams();
       params.set('limit', String(PAGE_SIZE));
-      params.set('page', String(page));
+      params.set('page', String(appliedFilters.page));
+      if (appliedFilters.search.trim()) params.set('search', appliedFilters.search.trim());
+      if (appliedFilters.fromDate) params.set('fromDate', appliedFilters.fromDate);
+      if (appliedFilters.toDate) params.set('toDate', appliedFilters.toDate);
+      if (appliedFilters.minMessages) params.set('minMessages', appliedFilters.minMessages);
+      if (appliedFilters.maxMessages) params.set('maxMessages', appliedFilters.maxMessages);
       const res = await authFetch(`/missed-conversations?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load missed conversations');
       const json = await res.json();
@@ -30,14 +55,14 @@ export default function MissedConversations() {
         rows: json.rows || [],
         total: json.total ?? 0,
         limit: json.limit ?? PAGE_SIZE,
-        page: json.page ?? page,
+        page: json.page ?? appliedFilters.page,
       });
     } catch {
       setData({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
     } finally {
       setLoading(false);
     }
-  }, [authFetch, page]);
+  }, [authFetch, appliedFilters]);
 
   useEffect(() => {
     load();
@@ -54,6 +79,96 @@ export default function MissedConversations() {
         Visitors who chatted but left without becoming a lead. Open the chat to follow up.
       </p>
 
+      <div className="card mb-3" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
+        <div className="card-body">
+          <div className="row g-2">
+            <div className="col-12 col-md-4">
+              <label className="form-label form-label-sm small mb-1" style={{ color: 'var(--chat-muted)' }}>Search</label>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="First message or session ID"
+                value={filters.search}
+                onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+              />
+            </div>
+            <div className="col-6 col-md-2">
+              <label className="form-label form-label-sm small mb-1" style={{ color: 'var(--chat-muted)' }}>From</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={filters.fromDate}
+                onChange={(e) => {
+                  const nextFromDate = clampFromNotAfterTo(e.target.value, filters.toDate);
+                  const nextToDate = nextToAfterFromChange(nextFromDate, filters.toDate);
+                  setFilters((prev) => ({ ...prev, fromDate: nextFromDate, toDate: nextToDate }));
+                }}
+              />
+            </div>
+            <div className="col-6 col-md-2">
+              <label className="form-label form-label-sm small mb-1" style={{ color: 'var(--chat-muted)' }}>To</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={filters.toDate}
+                min={filters.fromDate || undefined}
+                onChange={(e) => {
+                  const nextToDate = clampToNotBeforeFrom(e.target.value, filters.fromDate);
+                  setFilters((prev) => ({ ...prev, toDate: nextToDate }));
+                }}
+              />
+            </div>
+            <div className="col-6 col-md-2">
+              <label className="form-label form-label-sm small mb-1" style={{ color: 'var(--chat-muted)' }}>Min user msgs</label>
+              <input
+                type="number"
+                min="1"
+                className="form-control form-control-sm"
+                value={filters.minMessages}
+                onChange={(e) => setFilters((prev) => ({ ...prev, minMessages: e.target.value }))}
+              />
+            </div>
+            <div className="col-6 col-md-2">
+              <label className="form-label form-label-sm small mb-1" style={{ color: 'var(--chat-muted)' }}>Max user msgs</label>
+              <input
+                type="number"
+                min="1"
+                className="form-control form-control-sm"
+                value={filters.maxMessages}
+                onChange={(e) => setFilters((prev) => ({ ...prev, maxMessages: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="d-flex gap-2 mt-3">
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={() => setAppliedFilters({ ...filters, page: 1 })}
+            >
+              Apply filters
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => {
+                const reset = {
+                  search: '',
+                  fromDate: '',
+                  toDate: '',
+                  minMessages: '1',
+                  maxMessages: '',
+                  page: 1,
+                };
+                setFilters(reset);
+                setAppliedFilters(reset);
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="card" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)' }}>
         <div className="card-body p-0">
           {loading ? (
@@ -69,8 +184,8 @@ export default function MissedConversations() {
                   <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
                     <tr>
                       <th className="border-0 py-2">First message</th>
-                      <th className="border-0 py-2">Page</th>
-                      <th className="border-0 py-2">Messages</th>
+                      <th className="border-0 py-2">User msgs</th>
+                      <th className="border-0 py-2">Total msgs</th>
                       <th className="border-0 py-2">Left at</th>
                       <th className="border-0 py-2 text-end">Actions</th>
                     </tr>
@@ -87,15 +202,7 @@ export default function MissedConversations() {
                             {row.firstMessage || '—'}
                           </span>
                         </td>
-                        <td className="align-middle small">
-                          <span
-                            className="d-inline-block text-truncate"
-                            style={{ maxWidth: 200 }}
-                            title={row.pageUrl}
-                          >
-                            {row.pageUrl || '—'}
-                          </span>
-                        </td>
+                        <td className="align-middle">{row.userMessageCount}</td>
                         <td className="align-middle">{row.messageCount}</td>
                         <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
                           {formatDateTime(row.disconnectedAt)}
@@ -133,7 +240,7 @@ export default function MissedConversations() {
                       type="button"
                       className="btn btn-sm btn-outline-secondary"
                       disabled={data.page <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      onClick={() => setAppliedFilters((prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
                     >
                       Previous
                     </button>
@@ -144,7 +251,7 @@ export default function MissedConversations() {
                       type="button"
                       className="btn btn-sm btn-outline-secondary"
                       disabled={data.page >= totalPages}
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      onClick={() => setAppliedFilters((prev) => ({ ...prev, page: Math.min(totalPages, prev.page + 1) }))}
                     >
                       Next
                     </button>

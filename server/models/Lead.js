@@ -499,18 +499,21 @@ async function updateReminder(companyId, leadId, reminderAt, reminderNote) {
 
   const nextReminderAt = normalizedReminderAt;
   const nextReminderNote = note === undefined ? existing.reminder_note : note;
+  const reminderNoteParam = nextReminderNote == null ? null : String(nextReminderNote);
 
   const { rows } = await pool.query(
     `UPDATE leads
-     SET reminder_at = $1,
-         reminder_note = $2,
+     SET reminder_at = $1::timestamptz,
+         reminder_note = $2::text,
          reminder_notified_at = CASE
-           WHEN $1 IS NULL THEN NULL
-           WHEN reminder_notified_at IS NOT NULL AND $1::timestamptz != reminder_at THEN NULL
+           WHEN $1::timestamptz IS NULL THEN NULL::timestamptz
+           WHEN reminder_notified_at IS NOT NULL
+             AND $1::timestamptz IS DISTINCT FROM reminder_at
+             THEN NULL::timestamptz
            ELSE reminder_notified_at
          END,
          status = CASE
-           WHEN $1 IS NOT NULL
+           WHEN $1::timestamptz IS NOT NULL
              AND status = 'new'
              THEN 'follow_up_required'
            ELSE status
@@ -518,7 +521,7 @@ async function updateReminder(companyId, leadId, reminderAt, reminderNote) {
          updated_at = NOW()
      WHERE company_id = $3 AND id = $4 AND deleted_at IS NULL
      RETURNING *`,
-    [nextReminderAt, nextReminderNote, companyId, leadId]
+    [nextReminderAt, reminderNoteParam, companyId, leadId]
   );
 
   const updated = rows[0];
