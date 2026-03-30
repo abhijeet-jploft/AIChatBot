@@ -69,6 +69,19 @@ const PROFILE_SELECTION_HINTS = {
   sales: ['sales', 'marketing', 'social media', 'advert', 'promo', 'energetic', 'expressive', 'friendly'],
 };
 
+function normalizeElevenLabsApiKey(value) {
+  let key = String(value || '').trim();
+  if (!key) return '';
+
+  // Accept common copied formats such as: "Bearer <key>" or "xi-api-key: <key>".
+  key = key.replace(/^['"]+|['"]+$/g, '').trim();
+  key = key.replace(/^authorization\s*:\s*/i, '').trim();
+  key = key.replace(/^bearer\s+/i, '').trim();
+  key = key.replace(/^xi-api-key\s*[:=]\s*/i, '').trim();
+
+  return key;
+}
+
 function normalizeRequestedLanguage(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
@@ -616,6 +629,35 @@ function getVoicePreviewText(profile, gender, options = {}) {
 
 function extractElevenLabsErrorMessage(payload, fallback) {
   if (!payload) return fallback;
+  if (Buffer.isBuffer(payload)) {
+    try {
+      const parsed = JSON.parse(payload.toString('utf8'));
+      return extractElevenLabsErrorMessage(parsed, fallback);
+    } catch {
+      const s = payload.toString('utf8').trim();
+      return s || fallback;
+    }
+  }
+  if (typeof ArrayBuffer !== 'undefined' && payload instanceof ArrayBuffer) {
+    try {
+      const s = Buffer.from(payload).toString('utf8');
+      const parsed = JSON.parse(s);
+      return extractElevenLabsErrorMessage(parsed, fallback);
+    } catch {
+      const s = Buffer.from(payload).toString('utf8').trim();
+      return s || fallback;
+    }
+  }
+  if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(payload)) {
+    try {
+      const s = Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength).toString('utf8');
+      const parsed = JSON.parse(s);
+      return extractElevenLabsErrorMessage(parsed, fallback);
+    } catch {
+      const s = Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength).toString('utf8').trim();
+      return s || fallback;
+    }
+  }
   if (typeof payload === 'string') return payload;
   if (typeof payload.error === 'string') return payload.error;
   if (typeof payload.message === 'string') return payload.message;
@@ -628,7 +670,7 @@ function extractElevenLabsErrorMessage(payload, fallback) {
 }
 
 async function createCustomVoiceFromSamples(options = {}) {
-  const apiKey = String(options.apiKey || process.env.ELEVENLABS_API_KEY || '').trim();
+  const apiKey = normalizeElevenLabsApiKey(options.apiKey || process.env.ELEVENLABS_API_KEY);
   if (!apiKey) {
     const err = new Error('ELEVENLABS_API_KEY is not set. Add it in .env to train a custom voice.');
     err.status = 400;
@@ -756,8 +798,8 @@ function sanitizeTextForSpeech(text, options = {}) {
 }
 
 function buildApiKeyCandidates(explicitApiKey) {
-  const explicit = String(explicitApiKey || '').trim();
-  const fallback = String(process.env.ELEVENLABS_API_KEY || '').trim();
+  const explicit = normalizeElevenLabsApiKey(explicitApiKey);
+  const fallback = normalizeElevenLabsApiKey(process.env.ELEVENLABS_API_KEY);
   const list = [];
   if (explicit) list.push({ source: 'company', value: explicit });
   if (fallback && fallback !== explicit) list.push({ source: 'env', value: fallback });

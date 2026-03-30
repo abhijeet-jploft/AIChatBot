@@ -62,6 +62,19 @@ function normalizeAiProvider(value) {
   return null;
 }
 
+function normalizeElevenLabsApiKeyInput(value) {
+  if (value === undefined) return undefined;
+  let key = String(value || '').trim();
+  if (!key) return null;
+
+  key = key.replace(/^['"]+|['"]+$/g, '').trim();
+  key = key.replace(/^authorization\s*:\s*/i, '').trim();
+  key = key.replace(/^bearer\s+/i, '').trim();
+  key = key.replace(/^xi-api-key\s*[:=]\s*/i, '').trim();
+
+  return key || null;
+}
+
 function normalizeAutoTriggerOpenMode(value) {
   if (value === undefined) return undefined;
   const normalized = String(value || '').trim().toLowerCase();
@@ -604,7 +617,7 @@ async function updateSettings(req, res) {
       ai_model: ai?.model !== undefined ? String(ai.model || '').trim() || null : undefined,
       anthropic_api_key: ai?.anthropicApiKey !== undefined ? String(ai.anthropicApiKey || '').trim() || null : undefined,
       gemini_api_key: ai?.geminiApiKey !== undefined ? String(ai.geminiApiKey || '').trim() || null : undefined,
-      elevenlabs_api_key: ai?.elevenlabsApiKey !== undefined ? String(ai.elevenlabsApiKey || '').trim() || null : undefined,
+      elevenlabs_api_key: normalizeElevenLabsApiKeyInput(ai?.elevenlabsApiKey),
       theme_primary_color: theme?.primaryColor !== undefined ? theme.primaryColor : undefined,
       theme_primary_dark_color: theme?.primaryDarkColor !== undefined ? theme.primaryDarkColor : undefined,
       theme_secondary_color: theme?.secondaryColor !== undefined ? theme.secondaryColor : undefined,
