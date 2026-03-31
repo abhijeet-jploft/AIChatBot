@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import PasswordInput from '../../components/PasswordInput';
 import { useAdminToast } from '../context/AdminToastContext';
 
 export default function Login() {
@@ -51,8 +52,7 @@ export default function Login() {
             </div>
             <div className="mb-3">
               <label className="form-label" style={{ color: 'var(--chat-text)' }}>Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 autoComplete="current-password"
                 className="form-control"
                 value={password}

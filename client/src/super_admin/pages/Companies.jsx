@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
+import PasswordInput from '../../components/PasswordInput';
 import { useSuperToast } from '../context/ToastContext';
 import { hasAnyAiModePermission, hasPermission } from '../lib/permissions';
 
@@ -228,8 +229,7 @@ export default function Companies() {
               </div>
               <div className="sa-field">
                 <label>Admin password <small>(optional - set later via company detail)</small></label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={form.adminPassword}
                   onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
                   placeholder="Min 8 characters"

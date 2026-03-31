@@ -17,8 +17,8 @@ async function getDashboard(req, res) {
       conversationsByDay,
       revenueByMonth,
     ] = await Promise.all([
-      pool.query(`SELECT COUNT(*) AS n FROM chatbots`),
-      pool.query(`SELECT COUNT(*) AS n FROM chatbots WHERE COALESCE(is_suspended, FALSE) = FALSE`),
+      pool.query(`SELECT COUNT(*) AS n FROM chatbots WHERE company_id NOT IN ('_default', '_scrape_jobs')`),
+      pool.query(`SELECT COUNT(*) AS n FROM chatbots WHERE company_id NOT IN ('_default', '_scrape_jobs') AND COALESCE(is_suspended, FALSE) = FALSE`),
       pool.query(`SELECT COUNT(*) AS n FROM chat_sessions`),
       pool.query(`SELECT COUNT(*) AS n FROM leads WHERE deleted_at IS NULL`),
       pool.query(
@@ -50,6 +50,7 @@ async function getDashboard(req, res) {
          FROM chatbots c
          LEFT JOIN chat_sessions s ON s.company_id = c.company_id
          LEFT JOIN leads l ON l.company_id = c.company_id AND l.deleted_at IS NULL
+         WHERE c.company_id NOT IN ('_default', '_scrape_jobs')
          GROUP BY c.company_id, c.name
          ORDER BY leads DESC, conversations DESC
          LIMIT 5`

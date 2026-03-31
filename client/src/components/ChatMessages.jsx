@@ -9,6 +9,7 @@ import {
   hasUsableLeadContact,
   preprocessAssistantMarkdown,
   sanitizeAssistantHref,
+  userWantsToShareDetails,
 } from '../lib/chatMessageFormatting';
 
 function InlineLeadForm({ draft, disabled, onSubmit }) {
@@ -137,12 +138,22 @@ function MessageContent({ content, isUser }) {
 export default function ChatMessages({ messages, loading, greetingMessage, onPlayVoice, onPauseVoice, playingMessageIndex, voiceEnabled, voiceResponseEnabled = true, onPlayBrowserVoice, onSend }) {
   const leadDraft = extractLeadDraftFromMessages(messages);
   const hasLeadContact = hasLeadContactInMessages(messages);
+  const wantsToShareDetails = userWantsToShareDetails(messages);
   let leadPromptIndex = -1;
 
   if (!hasLeadContact) {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
-      if (message?.role === 'assistant' && detectLeadCapturePrompt(message.content)) {
+      if (
+        message?.role === 'assistant'
+        && (
+          detectLeadCapturePrompt(message.content)
+          || (
+            wantsToShareDetails
+            && /\b(your name|full name|name\s*[:?]|phone|phone number|mobile|mobile number|whatsapp|email|email address|e-mail)\b/i.test(String(message.content || ''))
+          )
+        )
+      ) {
         leadPromptIndex = index;
         break;
       }

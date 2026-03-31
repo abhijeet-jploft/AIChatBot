@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
+import PasswordInput from '../../components/PasswordInput';
 import { useSuperToast } from '../context/ToastContext';
 
 function resolveAvatarSrc(url) {
@@ -109,10 +110,10 @@ export default function SuperAdminProfile() {
     <div className="sa-page sa-profile-page">
       <div className="sa-page-header">
         <h2 className="sa-page-title">Your profile</h2>
-        <p className="sa-text-muted sa-profile-subtitle">
-          Update how you appear in the super admin console and manage your sign-in credentials.
-        </p>
       </div>
+      <p style={{lineHeight: 0}} className="sa-text-muted sa-profile-subtitle ">
+        Update how you appear in the super admin console and manage your sign-in credentials.
+      </p>
 
       {admin?.mustChangePassword ? (
         <div className="sa-panel sa-panel-info sa-profile-force">
@@ -190,8 +191,7 @@ export default function SuperAdminProfile() {
           </p>
           <div className="sa-field">
             <label>Current password</label>
-            <input
-              type="password"
+            <PasswordInput
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
@@ -200,8 +200,7 @@ export default function SuperAdminProfile() {
           </div>
           <div className="sa-field">
             <label>New password</label>
-            <input
-              type="password"
+            <PasswordInput
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"

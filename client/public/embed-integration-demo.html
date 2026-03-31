@@ -1072,7 +1072,9 @@
           apiUrl: urls.apiUrl,
           companyId: formState.companyId,
           companyName: formState.companyName,
-          apiKey: formState.apiKey
+          apiKey: formState.apiKey,
+          // Demo page path is /embed-integration-demo.html; force homepage-style auto-trigger matching here.
+          autoTriggerPath: '/'
         };
 
         var existingScript = document.getElementById('jploft-widget-loader');

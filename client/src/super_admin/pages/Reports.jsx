@@ -34,6 +34,15 @@ function formatDateTimeFull(value) {
   });
 }
 
+function formatPeriodLabel(fromValue, toValue) {
+  const fromDate = String(fromValue || '').slice(0, 10);
+  const toDate = String(toValue || '').slice(0, 10);
+  if (!fromDate && !toDate) return '';
+  if (!fromDate) return toDate;
+  if (!toDate) return fromDate;
+  return fromDate === toDate ? fromDate : `${fromDate} → ${toDate}`;
+}
+
 export default function Reports() {
   const { saFetch } = useSuperAuth();
   const { showToast } = useSuperToast();
@@ -42,9 +51,12 @@ export default function Reports() {
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+  const [to, setTo] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +80,7 @@ export default function Reports() {
   const convValues = data?.conversationsByDay?.map((d) => Number(d.n || 0)) || [];
   const leadsStatusLabels = data?.leadsByStatus?.map((s) => s.status) || [];
   const leadsStatusValues = data?.leadsByStatus?.map((s) => Number(s.n || 0)) || [];
+  const periodLabel = formatPeriodLabel(data?.period?.from, data?.period?.to);
 
   const convLineData = {
     labels: convLabels,
@@ -173,7 +186,7 @@ export default function Reports() {
         <>
           {/* By company */}
           <div className="sa-panel">
-            <h3 className="sa-panel-title">Activity by Company ({data.period.from.slice(0,10)} → {data.period.to.slice(0,10)})</h3>
+            <h3 className="sa-panel-title">Activity by Company ({periodLabel})</h3>
             <table className="sa-table">
               <thead>
                 <tr><th>Company</th><th>Conversations</th><th>Leads</th><th>Converted</th></tr>

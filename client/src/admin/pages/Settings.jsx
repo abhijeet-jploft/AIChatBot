@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import PasswordInput from '../../components/PasswordInput';
 import { useAdminToast } from '../context/AdminToastContext';
 import { hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../../constants/adminVisibility';
 import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
@@ -1169,8 +1170,7 @@ export default function Settings() {
             <div className="row g-2">
               <div className="col-12 col-md-4">
                 <label className="form-label small" style={labelStyle}>Current password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   className="form-control form-control-sm"
                   style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
                   value={passwordForm.currentPassword}
@@ -1180,8 +1180,7 @@ export default function Settings() {
               </div>
               <div className="col-12 col-md-4">
                 <label className="form-label small" style={labelStyle}>New password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   className="form-control form-control-sm"
                   style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
                   value={passwordForm.newPassword}
@@ -1191,8 +1190,7 @@ export default function Settings() {
               </div>
               <div className="col-12 col-md-4">
                 <label className="form-label small" style={labelStyle}>Confirm new password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   className="form-control form-control-sm"
                   style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
                   value={passwordForm.confirmPassword}

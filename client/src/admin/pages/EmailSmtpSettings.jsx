@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import PasswordInput from '../../components/PasswordInput';
 
 const cardStyle = {
   background: 'var(--chat-surface)',
@@ -188,8 +189,7 @@ export default function EmailSmtpSettings() {
           </div>
           <div className="mb-0">
             <label className="form-label small" style={labelStyle}>Password</label>
-            <input
-              type="password"
+            <PasswordInput
               className="form-control"
               placeholder={passwordConfigured ? '•••••••• (leave blank to keep)' : 'Optional if server allows unauthenticated relay'}
               value={password}

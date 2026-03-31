@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
+import PasswordInput from '../../components/PasswordInput';
 import { useSuperToast } from '../context/ToastContext';
 import { buildAiModePermissionChecks, hasAnyAiModePermission, hasAnyPermission, hasPermission } from '../lib/permissions';
 import {
@@ -445,8 +446,7 @@ export default function CompanyDetail() {
           <form onSubmit={handleResetPassword}>
             <div className="sa-field">
               <label>New Admin Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Min 8 characters"

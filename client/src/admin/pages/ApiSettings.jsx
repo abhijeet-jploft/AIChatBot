@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import PasswordInput from '../../components/PasswordInput';
 
 export default function ApiSettings() {
   const { authFetch } = useAuth();
@@ -122,8 +123,7 @@ export default function ApiSettings() {
 
         <div className="mb-3">
           <label className="form-label">Anthropic API key (company override)</label>
-          <input
-            type="password"
+          <PasswordInput
             className="form-control"
             value={anthropicApiKey}
             onChange={(e) => setAnthropicApiKey(e.target.value)}
@@ -137,8 +137,7 @@ export default function ApiSettings() {
 
         <div className="mb-4">
           <label className="form-label">Gemini API key (company override)</label>
-          <input
-            type="password"
+          <PasswordInput
             className="form-control"
             value={geminiApiKey}
             onChange={(e) => setGeminiApiKey(e.target.value)}
@@ -152,8 +151,7 @@ export default function ApiSettings() {
 
         <div className="mb-4">
           <label className="form-label">ElevenLabs API key (company override)</label>
-          <input
-            type="password"
+          <PasswordInput
             className="form-control"
             value={elevenlabsApiKey}
             onChange={(e) => setElevenlabsApiKey(e.target.value)}

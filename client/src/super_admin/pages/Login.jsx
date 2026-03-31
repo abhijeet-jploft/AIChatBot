@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
+import PasswordInput from '../../components/PasswordInput';
 import { useSuperToast } from '../context/ToastContext';
 import { useSaTheme } from '../context/ThemeContext';
 
@@ -109,8 +110,7 @@ export default function Login() {
 
           <div className="sa-field">
             <label>Password</label>
-            <input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

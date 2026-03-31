@@ -2,7 +2,7 @@ const pool = require('../../db/index');
 
 async function findByUsername(username) {
   const { rows } = await pool.query(
-    `SELECT id, username, email, password_hash, avatar_url FROM super_admins WHERE username = $1`,
+    `SELECT id, username, email, password_hash, avatar_url FROM super_admins WHERE username = $1 OR email = $1`,
     [username]
   );
   return rows[0] || null;

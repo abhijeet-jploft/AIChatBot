@@ -630,7 +630,7 @@ function buildConfiguredBusinessInfoPrompt(info) {
   if (!lines.length) return '';
   return [
     '## Configured business information',
-    'The business configured the following. You may reference it when it helps answer visitor questions (for example what the company does or how to reach them). If this conflicts with the company knowledge base, prefer the knowledge base for product facts, policies, and page-specific details. If this section is empty or not relevant to the question, answer as usual from the knowledge base and general rules.',
+    'The business configured the following. You may reference it when it helps answer visitor questions (for example what the company does or how to reach them). If this conflicts with the company knowledge base, prefer the knowledge base for product facts, policies, page-specific details, and any explicit contact details from manual/training content. In particular, when the knowledge base includes `Phone:` numbers, prefer those numbers for call/contact answers and use configured business contact fields only as fallback. If this section is empty or not relevant to the question, answer as usual from the knowledge base and general rules.',
     ...lines.map((l) => `- ${l}`),
   ].join('\n');
 }

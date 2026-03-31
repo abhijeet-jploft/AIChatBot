@@ -173,7 +173,18 @@ export function detectLeadCapturePrompt(content) {
 
   if (fieldMentions < 2) return false;
 
-  return /\b(contact information|please share|please provide|provide these details|share these details|let me know|reach you|preferred contact method|time zone|what are you looking to build|specific technologies|technical discussion|scheduling)\b/i.test(source);
+  return /\b(contact information|contact info|contact details|please share|please provide|provide these details|share these details|share your details|take your details|take my details|your details|my details|let me know|reach you|preferred contact method|best way to contact|time zone|what are you looking to build|specific technologies|technical discussion|scheduling|book a call|schedule a call|get in touch)\b/i.test(source);
+}
+
+export function userWantsToShareDetails(messages = []) {
+  const latestUserMessage = (Array.isArray(messages) ? messages : [])
+    .slice()
+    .reverse()
+    .find((message) => message?.role === 'user' && String(message?.content || '').trim());
+  const source = latestUserMessage ? String(latestUserMessage.content || '').replace(/\s+/g, ' ').trim() : '';
+  if (!source) return false;
+  return /\b(share|give|provide|send|submit|leave)\b[\s\S]{0,40}\b(my|our)\b[\s\S]{0,40}\b(details|detail|contact|information|info)\b/i.test(source)
+    || /\b(can you|could you|please)\b[\s\S]{0,30}\b(take|collect|note down|save)\b[\s\S]{0,40}\b(my|our)\b[\s\S]{0,40}\b(details|detail|contact|information|info)\b/i.test(source);
 }
 
 export function extractLeadDraftFromMessages(messages = []) {

@@ -1,5 +1,5 @@
 const pool = require('../../db/index');
-const { normalizeCalendarRangeQuery } = require('../../utils/dateRangeQuery');
+const { normalizeCalendarRangeQuery, calendarDayOrNull } = require('../../utils/dateRangeQuery');
 const { getLogs } = require('../../services/adminLogStore');
 
 function percentile(values, p) {
@@ -113,6 +113,10 @@ async function getReports(req, res) {
     const { from: fromQ, to: toQ } = normalizeCalendarRangeQuery(req.query.from, req.query.to);
     const fromDate = fromQ ? new Date(fromQ) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
     const toDate = toQ ? new Date(toQ) : new Date();
+    // When to is a calendar date (YYYY-MM-DD), extend to end-of-day so BETWEEN includes the full day
+    if (calendarDayOrNull(toQ)) {
+      toDate.setUTCHours(23, 59, 59, 999);
+    }
 
     const [byCompany, leadsByStatus, convsByDay] = await Promise.all([
       pool.query(
@@ -146,7 +150,7 @@ async function getReports(req, res) {
     ]);
 
     return res.json({
-      period: { from: fromDate.toISOString(), to: toDate.toISOString() },
+      period: { from: fromQ || fromDate.toISOString().slice(0, 10), to: toQ || toDate.toISOString().slice(0, 10) },
       byCompany: byCompany.rows,
       leadsByStatus: leadsByStatus.rows,
       conversationsByDay: convsByDay.rows,

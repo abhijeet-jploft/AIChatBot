@@ -20,6 +20,7 @@
   var apiKey = (script && script.getAttribute('data-api-key')) || config.apiKey || '';
   /** True for GET /embed/:slug/:token (server HTML); false for script tag on a third-party site. */
   var forceOpen = Boolean(config.forceOpen || (script && script.getAttribute('data-force-open') === 'true'));
+  var autoTriggerPathOverride = (script && script.getAttribute('data-auto-trigger-path')) || config.autoTriggerPath || '';
   var clientErrorSource = forceOpen ? 'embed-iframe-page' : 'embed-script';
   var explicitWidgetSide = (script && script.getAttribute('data-widget-side')) || config.widgetSide || '';
   var widgetSide = String(explicitWidgetSide || 'right').toLowerCase() === 'left' ? 'left' : 'right';
@@ -1006,6 +1007,10 @@
     return escapeHtml(String(s || '')).replace(/"/g, '&quot;');
   }
 
+  var CONTACT_PHONE_RE = /(?:^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/;
+  var CONTACT_PHONE_GLOBAL_RE = /(^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/g;
+  var WHATSAPP_LABELLED_PHONE_RE = /(\b(?:whats\s*app|whatsapp|wa)\b(?:\s+(?:number|no\.?|contact|chat|support|mobile))?\s*[:=-]?\s*)((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)/gi;
+
   function normalizePhoneForHref(rawPhone) {
     var source = String(rawPhone || '').trim();
     if (!source) return '';
@@ -1092,10 +1097,9 @@
 
   /** Plain `tel:` linkify must not touch numbers already inside <a>...</a> (e.g. WhatsApp wa.me links). */
   function linkifyTelOutsideAnchors(htmlFragment) {
-    var phoneRe = /(^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/g;
     return htmlFragment.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/gi).map(function (chunk) {
       if (/^<a\b/i.test(chunk)) return chunk;
-      return chunk.replace(phoneRe, function (fullMatch, prefix, phoneText) {
+      return chunk.replace(CONTACT_PHONE_GLOBAL_RE, function (fullMatch, prefix, phoneText) {
         var safePhone = normalizePhoneForHref(phoneText);
         if (!safePhone) return fullMatch;
         return prefix + renderSafeLink(phoneText.trim(), 'tel:' + safePhone);
@@ -1124,7 +1128,7 @@
         var parts = trimTrailingUrlPunctuation(url);
         return prefix + renderSafeLink(parts.cleanUrl, 'https://' + parts.cleanUrl) + escapeHtml(parts.trailing);
       })
-      .replace(/(\b(?:whats\s*app|whatsapp|wa)\b(?:\s+(?:number|no\.?|contact))?\s*[:=-]?\s*)((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)/gi, function (fullMatch, label, phoneText) {
+      .replace(WHATSAPP_LABELLED_PHONE_RE, function (fullMatch, label, phoneText) {
         var waHref = normalizeWhatsappForHref(phoneText);
         if (!waHref) return fullMatch;
         return escapeHtml(label) + renderSafeLink(phoneText.trim(), waHref);
@@ -1250,7 +1254,7 @@
       }
       return false;
     });
-    var phoneMatch = userText.match(/(?:^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/);
+    var phoneMatch = userText.match(CONTACT_PHONE_RE);
     if (phoneMatch && phoneMatch[1]) phone = phoneMatch[1].trim();
     var emailMatch = userText.match(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i);
     if (emailMatch && emailMatch[0]) email = emailMatch[0].trim();
@@ -1276,7 +1280,18 @@
       /\b(email|email address|e-mail)\b/i,
     ].filter(function (pattern) { return pattern.test(source); }).length;
     if (fieldMentions < 2) return false;
-    return /\b(contact information|contact details|please share|please provide|provide these details|share these details|let me know|reach you|preferred contact method|time zone|what are you looking to build|specific technologies|technical discussion|scheduling)\b/i.test(source);
+    return /\b(contact information|contact info|contact details|please share|please provide|provide these details|share these details|share your details|take your details|take my details|your details|my details|let me know|reach you|preferred contact method|best way to contact|time zone|what are you looking to build|specific technologies|technical discussion|scheduling|book a call|schedule a call|get in touch)\b/i.test(source);
+  }
+
+  function userWantsToShareDetails(list) {
+    var latestUserText = (Array.isArray(list) ? list : [])
+      .slice()
+      .reverse()
+      .find(function (message) { return message && message.role === 'user' && String(message.content || '').trim(); });
+    var source = latestUserText ? String(latestUserText.content || '').replace(/\s+/g, ' ').trim() : '';
+    if (!source) return false;
+    return /\b(share|give|provide|send|submit|leave)\b[\s\S]{0,40}\b(my|our)\b[\s\S]{0,40}\b(details|detail|contact|information|info)\b/i.test(source)
+      || /\b(can you|could you|please)\b[\s\S]{0,30}\b(take|collect|note down|save)\b[\s\S]{0,40}\b(my|our)\b[\s\S]{0,40}\b(details|detail|contact|information|info)\b/i.test(source);
   }
 
   function buildLeadCaptureMessage(fields) {
@@ -1289,9 +1304,14 @@
 
   function findLeadPromptIndex(list) {
     if (hasLeadContactInMessages(list)) return -1;
+    var userIntentToShareDetails = userWantsToShareDetails(list);
     for (var index = list.length - 1; index >= 0; index -= 1) {
       var message = list[index];
-      if (message && message.role === 'assistant' && detectLeadCapturePrompt(message.content)) {
+      if (!message || message.role !== 'assistant') continue;
+      if (
+        detectLeadCapturePrompt(message.content)
+        || (userIntentToShareDetails && /\b(your name|full name|name\s*[:?]|phone|phone number|mobile|mobile number|whatsapp|email|email address|e-mail)\b/i.test(String(message.content || '')))
+      ) {
         return index;
       }
     }
@@ -2516,7 +2536,7 @@
     }
 
     if (launcher && !opened) launcher.style.display = 'flex';
-    if (!openingMessageShown) openPanel();
+    openPanel();
   }
 
   function runActivation() {
@@ -2527,8 +2547,15 @@
       return;
     }
 
-    var currentPath = (typeof window !== 'undefined' && window.location) ? window.location.pathname : '/';
-    if (!shouldEnableAutoTrigger(currentPath)) return;
+    var hasExplicitPathOverride = Boolean(String(autoTriggerPathOverride || '').trim());
+    var currentPath = String(autoTriggerPathOverride || '').trim()
+      || ((typeof window !== 'undefined' && window.location) ? window.location.pathname : '/');
+    // When the embedder explicitly sets autoTriggerPath, honour mode (auto/click) but skip page targeting.
+    if (hasExplicitPathOverride) {
+      if (resolveAutoTriggerOpenMode(autoTrigger) !== 'auto') return;
+    } else {
+      if (!shouldEnableAutoTrigger(currentPath)) return;
+    }
 
     var delayMs = Math.max(0, Number(autoTrigger.afterSeconds || 0) * 1000);
     var scrollThreshold = Math.max(0, Math.min(1, Number(autoTrigger.afterScrollPercent || 0) / 100));

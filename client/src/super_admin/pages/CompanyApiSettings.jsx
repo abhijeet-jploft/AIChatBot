@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
+import PasswordInput from '../../components/PasswordInput';
 import { useSuperToast } from '../context/ToastContext';
 
 export default function CompanyApiSettings() {
@@ -105,8 +106,7 @@ export default function CompanyApiSettings() {
         </div>
         <div className="sa-field">
           <label>Anthropic API key (company override)</label>
-          <input
-            type="password"
+          <PasswordInput
             value={anthropicApiKey}
             onChange={(e) => setAnthropicApiKey(e.target.value)}
             placeholder={hasAnthropicKey ? 'Stored in DB (enter new key to replace)' : 'Enter company Anthropic key'}
@@ -115,8 +115,7 @@ export default function CompanyApiSettings() {
         </div>
         <div className="sa-field">
           <label>Gemini API key (company override)</label>
-          <input
-            type="password"
+          <PasswordInput
             value={geminiApiKey}
             onChange={(e) => setGeminiApiKey(e.target.value)}
             placeholder={hasGeminiKey ? 'Stored in DB (enter new key to replace)' : 'Enter company Gemini key'}
@@ -125,8 +124,7 @@ export default function CompanyApiSettings() {
         </div>
         <div className="sa-field">
           <label>ElevenLabs API key (company override)</label>
-          <input
-            type="password"
+          <PasswordInput
             value={elevenlabsApiKey}
             onChange={(e) => setElevenlabsApiKey(e.target.value)}
             placeholder={hasElevenlabsKey ? 'Stored in DB (enter new key to replace)' : 'Enter company ElevenLabs key'}
