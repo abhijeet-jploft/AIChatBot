@@ -18,140 +18,191 @@ function resolveAutoTriggerOpenMode(dbRow) {
   return enabled ? 'auto' : 'click';
 }
 
+async function listCandidateCompanies(filterCompanyId = '') {
+  const normalizedCompanyId = String(filterCompanyId || '').trim();
+  const fsCompanies = getCompanies();
+  const dbParams = [];
+  let dbFilterSql = '';
+
+  if (normalizedCompanyId) {
+    dbParams.push(normalizedCompanyId);
+    dbFilterSql = ` AND c.company_id = $${dbParams.length}`;
+  }
+
+  const { rows: dbCompanyRows } = await pool.query(
+    `SELECT c.company_id, c.name
+     FROM chatbots c
+     INNER JOIN chat_settings ch ON ch.company_id = c.company_id
+     WHERE c.company_id NOT IN ('_default', '_scrape_jobs')${dbFilterSql}
+     ORDER BY c.name ASC`,
+    dbParams
+  );
+
+  const merged = new Map();
+  for (const r of dbCompanyRows) {
+    merged.set(r.company_id, { id: r.company_id, name: r.name });
+  }
+  for (const c of fsCompanies) {
+    if (normalizedCompanyId && c.id !== normalizedCompanyId) continue;
+    if (!merged.has(c.id)) {
+      merged.set(c.id, c);
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+async function enrichCompanies(companies = []) {
+  if (!Array.isArray(companies) || companies.length === 0) {
+    return [];
+  }
+
+  const companyIds = companies.map((c) => c.id);
+  const { rows } = await pool.query(
+    `SELECT c.company_id, c.name AS db_company_name, ch.display_name, ch.icon_url, ch.greeting_message, ch.widget_position,
+            ch.auto_trigger_enabled, ch.auto_trigger_open_mode, ch.auto_trigger_delay_seconds, ch.auto_trigger_scroll_percent,
+            ch.auto_trigger_only_selected_pages, ch.auto_trigger_pricing_page, ch.auto_trigger_portfolio_page,
+            ch.auto_trigger_selected_pages,
+            th.theme_primary_color, th.theme_primary_dark_color,
+            th.theme_secondary_color, th.theme_secondary_light_color,
+            th.theme_header_background, th.theme_header_shadow, th.theme_header_text_color,
+            vo.voice_mode_enabled,
+            vo.voice_gender,
+            vo.voice_profile,
+            vo.voice_custom_id,
+            vo.voice_custom_gender,
+            vo.voice_ignore_emoji,
+            vo.voice_response_enabled,
+            vo.voice_tts_language_code,
+            av.admin_visibility_voice_mode_toggle,
+            av.admin_visibility_voice_response_toggle,
+            av.admin_visibility_voice_ignore_emoji,
+            av.admin_visibility_voice_spoken_language,
+            av.admin_visibility_voice_preset_voices,
+            av.admin_visibility_voice_custom_training,
+            av.admin_visibility_allowed_preset_voice_keys,
+            lg.language_primary,
+            lg.language_multi_enabled,
+            lg.language_auto_detect_enabled,
+            lg.language_manual_switch_enabled,
+            lg.language_extra_locales
+       FROM chatbots c
+       INNER JOIN chat_settings ch ON ch.company_id = c.company_id
+       INNER JOIN theme_settings th ON th.company_id = c.company_id
+       INNER JOIN voice_settings vo ON vo.company_id = c.company_id
+       INNER JOIN admin_visibility_settings av ON av.company_id = c.company_id
+       INNER JOIN language_settings lg ON lg.company_id = c.company_id
+     WHERE c.company_id = ANY($1::text[])`,
+    [companyIds]
+  );
+  const dbMap = Object.fromEntries(rows.map((r) => [r.company_id, r]));
+
+  return companies.map((c) => {
+    const dbRow = dbMap[c.id] || {};
+    const companyLabel = String(dbRow.db_company_name || '').trim() || c.name;
+    const chatbotRaw = String(dbRow.display_name || '').trim();
+    const customAvailable = Boolean(dbRow.voice_custom_id);
+    const resolvedProfile = customAvailable
+      ? (dbRow.voice_profile === 'custom' ? 'custom' : (dbRow.voice_profile || 'professional'))
+      : (dbRow.voice_profile === 'custom' ? 'professional' : (dbRow.voice_profile || 'professional'));
+    const resolvedGender = resolvedProfile === 'custom' && customAvailable
+      ? (dbRow.voice_custom_gender === 'male' ? 'male' : 'female')
+      : (dbRow.voice_gender === 'male' ? 'male' : 'female');
+    const openMode = resolveAutoTriggerOpenMode(dbRow);
+    const trainingContext = loadCompanyContext(c.id);
+    const businessProfile = inferCompanyProfile({ context: trainingContext });
+    const contentLocaleHint = inferTrainingContentLanguageHint(trainingContext);
+    const adminVisibility = buildAdminVisibilityPayload(dbRow);
+
+    return {
+      id: c.id,
+      name: companyLabel,
+      companyName: companyLabel,
+      chatbotName: chatbotRaw,
+      displayName: chatbotRaw || companyLabel,
+      iconUrl: (dbRow.icon_url && String(dbRow.icon_url).trim()) || null,
+      greetingMessage: dbRow.greeting_message || null,
+      widgetPosition: String(dbRow.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
+      autoTrigger: {
+        enabled: openMode === 'auto',
+        openMode,
+        afterSeconds: Math.max(0, Math.min(120, Number(dbRow.auto_trigger_delay_seconds ?? 8))),
+        afterScrollPercent: Math.max(0, Math.min(100, Number(dbRow.auto_trigger_scroll_percent ?? 40))),
+        onlySelectedPages: Boolean(dbRow.auto_trigger_only_selected_pages),
+        onPricingPage: Boolean(dbRow.auto_trigger_pricing_page),
+        onPortfolioPage: Boolean(dbRow.auto_trigger_portfolio_page),
+        selectedPages: String(dbRow.auto_trigger_selected_pages || ''),
+      },
+      voice: {
+        enabled: Boolean(dbRow.voice_mode_enabled) && Boolean(adminVisibility.voice.enableVoiceMode),
+        responseEnabled: Boolean(dbRow.voice_response_enabled !== false) && Boolean(adminVisibility.voice.enableVoiceResponse),
+        gender: resolvedGender,
+        profile: resolvedProfile,
+        customAvailable,
+        ignoreEmoji: Boolean(dbRow.voice_ignore_emoji) && Boolean(adminVisibility.voice.ignoreEmoji),
+        ttsLanguageCode: String(dbRow.voice_tts_language_code || '').trim().toLowerCase() || null,
+      },
+      adminVisibility,
+      language: {
+        primary: normalizeLanguagePrimaryToCode(dbRow.language_primary || 'en'),
+        catalog: getLanguageCatalogForClient(),
+        multiEnabled: Boolean(dbRow.language_multi_enabled),
+        autoDetectEnabled: Boolean(dbRow.language_auto_detect_enabled !== false),
+        manualSwitchEnabled: Boolean(dbRow.language_manual_switch_enabled),
+        extraLocales: parseLanguageExtraLocalesJson(dbRow.language_extra_locales),
+        contentLocaleHint: contentLocaleHint || null,
+      },
+      businessProfile,
+      theme: mergeCompanyTheme(c.id, {
+        primaryColor: dbRow.theme_primary_color,
+        primaryDarkColor: dbRow.theme_primary_dark_color,
+        secondaryColor: dbRow.theme_secondary_color,
+        secondaryLightColor: dbRow.theme_secondary_light_color,
+        headerBackground: dbRow.theme_header_background,
+        headerShadow: dbRow.theme_header_shadow,
+        headerTextColor: dbRow.theme_header_text_color,
+      }),
+    };
+  });
+}
+
+async function getEnrichedCompanies(filterCompanyId = '') {
+  const companies = await listCandidateCompanies(filterCompanyId);
+  return enrichCompanies(companies);
+}
+
 /**
  * GET /api/train/companies
  * Returns companies from train_data, enriched with display_name, greeting, language, icon, and theme from DB
  */
 async function getCompaniesList(req, res) {
   try {
-    const fsCompanies = getCompanies();
-    const { rows: dbCompanyRows } = await pool.query(
-      `SELECT c.company_id, c.name
-       FROM chatbots c
-       INNER JOIN chat_settings ch ON ch.company_id = c.company_id
-       WHERE c.company_id NOT IN ('_default', '_scrape_jobs')
-       ORDER BY c.name ASC`
-    );
-    const merged = new Map();
-    for (const r of dbCompanyRows) {
-      merged.set(r.company_id, { id: r.company_id, name: r.name });
-    }
-    for (const c of fsCompanies) {
-      if (!merged.has(c.id)) {
-        merged.set(c.id, c);
-      }
-    }
-    const companies = Array.from(merged.values());
-    if (!companies.length) {
-      return res.json([]);
-    }
-    const companyIds = companies.map((c) => c.id);
-    const { rows } = await pool.query(
-      `SELECT c.company_id, c.name AS db_company_name, ch.display_name, ch.icon_url, ch.greeting_message, ch.widget_position,
-              ch.auto_trigger_enabled, ch.auto_trigger_open_mode, ch.auto_trigger_delay_seconds, ch.auto_trigger_scroll_percent,
-              ch.auto_trigger_only_selected_pages, ch.auto_trigger_pricing_page, ch.auto_trigger_portfolio_page,
-              ch.auto_trigger_selected_pages,
-              th.theme_primary_color, th.theme_primary_dark_color,
-              th.theme_secondary_color, th.theme_secondary_light_color,
-              th.theme_header_background, th.theme_header_shadow, th.theme_header_text_color,
-              vo.voice_mode_enabled,
-              vo.voice_gender,
-              vo.voice_profile,
-              vo.voice_custom_id,
-              vo.voice_custom_gender,
-              vo.voice_ignore_emoji,
-                  vo.voice_response_enabled,
-                  vo.voice_tts_language_code,
-                  av.admin_visibility_voice_mode_toggle,
-                  av.admin_visibility_voice_response_toggle,
-                  av.admin_visibility_voice_ignore_emoji,
-                  av.admin_visibility_voice_spoken_language,
-                  av.admin_visibility_voice_preset_voices,
-                  av.admin_visibility_voice_custom_training,
-                  av.admin_visibility_allowed_preset_voice_keys,
-                  lg.language_primary,
-                  lg.language_multi_enabled,
-                  lg.language_auto_detect_enabled,
-                  lg.language_manual_switch_enabled,
-                  lg.language_extra_locales
-         FROM chatbots c
-         INNER JOIN chat_settings ch ON ch.company_id = c.company_id
-         INNER JOIN theme_settings th ON th.company_id = c.company_id
-         INNER JOIN voice_settings vo ON vo.company_id = c.company_id
-                INNER JOIN admin_visibility_settings av ON av.company_id = c.company_id
-                INNER JOIN language_settings lg ON lg.company_id = c.company_id
-       WHERE c.company_id = ANY($1::text[])`,
-      [companyIds]
-    );
-    const dbMap = Object.fromEntries(rows.map((r) => [r.company_id, r]));
-    const enriched = companies.map((c) => {
-      const dbRow = dbMap[c.id] || {};
-      const companyLabel = String(dbRow.db_company_name || '').trim() || c.name;
-      const chatbotRaw = String(dbRow.display_name || '').trim();
-      const customAvailable = Boolean(dbRow.voice_custom_id);
-      const resolvedProfile = customAvailable
-        ? (dbRow.voice_profile === 'custom' ? 'custom' : (dbRow.voice_profile || 'professional'))
-        : (dbRow.voice_profile === 'custom' ? 'professional' : (dbRow.voice_profile || 'professional'));
-      const resolvedGender = resolvedProfile === 'custom' && customAvailable
-        ? (dbRow.voice_custom_gender === 'male' ? 'male' : 'female')
-        : (dbRow.voice_gender === 'male' ? 'male' : 'female');
-      const openMode = resolveAutoTriggerOpenMode(dbRow);
-      const trainingContext = loadCompanyContext(c.id);
-      const businessProfile = inferCompanyProfile({ context: trainingContext });
-      const contentLocaleHint = inferTrainingContentLanguageHint(trainingContext);
-      const adminVisibility = buildAdminVisibilityPayload(dbRow);
+    const companies = await getEnrichedCompanies();
+    res.json(companies);
+  } catch (err) {
+    console.error('Training error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
 
-      return {
-        id: c.id,
-        name: companyLabel,
-        companyName: companyLabel,
-        chatbotName: chatbotRaw,
-        displayName: chatbotRaw || companyLabel,
-        iconUrl: (dbRow.icon_url && String(dbRow.icon_url).trim()) || null,
-        greetingMessage: dbRow.greeting_message || null,
-        widgetPosition: String(dbRow.widget_position || 'right').toLowerCase() === 'left' ? 'left' : 'right',
-        autoTrigger: {
-          enabled: openMode === 'auto',
-          openMode,
-          afterSeconds: Math.max(0, Math.min(120, Number(dbRow.auto_trigger_delay_seconds ?? 8))),
-          afterScrollPercent: Math.max(0, Math.min(100, Number(dbRow.auto_trigger_scroll_percent ?? 40))),
-          onlySelectedPages: Boolean(dbRow.auto_trigger_only_selected_pages),
-          onPricingPage: Boolean(dbRow.auto_trigger_pricing_page),
-          onPortfolioPage: Boolean(dbRow.auto_trigger_portfolio_page),
-          selectedPages: String(dbRow.auto_trigger_selected_pages || ''),
-        },
-        voice: {
-          enabled: Boolean(dbRow.voice_mode_enabled) && Boolean(adminVisibility.voice.enableVoiceMode),
-          responseEnabled: Boolean(dbRow.voice_response_enabled !== false) && Boolean(adminVisibility.voice.enableVoiceResponse),
-          gender: resolvedGender,
-          profile: resolvedProfile,
-          customAvailable,
-          ignoreEmoji: Boolean(dbRow.voice_ignore_emoji) && Boolean(adminVisibility.voice.ignoreEmoji),
-          ttsLanguageCode: String(dbRow.voice_tts_language_code || '').trim().toLowerCase() || null,
-        },
-        adminVisibility,
-        language: {
-          primary: normalizeLanguagePrimaryToCode(dbRow.language_primary || 'en'),
-          catalog: getLanguageCatalogForClient(),
-          multiEnabled: Boolean(dbRow.language_multi_enabled),
-          autoDetectEnabled: Boolean(dbRow.language_auto_detect_enabled !== false),
-          manualSwitchEnabled: Boolean(dbRow.language_manual_switch_enabled),
-          extraLocales: parseLanguageExtraLocalesJson(dbRow.language_extra_locales),
-          contentLocaleHint: contentLocaleHint || null,
-        },
-        businessProfile,
-        theme: mergeCompanyTheme(c.id, {
-          primaryColor: dbRow.theme_primary_color,
-          primaryDarkColor: dbRow.theme_primary_dark_color,
-          secondaryColor: dbRow.theme_secondary_color,
-          secondaryLightColor: dbRow.theme_secondary_light_color,
-          headerBackground: dbRow.theme_header_background,
-          headerShadow: dbRow.theme_header_shadow,
-          headerTextColor: dbRow.theme_header_text_color,
-        }),
-      };
-    });
-    res.json(enriched);
+/**
+ * GET /api/train/companies/:companyId
+ * Returns a single enriched company payload for widget bootstrap/theme loading.
+ */
+async function getCompanyBootstrap(req, res) {
+  try {
+    const companyId = String(req.params.companyId || '').trim();
+    if (!companyId) {
+      return res.status(400).json({ error: 'companyId is required' });
+    }
+
+    const companies = await getEnrichedCompanies(companyId);
+    const company = companies[0] || null;
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    res.json(company);
   } catch (err) {
     console.error('Training error:', err);
     res.status(500).json({ error: err.message });
@@ -175,4 +226,4 @@ function getCompanyContext(req, res) {
   }
 }
 
-module.exports = { getCompaniesList, getCompanyContext };
+module.exports = { getCompaniesList, getCompanyBootstrap, getCompanyContext };

@@ -1358,6 +1358,10 @@ export default function App() {
         const e = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
         e.httpStatus = res.status;
         e.serverResponseBody = serverResponseBody;
+        if (serverResponseBody && typeof serverResponseBody === 'object') {
+          e.requestId = serverResponseBody.requestId || undefined;
+          e.serverStage = serverResponseBody.stage || undefined;
+        }
         throw e;
       }
 
@@ -1408,6 +1412,8 @@ export default function App() {
             detail: err?.stack ? String(err.stack).slice(0, 12000) : '',
             pageUrl: typeof window !== 'undefined' ? window.location.href : '',
             source: 'react-app',
+            requestId: err?.requestId,
+            serverStage: err?.serverStage,
             httpStatus: err?.httpStatus,
             serverResponseBody: err?.serverResponseBody,
             errorName: err?.name,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { hasPermission } from '../lib/permissions';
 
 const STATUS_OPTIONS = ['pending', 'resolved', 'closed'];
 const PRIORITY_OPTIONS = ['all', 'low', 'normal', 'high', 'urgent'];
@@ -9,7 +10,7 @@ const PAGE_SIZE = 20;
 const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
 export default function SupportTickets() {
-  const { saFetch } = useSuperAuth();
+  const { saFetch, admin } = useSuperAuth();
   const { showToast } = useSuperToast();
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
@@ -25,6 +26,10 @@ export default function SupportTickets() {
   const [msgLoading, setMsgLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const canEditTickets =
+    hasPermission(admin, 'support_tickets', 'edit')
+    || hasPermission(admin, 'conversation_monitoring', 'edit');
+  const pageTitle = hasPermission(admin, 'support_tickets', 'view') ? 'Support Tickets' : 'Conversation Monitoring';
 
   const loadTickets = async ({
     nextStatus = status,
@@ -139,7 +144,7 @@ export default function SupportTickets() {
   return (
     <div className="sa-page">
       <div className="sa-page-header">
-        <h2 className="sa-page-title">Support Tickets</h2>
+        <h2 className="sa-page-title">{pageTitle}</h2>
         <button type="button" className="sa-btn sa-btn-ghost sa-btn-sm" onClick={() => loadTickets()}>
           Refresh
         </button>
@@ -355,6 +360,7 @@ export default function SupportTickets() {
                     type="button"
                     className="sa-btn sa-btn-sm sa-btn-ghost"
                     onClick={() => handleStatusChange(selectedTicket.id, s)}
+                    disabled={!canEditTickets}
                   >
                     Mark {s}
                   </button>
@@ -378,27 +384,33 @@ export default function SupportTickets() {
                 )}
               </div>
 
-              <form onSubmit={handleReply}>
-                {sendingReply ? (
-                  <div className="sa-text-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                    Sending message...
+              {canEditTickets ? (
+                <form onSubmit={handleReply}>
+                  {sendingReply ? (
+                    <div className="sa-text-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                      Sending message...
+                    </div>
+                  ) : null}
+                  <div className="sa-field">
+                    <label>Reply on ticket</label>
+                    <textarea
+                      rows={3}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="Type response for this ticket..."
+                      disabled={sendingReply}
+                      style={{ color: 'var(--sa-text)', background: 'var(--sa-bg)' }}
+                    />
                   </div>
-                ) : null}
-                <div className="sa-field">
-                  <label>Reply on ticket</label>
-                  <textarea
-                    rows={3}
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Type response for this ticket..."
-                    disabled={sendingReply}
-                    style={{ color: 'var(--sa-text)', background: 'var(--sa-bg)' }}
-                  />
+                  <button type="submit" className="sa-btn sa-btn-primary" disabled={!replyText.trim() || sendingReply}>
+                    {sendingReply ? 'Sending...' : 'Send message'}
+                  </button>
+                </form>
+              ) : (
+                <div className="sa-text-muted" style={{ fontSize: 12 }}>
+                  This role has view access only for this module.
                 </div>
-                <button type="submit" className="sa-btn sa-btn-primary" disabled={!replyText.trim() || sendingReply}>
-                  {sendingReply ? 'Sending...' : 'Send message'}
-                </button>
-              </form>
+              )}
             </>
           )}
         </div>

@@ -160,10 +160,22 @@ router.get('/training/:companyId/files', requireSuperAuth, requireAnyPermission(
 // System
 router.get('/system/status', requireSuperAuth, requirePermission('system_settings', 'view'), systemController.getSystemStatus);
 router.get('/system/logs', requireSuperAuth, requirePermission('system_settings', 'view'), systemController.getSystemLogs);
-router.get('/support-tickets', requireSuperAuth, requirePermission('support_tickets', 'view'), supportTicketsController.listSupportTickets);
-router.patch('/support-tickets/:ticketId/status', requireSuperAuth, requirePermission('support_tickets', 'edit'), supportTicketsController.updateSupportTicketStatus);
-router.get('/support-tickets/:ticketId/messages', requireSuperAuth, requirePermission('support_tickets', 'view'), supportTicketsController.listSupportTicketMessages);
-router.post('/support-tickets/:ticketId/messages', requireSuperAuth, requirePermission('support_tickets', 'edit'), supportTicketsController.createSupportTicketMessage);
+router.get('/support-tickets', requireSuperAuth, requireAnyPermission([
+	['support_tickets', 'view'],
+	['conversation_monitoring', 'view'],
+]), supportTicketsController.listSupportTickets);
+router.patch('/support-tickets/:ticketId/status', requireSuperAuth, requireAnyPermission([
+	['support_tickets', 'edit'],
+	['conversation_monitoring', 'edit'],
+]), supportTicketsController.updateSupportTicketStatus);
+router.get('/support-tickets/:ticketId/messages', requireSuperAuth, requireAnyPermission([
+	['support_tickets', 'view'],
+	['conversation_monitoring', 'view'],
+]), supportTicketsController.listSupportTicketMessages);
+router.post('/support-tickets/:ticketId/messages', requireSuperAuth, requireAnyPermission([
+	['support_tickets', 'edit'],
+	['conversation_monitoring', 'edit'],
+]), supportTicketsController.createSupportTicketMessage);
 router.get('/reports', requireSuperAuth, requirePermission('analytics', 'view'), systemController.getReports);
 router.get('/alert-rules', requireSuperAuth, requirePermission('system_settings', 'view'), systemController.listAlertRules);
 router.post('/alert-rules', requireSuperAuth, requirePermission('system_settings', 'edit'), systemController.createAlertRule);

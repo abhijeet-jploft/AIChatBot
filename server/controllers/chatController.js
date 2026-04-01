@@ -1,3 +1,4 @@
+const { randomUUID } = require('crypto');
 const { sendMessage: sendAnthropicMessage } = require('../services/anthropicService');
 const { sendMessage: sendGeminiMessage } = require('../services/geminiService');
 const { captureLeadFromConversation } = require('../services/leadCaptureService');
@@ -22,6 +23,10 @@ const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
 
 const PROJECT_LINK_INTENT_RE = /\b(project|projects|portfolio|case\s*stud(y|ies)|have\s+you\s+done|similar\s+app|related\s+app|i\s+want\s+to\s+develop|want\s+to\s+develop|developed?)\b/i;
+const CHAT_CONTEXT_MAX_MESSAGES = Math.max(2, parseInt(process.env.CHAT_CONTEXT_MAX_MESSAGES || '18', 10));
+const CHAT_CONTEXT_MAX_CHARS = Math.max(2000, parseInt(process.env.CHAT_CONTEXT_MAX_CHARS || '18000', 10));
+const CHAT_MESSAGE_MAX_CHARS = Math.max(500, parseInt(process.env.CHAT_MESSAGE_MAX_CHARS || '6000', 10));
+const CHAT_AI_TIMEOUT_MS = Math.max(1000, parseInt(process.env.CHAT_AI_TIMEOUT_MS || '45000', 10));
 
 function shouldReturnProjectLinks(query = '') {
   return PROJECT_LINK_INTENT_RE.test(String(query || ''));
@@ -34,6 +39,103 @@ function buildProjectLinksReply(query = '', links = []) {
     : 'Here are relevant projects with links:';
   const lines = links.map((item) => `- ${item.title}: ${item.url}`);
   return [intro, '', ...lines].join('\n');
+}
+
+function buildChatRequestId() {
+  try {
+    return randomUUID();
+  } catch {
+    return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+function normalizeMessageRole(role) {
+  return String(role || '').trim().toLowerCase() === 'assistant' ? 'assistant' : 'user';
+}
+
+function normalizeIncomingMessages(messages = []) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .map((msg) => {
+      const content = String(msg?.content ?? '').replace(/\u0000/g, '').trim();
+      if (!content) return null;
+      return {
+        role: normalizeMessageRole(msg?.role),
+        content: content.length > CHAT_MESSAGE_MAX_CHARS ? content.slice(0, CHAT_MESSAGE_MAX_CHARS) : content,
+      };
+    })
+    .filter(Boolean);
+}
+
+function summarizeConversation(messages = []) {
+  return {
+    count: Array.isArray(messages) ? messages.length : 0,
+    chars: Array.isArray(messages)
+      ? messages.reduce((sum, msg) => sum + String(msg?.content || '').length, 0)
+      : 0,
+  };
+}
+
+function trimMessagesForAi(messages = []) {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+
+  const kept = [];
+  let totalChars = 0;
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    const content = String(msg?.content || '').trim();
+    if (!content) continue;
+    const normalized = {
+      role: normalizeMessageRole(msg?.role),
+      content,
+    };
+    const nextChars = totalChars + normalized.content.length;
+    if (kept.length >= CHAT_CONTEXT_MAX_MESSAGES) break;
+    if (kept.length > 0 && nextChars > CHAT_CONTEXT_MAX_CHARS) break;
+    kept.push(normalized);
+    totalChars = nextChars;
+  }
+
+  if (!kept.length) {
+    const latest = messages[messages.length - 1];
+    return latest ? [{
+      role: normalizeMessageRole(latest.role),
+      content: String(latest.content || '').trim().slice(0, CHAT_MESSAGE_MAX_CHARS),
+    }] : [];
+  }
+
+  return kept.reverse();
+}
+
+async function withTimeout(promise, timeoutMs, label) {
+  const ms = Number(timeoutMs);
+  if (!Number.isFinite(ms) || ms <= 0) return promise;
+
+  let timer = null;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const err = new Error(`${label} timed out after ${ms}ms`);
+          err.code = 'ETIMEDOUT';
+          err.timeoutMs = ms;
+          reject(err);
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function deriveChatErrorStatus(err) {
+  if (String(err?.code || '').toUpperCase() === 'ETIMEDOUT') return 504;
+  const upstreamStatus = Number(err?.status || err?.httpStatus || err?.response?.status);
+  if (upstreamStatus === 429) return 503;
+  if (upstreamStatus >= 500 && upstreamStatus < 600) return 502;
+  return 500;
 }
 
 async function trackApiUsage({
@@ -165,17 +267,34 @@ async function synthesizeCompanyVoice({ chatbot, aiLanguageConfig, voiceConfig, 
  * Returns: { content, sessionId }
  */
 async function postMessage(req, res) {
+  const requestId = buildChatRequestId();
   let companyId = '_default';
   let sid = null;
+  let stage = 'start';
+  let originalConversation = [];
+  let aiConversation = [];
+  let userMsg = null;
   const requestStartedAt = Date.now();
   try {
-    const { messages, companyId: requestCompanyId = '_default', sessionId } = req.body;
+    const { messages, companyId: requestCompanyId = '_default', sessionId } = req.body || {};
     companyId = requestCompanyId;
+    stage = 'validate_request';
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages array is required' });
     }
 
+    originalConversation = normalizeIncomingMessages(messages);
+    if (!originalConversation.length) {
+      return res.status(400).json({ error: 'messages array must include at least one non-empty message' });
+    }
+
+    userMsg = originalConversation[originalConversation.length - 1];
+    if (userMsg.role !== 'user') {
+      return res.status(400).json({ error: 'last message must be a user message' });
+    }
+
+    aiConversation = trimMessagesForAi(originalConversation);
     sid = sessionId || null;
     let selectedModeId = null;
     let safetyConfig = {};
@@ -202,11 +321,11 @@ async function postMessage(req, res) {
       customVoiceName: null,
       customVoiceGender: null,
     };
-    const userMsg = messages[messages.length - 1];
     let chatbot = null;
 
     // Persist pre-response data (non-fatal if DB is unavailable)
     try {
+      stage = 'db_prewrite';
       await Chatbot.findOrCreate(companyId);
       chatbot = await Chatbot.findByCompanyId(companyId);
       selectedModeId = chatbot?.ai_mode || null;
@@ -262,6 +381,7 @@ async function postMessage(req, res) {
       }
 
       if (chatbot?.agent_paused || chatbot?.is_suspended) {
+        stage = 'paused_reply';
         const pausedMessage = chatbot?.is_suspended
           ? 'This chatbot is temporarily unavailable because the company is suspended. Please contact support for assistance.'
           : 'Our AI agent is currently paused. Please leave your name and contact details, and we will get back to you shortly.';
@@ -282,7 +402,7 @@ async function postMessage(req, res) {
           }
         }
 
-        return res.json({ content: pausedMessage, sessionId: sid, voice: pausedVoice });
+        return res.json({ content: pausedMessage, sessionId: sid, voice: pausedVoice, requestId });
       }
 
       recordLiveMessage(
@@ -321,11 +441,12 @@ async function postMessage(req, res) {
     }
 
     if (!response) {
+      stage = 'ai_generation';
       const aiStartedAt = Date.now();
       const effectiveAiModel = resolveEffectiveModel(aiConfig.provider, aiConfig.model);
       try {
         response = aiConfig.provider === 'gemini'
-          ? await sendGeminiMessage(companyId, messages, {
+          ? await withTimeout(sendGeminiMessage(companyId, aiConversation, {
             modeId: selectedModeId,
             safetyConfig,
             model: aiConfig.model,
@@ -333,8 +454,8 @@ async function postMessage(req, res) {
             assistantName: aiConfig.assistantName,
             languageConfig: aiConfig.language,
             configuredBusinessInfo,
-          })
-          : await sendAnthropicMessage(companyId, messages, {
+          }), CHAT_AI_TIMEOUT_MS, 'Gemini request')
+          : await withTimeout(sendAnthropicMessage(companyId, aiConversation, {
             modeId: selectedModeId,
             safetyConfig,
             model: aiConfig.model,
@@ -342,7 +463,7 @@ async function postMessage(req, res) {
             assistantName: aiConfig.assistantName,
             languageConfig: aiConfig.language,
             configuredBusinessInfo,
-          });
+          }), CHAT_AI_TIMEOUT_MS, 'Anthropic request');
         await trackApiUsage({
           companyId,
           sessionId: sid,
@@ -375,6 +496,7 @@ async function postMessage(req, res) {
 
     if (voiceConfig.responseEnabled) {
       try {
+        stage = 'voice_synthesis';
         const voiceStartedAt = Date.now();
         voice = await synthesizeCompanyVoice({
           chatbot,
@@ -417,6 +539,7 @@ async function postMessage(req, res) {
 
     if (sid) {
       try {
+        stage = 'assistant_persist';
         await ChatMessage.create(sid, 'assistant', response);
         recordLiveMessage(companyId, sid, 'assistant', response, req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl);
       } catch (dbErr) {
@@ -426,10 +549,11 @@ async function postMessage(req, res) {
 
       let leadCaptureResult = null;
       try {
+        stage = 'lead_capture';
         leadCaptureResult = await captureLeadFromConversation({
           companyId,
           sessionId: sid,
-          messages: [...messages, { role: 'assistant', content: response }],
+          messages: [...originalConversation, { role: 'assistant', content: response }],
           requestMeta: {
             referer: req.headers.referer,
             origin: req.headers.origin,
@@ -464,6 +588,7 @@ async function postMessage(req, res) {
 
       // 4.5.10 Escalation Settings
       try {
+        stage = 'escalation';
         const leadScore = leadCaptureResult?.lead?.lead_score ?? null;
         const escalation = evaluateEscalation({
           companyId,
@@ -489,25 +614,50 @@ async function postMessage(req, res) {
       }
     }
 
+    stage = 'respond';
+    const originalMetrics = summarizeConversation(originalConversation);
+    const aiMetrics = summarizeConversation(aiConversation);
     appendChatLog('info', 'AI response generated', {
       category: 'notification',
       companyId,
       sessionId: sid,
+      requestId,
       aiProvider: aiConfig.provider,
       aiResponseMs,
       totalRequestMs: Date.now() - requestStartedAt,
+      originalMessageCount: originalMetrics.count,
+      aiMessageCount: aiMetrics.count,
+      originalInputChars: originalMetrics.chars,
+      aiInputChars: aiMetrics.chars,
+      historyTrimmed: originalMetrics.count !== aiMetrics.count || originalMetrics.chars !== aiMetrics.chars,
     });
-    res.json({ content: response, sessionId: sid, voice });
+    res.json({ content: response, sessionId: sid, voice, requestId });
   } catch (err) {
     const message = err?.message || 'Failed to get AI response';
-    console.error('[chat] error:', err);
+    const originalMetrics = summarizeConversation(originalConversation);
+    const aiMetrics = summarizeConversation(aiConversation);
+    console.error(`[chat] error [${requestId}] stage=${stage}:`, err);
     const httpMeta = buildHttpClientErrorMeta(err);
-    appendSystemLog('error', `Chat message API error: ${message}`, {
-      companyId,
-      sessionId: sid || undefined,
-      ...httpMeta,
-    });
-    res.status(500).json({ error: message });
+    const statusCode = deriveChatErrorStatus(err);
+    try {
+      appendSystemLog('error', `Chat message API error [${requestId}] stage=${stage}: ${message}`, {
+        companyId,
+        sessionId: sid || undefined,
+        requestId,
+        stage,
+        pageUrl: req.headers['x-page-url'] || req.body?.pageUrl || req.headers.referer || undefined,
+        originalMessageCount: originalMetrics.count || undefined,
+        aiMessageCount: aiMetrics.count || undefined,
+        originalInputChars: originalMetrics.chars || undefined,
+        aiInputChars: aiMetrics.chars || undefined,
+        historyTrimmed: originalMetrics.count !== aiMetrics.count || originalMetrics.chars !== aiMetrics.chars || undefined,
+        ...httpMeta,
+      });
+    } catch (logErr) {
+      console.error('[chat] appendSystemLog failed:', logErr);
+    }
+    if (res.headersSent) return;
+    res.status(statusCode).json({ error: message, requestId, stage });
   }
 }
 
@@ -546,12 +696,25 @@ function reportClientChatFailure(req, res) {
       }
     }
 
+    const requestId =
+      body.requestId ? String(body.requestId).slice(0, 120)
+        : (serverResponseBody && typeof serverResponseBody === 'object' && serverResponseBody.requestId
+          ? String(serverResponseBody.requestId).slice(0, 120)
+          : undefined);
+    const serverStage =
+      body.serverStage ? String(body.serverStage).slice(0, 120)
+        : (serverResponseBody && typeof serverResponseBody === 'object' && serverResponseBody.stage
+          ? String(serverResponseBody.stage).slice(0, 120)
+          : undefined);
     const statusPart = Number.isFinite(httpStatus) ? ` (HTTP ${httpStatus})` : '';
-    const line = `Client reported chat failure [${source}]${statusPart}: ${reason}`;
+    const requestPart = requestId ? ` [${requestId}]` : '';
+    const line = `Client reported chat failure [${source}]${statusPart}${requestPart}: ${reason}`;
 
     const meta = {
       companyId,
       sessionId: sessionId || undefined,
+      requestId: requestId || undefined,
+      serverStage: serverStage || undefined,
       httpStatus: Number.isFinite(httpStatus) ? httpStatus : undefined,
       pageUrl: pageUrl || undefined,
       clientStack: detail || undefined,

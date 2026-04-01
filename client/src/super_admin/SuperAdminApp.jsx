@@ -55,6 +55,8 @@ function SuperAdminLayout({ children }) {
   const currentCompanyId = companyMatch?.[1] ? decodeURIComponent(companyMatch[1]) : null;
   const isForcedPasswordChange = admin?.type === 'staff' && admin?.mustChangePassword;
   const canAccess = (moduleKey, minimumLevel = 'view') => hasPermission(admin, moduleKey, minimumLevel);
+  const canAccessConversationMonitoring = canAccess('conversation_monitoring');
+  const canAccessSupportTickets = canAccess('support_tickets');
   const canAccessCompanySelector =
     canAccess('business_management')
     || hasAnyAiModePermission(admin)
@@ -85,7 +87,8 @@ function SuperAdminLayout({ children }) {
       label: 'System',
       items: [
         ...(canAccess('system_settings') ? [{ to: '/super-admin/monitoring', label: 'System Monitoring' }] : []),
-        ...(canAccess('support_tickets') ? [{ to: '/super-admin/support-tickets', label: 'Support Tickets' }] : []),
+        ...(canAccessConversationMonitoring && !canAccessSupportTickets ? [{ to: '/super-admin/support-tickets', label: 'Conversation Monitoring' }] : []),
+        ...(canAccessSupportTickets ? [{ to: '/super-admin/support-tickets', label: 'Support Tickets' }] : []),
         ...(canAccess('system_settings') ? [{ to: '/super-admin/alert-rules', label: 'Alert Rules' }] : []),
       ],
     },
@@ -385,7 +388,10 @@ export default function SuperAdminApp() {
                   ]}><CompanyDetail /></RequireAnyPermission>} />
                   <Route path="training/:companyId" element={<RequireAnyPermission checks={TRAINING_PERMISSION_CHECKS}><Training /></RequireAnyPermission>} />
                   <Route path="monitoring" element={<RequirePermission moduleKey="system_settings"><SystemMonitoring /></RequirePermission>} />
-                  <Route path="support-tickets" element={<RequirePermission moduleKey="support_tickets"><SupportTickets /></RequirePermission>} />
+                  <Route path="support-tickets" element={<RequireAnyPermission checks={[
+                    ['support_tickets', 'view'],
+                    ['conversation_monitoring', 'view'],
+                  ]}><SupportTickets /></RequireAnyPermission>} />
                   <Route path="reports" element={<RequirePermission moduleKey="analytics"><Reports /></RequirePermission>} />
                   <Route path="alert-rules" element={<RequirePermission moduleKey="system_settings"><AlertRules /></RequirePermission>} />
                   <Route path="profile" element={<SuperAdminProfile />} />

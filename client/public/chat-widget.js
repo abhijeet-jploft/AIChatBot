@@ -252,7 +252,7 @@
   var maxBtn = null;
   var bootstrapRetryTimer = null;
   var hideWidgetUntilThemeReady = true;
-  /** Server embed HTML includes #jploft-embed-page-loading; removed after /train/companies completes for theme. */
+  /** Server embed HTML includes #jploft-embed-page-loading; removed after company bootstrap completes for theme. */
   var EMBED_PAGE_LOADING_ID = 'jploft-embed-page-loading';
 
   var isFullscreen = false;
@@ -1900,6 +1900,10 @@
             var errObj = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
             errObj.httpStatus = r.status;
             errObj.serverResponseBody = serverResponseBody;
+            if (serverResponseBody && typeof serverResponseBody === 'object') {
+              errObj.requestId = serverResponseBody.requestId || undefined;
+              errObj.serverStage = serverResponseBody.stage || undefined;
+            }
             throw errObj;
           });
         }
@@ -1964,6 +1968,8 @@
               pageUrl: pageUrl,
               source: clientErrorSource,
               embedIframePage: Boolean(forceOpen),
+              requestId: err && err.requestId,
+              serverStage: err && err.serverStage,
               httpStatus: err && err.httpStatus,
               serverResponseBody: err && err.serverResponseBody,
               errorName: err && err.name,
@@ -2020,7 +2026,7 @@
     }, 1300);
   }
 
-  function createWidget() {
+  function createWidget(initialCompany) {
     root = document.createElement('div');
     root.id = 'jploft-chat-root';
 
@@ -2165,7 +2171,7 @@
       window.addEventListener('popstate', sendPageUpdate);
       window.addEventListener('hashchange', sendPageUpdate);
     }
-    fetchThemeAndApply(root);
+    fetchThemeAndApply(root, initialCompany || null);
     bindEmbedLocationTracking();
   }
 
@@ -2316,13 +2322,8 @@
     } catch (e) {}
   }
 
-  function findCompanyRecord(companies) {
-    if (!Array.isArray(companies)) return null;
-    for (var i = 0; i < companies.length; i += 1) {
-      var c = companies[i];
-      if (c && c.id === companyId) return c;
-    }
-    return null;
+  function getCompanyBootstrapUrl() {
+    return apiUrl + '/train/companies/' + encodeURIComponent(companyId);
   }
 
   function applyCompanyRuntimeConfig(company) {
@@ -2378,30 +2379,26 @@
 
   /** Iframe /embed only: must get HTTP 200 + valid JSON + company row — no cache to show UI. */
   function loadCompanyBootstrapFromApiStrict() {
-    return fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
+    return fetch(getCompanyBootstrapUrl(), { headers: mergeHeaders() })
       .then(function (r) {
-        if (!r.ok) throw new Error('train/companies HTTP ' + r.status);
+        if (!r.ok) throw new Error('train/company HTTP ' + r.status);
         return r.json();
       })
-      .then(function (companies) {
-        if (!Array.isArray(companies)) throw new Error('train/companies invalid payload');
-        var company = findCompanyRecord(companies);
-        if (!company) throw new Error('train/companies missing company ' + companyId);
+      .then(function (company) {
+        if (!company || typeof company !== 'object') throw new Error('train/company invalid payload');
         writeCompanyBootstrapCache(company);
         return company;
       });
   }
 
-  /** Script embed: wait for live /train/companies to finish (no early cache while fetch is still pending). */
+  /** Script embed: wait for live company bootstrap to finish (no early cache while fetch is still pending). */
   function loadCompanyBootstrapConfig() {
-    return fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
+    return fetch(getCompanyBootstrapUrl(), { headers: mergeHeaders() })
       .then(function (r) {
-        if (!r.ok) throw new Error('train/companies HTTP ' + r.status);
+        if (!r.ok) throw new Error('train/company HTTP ' + r.status);
         return r.json();
       })
-      .then(function (companies) {
-        if (!Array.isArray(companies)) return null;
-        var company = findCompanyRecord(companies);
+      .then(function (company) {
         if (company) {
           writeCompanyBootstrapCache(company);
           return company;
@@ -2450,73 +2447,70 @@
     }
   }
 
-  function fetchThemeAndApply(widgetRoot) {
-    fetch(apiUrl + '/train/companies', { headers: mergeHeaders() })
-      .then(function (r) {
-        if (!r.ok) throw new Error('train/companies HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function (companies) {
-        if (!widgetRoot) return;
-        if (!Array.isArray(companies)) return;
-        var company = findCompanyRecord(companies);
-        if (company) {
-          writeCompanyBootstrapCache(company);
-        }
-        if (company) {
-          applyCompanyRuntimeConfig(company);
-          var vp = getViewport();
-          widgetButtonPos = clampWidgetButtonPosition(widgetButtonPos, vp.width, vp.height);
-          applyWidgetButtonPosition();
-          updatePanelPosition();
-          var titleEl = widgetRoot.querySelector('.jploft-title');
-          if (titleEl) titleEl.textContent = companyName;
-          var avatarEl = widgetRoot.querySelector('.jploft-avatar');
-          if (avatarEl) {
-            avatarLetter = (companyName || '').trim().charAt(0) || 'J';
-            setAvatarContents(avatarEl);
-          }
-          setLauncherIconContents();
-        } else {
-          companyIconUrl = resolvePublicMediaUrl(config.iconUrl || null);
-          avatarLetter = (companyName || '').trim().charAt(0) || 'J';
-          var avatarFallback = widgetRoot.querySelector('.jploft-avatar');
-          if (avatarFallback) setAvatarContents(avatarFallback);
-          setLauncherIconContents();
-        }
-        messages = messages.map(function (msg) {
-          if (!msg || msg.role !== 'assistant') return msg;
-          return {
-            role: msg.role,
-            content: normalizeAssistantNameInText(msg.content, chatbotDisplayName),
-            voiceUrl: msg.voiceUrl || undefined,
-          };
+  function applyCompanyToWidget(widgetRoot, company) {
+    if (!widgetRoot) return;
+    if (company) {
+      writeCompanyBootstrapCache(company);
+      applyCompanyRuntimeConfig(company);
+      var vp = getViewport();
+      widgetButtonPos = clampWidgetButtonPosition(widgetButtonPos, vp.width, vp.height);
+      applyWidgetButtonPosition();
+      updatePanelPosition();
+      var titleEl = widgetRoot.querySelector('.jploft-title');
+      if (titleEl) titleEl.textContent = companyName;
+      var avatarEl = widgetRoot.querySelector('.jploft-avatar');
+      if (avatarEl) {
+        avatarLetter = (companyName || '').trim().charAt(0) || 'J';
+        setAvatarContents(avatarEl);
+      }
+      setLauncherIconContents();
+    } else {
+      companyIconUrl = resolvePublicMediaUrl(config.iconUrl || null);
+      avatarLetter = (companyName || '').trim().charAt(0) || 'J';
+      var avatarFallback = widgetRoot.querySelector('.jploft-avatar');
+      if (avatarFallback) setAvatarContents(avatarFallback);
+      setLauncherIconContents();
+    }
+    messages = messages.map(function (msg) {
+      if (!msg || msg.role !== 'assistant') return msg;
+      return {
+        role: msg.role,
+        content: normalizeAssistantNameInText(msg.content, chatbotDisplayName),
+        voiceUrl: msg.voiceUrl || undefined,
+      };
+    });
+    setSendButtonState();
+    applyVoiceFeatureState();
+    renderMessages();
+    var theme = company && company.theme;
+    if (theme) {
+      var vars = buildThemeVars(theme);
+      if (vars) {
+        var key;
+        for (key in vars) widgetRoot.style.setProperty(key, vars[key]);
+        document.documentElement.style.setProperty('--brand', vars['--chat-accent'] || '');
+        document.documentElement.style.setProperty('--brand-soft', (vars['--chat-accent'] || '') + '22');
+        document.documentElement.style.setProperty('--embed-header-bg', vars['--chat-header-bg'] || '');
+      }
+    }
+  }
+
+  function fetchThemeAndApply(widgetRoot, companyOverride) {
+    var loadPromise = companyOverride && typeof companyOverride === 'object'
+      ? Promise.resolve(companyOverride)
+      : fetch(getCompanyBootstrapUrl(), { headers: mergeHeaders() })
+        .then(function (r) {
+          if (!r.ok) throw new Error('train/company HTTP ' + r.status);
+          return r.json();
         });
-        setSendButtonState();
-        applyVoiceFeatureState();
-        renderMessages();
-        var theme = company && company.theme;
-        if (theme) {
-          var vars = buildThemeVars(theme);
-          if (vars) {
-            var key;
-            for (key in vars) widgetRoot.style.setProperty(key, vars[key]);
-            document.documentElement.style.setProperty('--brand', vars['--chat-accent'] || '');
-            document.documentElement.style.setProperty('--brand-soft', (vars['--chat-accent'] || '') + '22');
-            document.documentElement.style.setProperty('--embed-header-bg', vars['--chat-header-bg'] || '');
-          }
-        }
+
+    loadPromise
+      .then(function (company) {
+        applyCompanyToWidget(widgetRoot, company || null);
       })
       .catch(function () {
         if (!widgetRoot) return;
-        companyIconUrl = resolvePublicMediaUrl(config.iconUrl || null);
-        avatarLetter = (companyName || '').trim().charAt(0) || 'J';
-        var avatarFallback = widgetRoot.querySelector('.jploft-avatar');
-        if (avatarFallback) setAvatarContents(avatarFallback);
-        setLauncherIconContents();
-        setSendButtonState();
-        applyVoiceFeatureState();
-        renderMessages();
+        applyCompanyToWidget(widgetRoot, null);
       })
       .then(function () {
         if (widgetRoot) setWidgetRootAwaitingCompanies(widgetRoot, false);
@@ -2600,7 +2594,7 @@
         hideWidgetUntilThemeReady = true;
         if (!root) {
           createStyles();
-          createWidget();
+          createWidget(company);
         }
       })
       .catch(function () {

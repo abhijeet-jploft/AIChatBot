@@ -6,3 +6,5 @@ dist/
 tools/
 *.docx
 train_data/
+backup_file.sql
+backup_file.sql
