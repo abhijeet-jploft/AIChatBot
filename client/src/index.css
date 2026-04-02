@@ -202,7 +202,35 @@ textarea::placeholder {
   outline: none;
 }
 
-.chat-inline-lead-field input:focus {
+.chat-inline-lead-field select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--chat-border);
+  border-radius: 10px;
+  background: var(--chat-surface);
+  color: var(--chat-text);
+  padding: 0.62rem 0.52rem;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.chat-inline-lead-phone-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.chat-inline-lead-phone-code {
+  width: 92px;
+  min-width: 88px;
+}
+
+.chat-inline-lead-phone-local {
+  flex: 1;
+}
+
+.chat-inline-lead-field input:focus,
+.chat-inline-lead-field select:focus {
   border-color: var(--chat-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--chat-accent) 16%, transparent);
 }
@@ -253,6 +281,23 @@ textarea::placeholder {
   background: var(--assistant-bubble);
   color: var(--chat-text);
   border-radius: 16px 16px 16px 0;
+}
+
+.chat-message-meta {
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  opacity: 0.72;
+}
+
+.chat-message-meta.user {
+  text-align: right;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.chat-message-meta.assistant {
+  text-align: left;
+  color: var(--chat-muted);
 }
 
 .chat-input-shell .chat-mic-btn {

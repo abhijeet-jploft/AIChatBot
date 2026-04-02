@@ -118,19 +118,84 @@ async function getReports(req, res) {
       toDate.setUTCHours(23, 59, 59, 999);
     }
 
-    const [byCompany, leadsByStatus, convsByDay] = await Promise.all([
-      pool.query(
-        `SELECT c.company_id, c.name,
-           COUNT(DISTINCT s.id) AS conversations,
-           COUNT(DISTINCT l.id) AS leads,
-           COUNT(DISTINCT CASE WHEN l.status = 'converted' THEN l.id END) AS converted
-         FROM chatbots c
-         LEFT JOIN chat_sessions s ON s.company_id = c.company_id AND s.created_at BETWEEN $1 AND $2
-         LEFT JOIN leads l ON l.company_id = c.company_id AND l.created_at BETWEEN $1 AND $2 AND l.deleted_at IS NULL
-         GROUP BY c.company_id, c.name
-         ORDER BY leads DESC`,
-        [fromDate, toDate]
-      ),
+    const byCompanyLimit = Math.max(1, Math.min(500, Number(req.query.byCompanyLimit || req.query.limit) || 20));
+    const byCompanyPage = Math.max(1, Number(req.query.byCompanyPage || req.query.page) || 1);
+    let byCompanyOffset = Math.max(0, Number(req.query.byCompanyOffset || req.query.offset) || 0);
+    if ((req.query.byCompanyPage != null || req.query.page != null) && req.query.byCompanyOffset == null && req.query.offset == null) {
+      byCompanyOffset = (byCompanyPage - 1) * byCompanyLimit;
+    }
+
+    const companySearch = String(req.query.companySearch || req.query.search || '').trim();
+    const minConversationsRaw = req.query.minConversations;
+    const minLeadsRaw = req.query.minLeads;
+    const minConvertedRaw = req.query.minConverted;
+    const minConversations = (minConversationsRaw === undefined || String(minConversationsRaw).trim() === '')
+      ? null
+      : Math.max(0, Number(minConversationsRaw) || 0);
+    const minLeads = (minLeadsRaw === undefined || String(minLeadsRaw).trim() === '')
+      ? null
+      : Math.max(0, Number(minLeadsRaw) || 0);
+    const minConverted = (minConvertedRaw === undefined || String(minConvertedRaw).trim() === '')
+      ? null
+      : Math.max(0, Number(minConvertedRaw) || 0);
+
+    const byCompanyFilterParams = [fromDate, toDate];
+    const byCompanyFilters = [];
+    if (companySearch) {
+      byCompanyFilterParams.push(`%${companySearch}%`);
+      const searchPh = `$${byCompanyFilterParams.length}`;
+      byCompanyFilters.push(`(ca.company_id ILIKE ${searchPh} OR ca.name ILIKE ${searchPh})`);
+    }
+    if (minConversations != null) {
+      byCompanyFilterParams.push(minConversations);
+      byCompanyFilters.push(`ca.conversations >= $${byCompanyFilterParams.length}`);
+    }
+    if (minLeads != null) {
+      byCompanyFilterParams.push(minLeads);
+      byCompanyFilters.push(`ca.leads >= $${byCompanyFilterParams.length}`);
+    }
+    if (minConverted != null) {
+      byCompanyFilterParams.push(minConverted);
+      byCompanyFilters.push(`ca.converted >= $${byCompanyFilterParams.length}`);
+    }
+    const byCompanyWhereSql = byCompanyFilters.length ? `WHERE ${byCompanyFilters.join(' AND ')}` : '';
+    const byCompanyCte = `
+      WITH company_activity AS (
+        SELECT
+          c.company_id,
+          c.name,
+          COUNT(DISTINCT s.id)::int AS conversations,
+          COUNT(DISTINCT l.id)::int AS leads,
+          COUNT(DISTINCT CASE WHEN l.status = 'converted' THEN l.id END)::int AS converted
+        FROM chatbots c
+        LEFT JOIN chat_sessions s ON s.company_id = c.company_id AND s.created_at BETWEEN $1 AND $2
+        LEFT JOIN leads l ON l.company_id = c.company_id AND l.created_at BETWEEN $1 AND $2 AND l.deleted_at IS NULL
+        WHERE c.company_id <> '_scrape_jobs'
+        GROUP BY c.company_id, c.name
+      )
+    `;
+
+    const byCompanyCountPromise = pool.query(
+      `${byCompanyCte}
+       SELECT COUNT(*)::int AS total
+       FROM company_activity ca
+       ${byCompanyWhereSql}`,
+      byCompanyFilterParams
+    );
+    const byCompanyRowsPromise = pool.query(
+      `${byCompanyCte}
+       SELECT ca.company_id, ca.name, ca.conversations, ca.leads, ca.converted
+       FROM company_activity ca
+       ${byCompanyWhereSql}
+       ORDER BY ca.leads DESC, ca.conversations DESC, ca.company_id ASC
+       LIMIT $${byCompanyFilterParams.length + 1}
+       OFFSET $${byCompanyFilterParams.length + 2}`,
+      [...byCompanyFilterParams, byCompanyLimit, byCompanyOffset]
+    );
+
+    const [byCompanyCount, byCompanyRows, leadsByStatus, convsByDay] = await Promise.all([
+      byCompanyCountPromise,
+      byCompanyRowsPromise,
       pool.query(
         `SELECT status, COUNT(*) AS n
          FROM leads
@@ -149,9 +214,26 @@ async function getReports(req, res) {
       ),
     ]);
 
+    const byCompanyTotal = Number(byCompanyCount.rows?.[0]?.total || 0);
+    const byCompanyCurrentPage = Math.floor(byCompanyOffset / byCompanyLimit) + 1;
+    const byCompanyTotalPages = Math.max(1, Math.ceil(byCompanyTotal / byCompanyLimit));
+
     return res.json({
       period: { from: fromQ || fromDate.toISOString().slice(0, 10), to: toQ || toDate.toISOString().slice(0, 10) },
-      byCompany: byCompany.rows,
+      byCompany: byCompanyRows.rows,
+      byCompanyMeta: {
+        total: byCompanyTotal,
+        limit: byCompanyLimit,
+        page: byCompanyCurrentPage,
+        offset: byCompanyOffset,
+        totalPages: byCompanyTotalPages,
+        filters: {
+          companySearch: companySearch || '',
+          minConversations,
+          minLeads,
+          minConverted,
+        },
+      },
       leadsByStatus: leadsByStatus.rows,
       conversationsByDay: convsByDay.rows,
     });

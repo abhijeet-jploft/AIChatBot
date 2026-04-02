@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ACCESS_LEVELS, PERMISSION_MODULES, normalizePermissionMatrix } from '../lib/permissions';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { validateEmail } from '../../lib/contactValidation';
 import {
   clampFromNotAfterTo,
   clampToNotBeforeFrom,
@@ -400,6 +401,11 @@ export default function StaffManagement() {
 
   const saveStaff = async (event) => {
     event.preventDefault();
+    const emailCheck = validateEmail(staffForm.email);
+    if (!emailCheck.valid) {
+      showToast(emailCheck.error, 'error');
+      return;
+    }
     if (!staffForm.roleIds?.length) {
       showToast('Select at least one role', 'error');
       return;
@@ -563,7 +569,7 @@ export default function StaffManagement() {
           </div>
 
           <form onSubmit={saveRole}>
-            <div className="sa-field"><label>Role name</label><input type="text" value={roleForm.name} onChange={(e) => setRoleForm((current) => ({ ...current, name: e.target.value }))} disabled={!canEdit} required /></div>
+            <div className="sa-field"><label>Role name <span style={{ color: '#ef4444' }}>*</span></label><input type="text" value={roleForm.name} onChange={(e) => setRoleForm((current) => ({ ...current, name: e.target.value }))} disabled={!canEdit} required /></div>
             <div className="sa-field"><label>Description</label><textarea rows={2} value={roleForm.description} onChange={(e) => setRoleForm((current) => ({ ...current, description: e.target.value }))} disabled={!canEdit} /></div>
 
             <div className="sa-field">
@@ -725,8 +731,8 @@ export default function StaffManagement() {
           </div>
 
           <form onSubmit={saveStaff}>
-            <div className="sa-field"><label>Name</label><input type="text" value={staffForm.name} onChange={(e) => setStaffForm((current) => ({ ...current, name: e.target.value }))} disabled={!canEdit} required /></div>
-            <div className="sa-field"><label>Email</label><input type="email" value={staffForm.email} onChange={(e) => setStaffForm((current) => ({ ...current, email: e.target.value }))} disabled={!canEdit} required /></div>
+            <div className="sa-field"><label>Name <span style={{ color: '#ef4444' }}>*</span></label><input type="text" value={staffForm.name} onChange={(e) => setStaffForm((current) => ({ ...current, name: e.target.value }))} disabled={!canEdit} required /></div>
+            <div className="sa-field"><label>Email <span style={{ color: '#ef4444' }}>*</span></label><input type="email" value={staffForm.email} onChange={(e) => setStaffForm((current) => ({ ...current, email: e.target.value }))} disabled={!canEdit} required /></div>
             <div className="sa-field">
               <label>Roles</label>
               <p className="sa-text-muted" style={{ fontSize: 12, marginTop: 4 }}>

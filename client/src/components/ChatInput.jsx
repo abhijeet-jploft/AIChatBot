@@ -7,10 +7,30 @@ export default function ChatInput({ onSend, disabled, showMic = true, onTypingCh
   const recognitionRef = useRef(null);
   const shouldBeRecordingRef = useRef(false);
   const typingTimeoutRef = useRef(null);
+  const lastTranscriptRef = useRef({ text: '', time: 0 });
+
+  const normalizeVoiceTranscript = (rawValue = '') => {
+    const normalized = String(rawValue || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+    // Some recognizers emit this filler phrase before actual dictation.
+    if (/^(text\s+message|new\s+message|message|send\s+message)$/i.test(normalized)) return '';
+    return normalized;
+  };
+
+  const stopMicCapture = () => {
+    shouldBeRecordingRef.current = false;
+    try {
+      recognitionRef.current && recognitionRef.current.stop();
+    } catch {
+      // ignore
+    }
+    setIsRecording(false);
+  };
 
   const handleSubmit = (e) => {
     e?.preventDefault();
     if (!value.trim() || disabled) return;
+    if (isRecording) stopMicCapture();
     onSend(value.trim());
     setValue('');
     if (typingTimeoutRef.current) {
@@ -48,9 +68,16 @@ export default function ChatInput({ onSend, disabled, showMic = true, onTypingCh
           finalTranscript += result[0].transcript;
         }
       }
-      if (finalTranscript.trim()) {
+      const normalizedTranscript = normalizeVoiceTranscript(finalTranscript);
+      if (normalizedTranscript) {
+        const now = Date.now();
+        const last = lastTranscriptRef.current;
+        if (last.text === normalizedTranscript && now - last.time < 2500) {
+          return; // skip duplicate caused by recognition restart
+        }
+        lastTranscriptRef.current = { text: normalizedTranscript, time: now };
         setValue((prev) =>
-          prev ? `${prev.trim()} ${finalTranscript.trim()}` : finalTranscript.trim()
+          prev ? `${prev.trim()} ${normalizedTranscript}` : normalizedTranscript
         );
       }
     };
@@ -81,13 +108,7 @@ export default function ChatInput({ onSend, disabled, showMic = true, onTypingCh
   const handleMicClick = () => {
     if (disabled) return;
     if (isRecording) {
-      try {
-        recognitionRef.current && recognitionRef.current.stop();
-      } catch {
-        // ignore
-      }
-      shouldBeRecordingRef.current = false;
-      setIsRecording(false);
+      stopMicCapture();
       return;
     }
 
@@ -107,10 +128,16 @@ export default function ChatInput({ onSend, disabled, showMic = true, onTypingCh
   };
 
   useEffect(() => {
+    if (!disabled || !isRecording) return;
+    stopMicCapture();
+  }, [disabled, isRecording]);
+
+  useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      stopMicCapture();
       if (typeof onTypingChange === 'function') onTypingChange(false);
     };
   }, [onTypingChange]);
@@ -142,7 +169,7 @@ export default function ChatInput({ onSend, disabled, showMic = true, onTypingCh
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Type your message or use the mic…"
+            placeholder="Type your message or use the mic..."
             disabled={disabled}
             rows={1}
             className="form-control border-0 flex-grow-1 bg-transparent"

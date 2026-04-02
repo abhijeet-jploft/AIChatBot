@@ -196,9 +196,6 @@ function AdminLayout({ children }) {
           ))}
 
           <div className="admin-sidebar-footer">
-            <NavLink className="admin-sidebar-muted-link" to="/">
-              Back to chat
-            </NavLink>
             <button className="admin-logout-btn" onClick={handleLogout}>
               Logout
             </button>

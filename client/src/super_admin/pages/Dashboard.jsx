@@ -140,7 +140,7 @@ export default function Dashboard() {
         </div>
         <div className="sa-kpi-card">
           <div className="sa-kpi-label">Active Subscriptions</div>
-          <div className="sa-kpi-value">{stats.activeSubscriptions.toLocaleString()}</div>
+          <div className="sa-kpi-value">Coming Soon</div>
         </div>
         <div className="sa-kpi-card">
           <div className="sa-kpi-label">Total AI Conversations</div>
@@ -153,13 +153,13 @@ export default function Dashboard() {
         <div className="sa-kpi-card">
           <div className="sa-kpi-label">Revenue (Monthly)</div>
           <div className="sa-kpi-value">
-            {new Intl.NumberFormat('en-US', { style: 'currency', currency: stats.revenue?.currency || 'USD', maximumFractionDigits: 0 }).format(stats.revenue?.monthly || 0)}
+            Coming Soon
           </div>
         </div>
         <div className="sa-kpi-card">
           <div className="sa-kpi-label">Revenue (Yearly)</div>
           <div className="sa-kpi-value">
-            {new Intl.NumberFormat('en-US', { style: 'currency', currency: stats.revenue?.currency || 'USD', maximumFractionDigits: 0 }).format(stats.revenue?.yearly || 0)}
+          Coming Soon
           </div>
         </div>
         <div className="sa-kpi-card sa-kpi-card-system">

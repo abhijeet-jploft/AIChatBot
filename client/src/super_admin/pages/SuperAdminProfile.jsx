@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import PasswordInput from '../../components/PasswordInput';
 import { useSuperToast } from '../context/ToastContext';
+import { validateEmail } from '../../lib/contactValidation';
 
 function resolveAvatarSrc(url) {
   const s = String(url || '').trim();
@@ -37,6 +38,13 @@ export default function SuperAdminProfile() {
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (email.trim()) {
+      const emailCheck = validateEmail(email);
+      if (!emailCheck.valid) {
+        showToast(emailCheck.error, 'error');
+        return;
+      }
+    }
     setSavingProfile(true);
     try {
       const res = await saFetch('/auth/profile', {
@@ -156,7 +164,7 @@ export default function SuperAdminProfile() {
         <form onSubmit={handleSaveProfile}>
           <h4 className="sa-panel-title">Account</h4>
           <div className="sa-field">
-            <label>{isStaff ? 'Name' : 'Username'}</label>
+            <label>{isStaff ? 'Name' : 'Username'} <span style={{ color: '#ef4444' }}>*</span></label>
             <input
               type="text"
               value={username}
@@ -190,7 +198,7 @@ export default function SuperAdminProfile() {
             After a successful change, all sessions are ended and you must sign in again.
           </p>
           <div className="sa-field">
-            <label>Current password</label>
+            <label>Current password <span style={{ color: '#ef4444' }}>*</span></label>
             <PasswordInput
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -199,7 +207,7 @@ export default function SuperAdminProfile() {
             />
           </div>
           <div className="sa-field">
-            <label>New password</label>
+            <label>New password <span style={{ color: '#ef4444' }}>*</span></label>
             <PasswordInput
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}

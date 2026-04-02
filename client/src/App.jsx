@@ -170,6 +170,34 @@ const COMPANIES_CACHE_KEY = 'ai-chat-companies-cache-v1';
 const DEFAULT_COMPANY_ID = '_JP_Loft';
 const DEFAULT_COMPANY_NAME = 'JP Loft';
 
+function getNowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeMessageShape(message, fallbackCreatedAt = null) {
+  if (!message || typeof message !== 'object') return null;
+  const role = String(message.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
+  const content = String(message.content || '').trim();
+  if (!content) return null;
+
+  const createdAtRaw = message.createdAt || message.created_at || fallbackCreatedAt || getNowIso();
+  const createdAt = Number.isNaN(new Date(createdAtRaw).getTime()) ? getNowIso() : new Date(createdAtRaw).toISOString();
+
+  return {
+    role,
+    content,
+    createdAt,
+    voiceUrl: message.voiceUrl || message.voice_url || undefined,
+  };
+}
+
+function normalizeMessageList(messages = []) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .map((message) => normalizeMessageShape(message))
+    .filter(Boolean);
+}
+
 /** Icon URL from settings may be relative (e.g. /favicon.ico) or //cdn… — resolve against the current page. */
 function resolvePublicMediaUrl(raw) {
   const s = String(raw ?? '').trim();
@@ -612,7 +640,7 @@ export default function App() {
   const [widgetSideOverride, setWidgetSideOverride] = useState(() =>
     readWidgetSideByCompany(initialChatState?.companyId || DEFAULT_COMPANY_ID, cachedCompanies)
   );
-  const [messages, setMessages]     = useState(() => Array.isArray(initialChatState?.messages) ? initialChatState.messages : []);
+  const [messages, setMessages]     = useState(() => normalizeMessageList(initialChatState?.messages));
   const [loading, setLoading]       = useState(false);
   const [sessionId, setSessionId]   = useState(() => initialChatState?.sessionId || null);
   const [sessions, setSessions]     = useState([]);
@@ -959,7 +987,7 @@ export default function App() {
       setOpeningMessageShown(chatState.openingMessageShown ?? false);
       setCurrentPage(chatState.currentPage || 'chat');
       setCompanyId(chatState.companyId || DEFAULT_COMPANY_ID);
-      setMessages(Array.isArray(chatState.messages) ? chatState.messages : []);
+      setMessages(normalizeMessageList(chatState.messages));
       setSessionId(chatState.sessionId || null);
       let newMode = Object.values(CHAT_VIEW_MODES).includes(chatState.chatViewMode)
         ? chatState.chatViewMode
@@ -1056,7 +1084,7 @@ export default function App() {
 
     setCurrentPage('chat');
     if (messages.length === 0 && !openingMessageShown) {
-      setMessages([{ role: 'assistant', content: openingMessageText }]);
+      setMessages([normalizeMessageShape({ role: 'assistant', content: openingMessageText, createdAt: getNowIso() })]);
       setOpeningMessageShown(true);
     }
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
@@ -1175,7 +1203,12 @@ export default function App() {
             if (msg.type === 'message' && msg.content != null) {
               const content = normalizeAssistantNameInText(String(msg.content), chatbotNameForOpening);
               const voiceUrl = msg.voice?.audioDataUrl ? String(msg.voice.audioDataUrl) : undefined;
-              setMessages((prev) => [...prev, { role: 'assistant', content, voiceUrl }]);
+              setMessages((prev) => [...prev, normalizeMessageShape({
+                role: 'assistant',
+                content,
+                voiceUrl,
+                createdAt: msg.createdAt || msg.created_at || getNowIso(),
+              })]);
             }
           } catch (_) {}
         };
@@ -1233,7 +1266,7 @@ export default function App() {
         const data = await res.json();
 
         if (!cancelled) {
-          setMessages(Array.isArray(data) ? data.map((m) => ({ role: m.role, content: m.content })) : []);
+          setMessages(normalizeMessageList(data));
         }
       } catch {
         if (!cancelled) setMessages([]);
@@ -1253,7 +1286,7 @@ export default function App() {
     try {
       const res  = await fetch(`${API_BASE}/sessions/${id}/messages`);
       const data = await res.json();
-      setMessages(Array.isArray(data) ? data.map((m) => ({ role: m.role, content: m.content })) : []);
+      setMessages(normalizeMessageList(data));
     } catch {
       setMessages([]);
     }
@@ -1280,7 +1313,7 @@ export default function App() {
     sessionIdRef.current = null;
     setLoading(false);
     setSessionId(null);
-    setMessages([{ role: 'assistant', content: openingMessageText }]);
+    setMessages([normalizeMessageShape({ role: 'assistant', content: openingMessageText, createdAt: getNowIso() })]);
     setOpeningMessageShown(true);
     setCurrentPage('chat');
   };
@@ -1325,57 +1358,74 @@ export default function App() {
     sendTypingPresence(false);
     const requestGeneration = requestGenerationRef.current;
 
-    const userMsg = { role: 'user', content: content.trim() };
+    const userMsg = normalizeMessageShape({ role: 'user', content: content.trim(), createdAt: getNowIso() });
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/chat/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '',
-        },
-        body: JSON.stringify({
-          companyId:  companyId || DEFAULT_COMPANY_ID,
-          sessionId:  sessionId || undefined,
-          messages:   [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
+      const requestPayload = {
+        companyId: companyId || DEFAULT_COMPANY_ID,
+        sessionId: sessionId || undefined,
+        messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
+        clientTime: getNowIso(),
+        clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+      };
+      const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
 
-      if (!res.ok) {
-        const text = await res.text();
-        let serverResponseBody = null;
-        try {
-          serverResponseBody = text ? JSON.parse(text) : null;
-        } catch {
-          serverResponseBody = text ? { raw: text.slice(0, 8000) } : null;
-        }
-        const msg =
-          (serverResponseBody && typeof serverResponseBody === 'object' && serverResponseBody.error) ||
-          (typeof text === 'string' && text.trim() ? text.trim().slice(0, 500) : '') ||
-          `HTTP ${res.status}`;
-        const e = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-        e.httpStatus = res.status;
-        e.serverResponseBody = serverResponseBody;
-        if (serverResponseBody && typeof serverResponseBody === 'object') {
-          e.requestId = serverResponseBody.requestId || undefined;
-          e.serverStage = serverResponseBody.stage || undefined;
-        }
-        throw e;
-      }
+      const requestChatMessage = async (attempt = 0) => {
+        const res = await fetch(`${API_BASE}/chat/message`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Page-Url': pageUrl,
+          },
+          body: JSON.stringify(requestPayload),
+        });
 
-      const data = await res.json();
+        if (!res.ok) {
+          const text = await res.text();
+          let serverResponseBody = null;
+          try {
+            serverResponseBody = text ? JSON.parse(text) : null;
+          } catch {
+            serverResponseBody = text ? { raw: text.slice(0, 8000) } : null;
+          }
+
+          const msg =
+            (serverResponseBody && typeof serverResponseBody === 'object' && serverResponseBody.error)
+            || (typeof text === 'string' && text.trim() ? text.trim().slice(0, 500) : '')
+            || `HTTP ${res.status}`;
+          const e = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+          e.httpStatus = res.status;
+          e.serverResponseBody = serverResponseBody;
+          if (serverResponseBody && typeof serverResponseBody === 'object') {
+            e.requestId = serverResponseBody.requestId || undefined;
+            e.serverStage = serverResponseBody.stage || undefined;
+          }
+
+          const retryableStatus = [429, 500, 502, 503, 504].includes(Number(res.status));
+          if (attempt < 2 && retryableStatus) {
+            await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+            return requestChatMessage(attempt + 1);
+          }
+          throw e;
+        }
+
+        return res.json();
+      };
+
+      const data = await requestChatMessage(0);
       if (requestGeneration !== requestGenerationRef.current) return;
       const normalizedAssistantContent = normalizeAssistantNameInText(String(data?.content || ''), chatbotNameForOpening);
       const responseAudioDataUrl = data?.voice?.audioDataUrl;
       // Index of the new assistant message: we already added the user message earlier, so it's messages.length + 1
       const newAssistantIndex = messages.length + 1;
-      setMessages((prev) => [...prev, {
+      setMessages((prev) => [...prev, normalizeMessageShape({
         role: 'assistant',
         content: normalizedAssistantContent,
         voiceUrl: responseAudioDataUrl || undefined,
-      }]);
+        createdAt: data?.createdAt || getNowIso(),
+      })]);
       if (responseAudioDataUrl) {
         playAssistantVoice(responseAudioDataUrl, newAssistantIndex);
       }
@@ -1425,7 +1475,11 @@ export default function App() {
       }
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: 'We are facing some technical issue.' },
+        normalizeMessageShape({
+          role: 'assistant',
+          content: 'We are facing some technical issue. Please try again.',
+          createdAt: getNowIso(),
+        }),
       ]);
     } finally {
       setLoading(false);
@@ -1475,7 +1529,7 @@ export default function App() {
     setCurrentPage('chat');
     if (isWebsiteView) setAutoPopupHandled(true);
     if (isWebsiteView && messages.length === 0 && !openingMessageShown) {
-      setMessages([{ role: 'assistant', content: openingMessageText }]);
+      setMessages([normalizeMessageShape({ role: 'assistant', content: openingMessageText, createdAt: getNowIso() })]);
       setOpeningMessageShown(true);
     }
     setChatViewMode(CHAT_VIEW_MODES.WIDGET_OPEN);
@@ -1764,18 +1818,6 @@ export default function App() {
             <header className="chat-widget-header">
               <div className="chat-widget-title-wrap">
                 <div className="d-flex align-items-center gap-2">
-                  <button
-                    type="button"
-                    className="chat-widget-icon-btn"
-                    onClick={clearChat}
-                    aria-label="Start new chat"
-                    title="New chat"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 5v14" />
-                      <path d="M5 12h14" />
-                    </svg>
-                  </button>
                   <span className="chat-widget-title">{companyName}</span>
                 </div>
               </div>

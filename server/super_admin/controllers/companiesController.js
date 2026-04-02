@@ -32,6 +32,67 @@ function normalizeCompanyWebsite(raw) {
 // GET /super-admin/companies
 async function listCompanies(req, res) {
   try {
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 20));
+    const page = Math.max(1, Number(req.query.page) || 1);
+    let offset = Math.max(0, Number(req.query.offset) || 0);
+    if (req.query.page != null && req.query.offset == null) {
+      offset = (page - 1) * limit;
+    }
+
+    const search = String(req.query.search || '').trim();
+    const agentStatus = String(req.query.agentStatus || 'all').trim().toLowerCase();
+    const adminLogin = String(req.query.adminLogin || 'all').trim().toLowerCase();
+
+    const filters = [`c.company_id <> '_scrape_jobs'`];
+    const params = [];
+
+    if (search) {
+      params.push(`%${search}%`);
+      const searchPh = `$${params.length}`;
+      filters.push(
+        `(
+          c.company_id ILIKE ${searchPh}
+          OR c.name ILIKE ${searchPh}
+          OR COALESCE(c.description, '') ILIKE ${searchPh}
+          OR COALESCE(c.admin_email, '') ILIKE ${searchPh}
+          OR COALESCE(ch.display_name, '') ILIKE ${searchPh}
+          OR COALESCE(em.embed_slug, '') ILIKE ${searchPh}
+          OR COALESCE(ch.ai_mode, '') ILIKE ${searchPh}
+        )`
+      );
+    }
+
+    if (agentStatus === 'active') {
+      filters.push(`COALESCE(ch.agent_paused, FALSE) = FALSE`);
+    } else if (agentStatus === 'paused') {
+      filters.push(`COALESCE(ch.agent_paused, FALSE) = TRUE`);
+    }
+
+    if (adminLogin === 'ready') {
+      filters.push(`c.admin_email IS NOT NULL AND c.admin_email <> '' AND c.password_hash IS NOT NULL`);
+    } else if (adminLogin === 'no_password') {
+      filters.push(`c.admin_email IS NOT NULL AND c.admin_email <> '' AND c.password_hash IS NULL`);
+    } else if (adminLogin === 'no_email') {
+      filters.push(`(c.admin_email IS NULL OR c.admin_email = '')`);
+    }
+
+    const whereSql = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const baseFromSql = `
+      FROM chatbots c
+      LEFT JOIN chat_settings ch ON ch.company_id = c.company_id
+      LEFT JOIN embed_settings em ON em.company_id = c.company_id
+      ${whereSql}
+    `;
+
+    const totalResult = await pool.query(
+      `SELECT COUNT(*)::int AS total ${baseFromSql}`,
+      params
+    );
+    const total = Number(totalResult.rows?.[0]?.total || 0);
+
+    const listParams = [...params, limit, offset];
+    const limitPh = `$${listParams.length - 1}`;
+    const offsetPh = `$${listParams.length}`;
     const { rows } = await pool.query(
       `SELECT
          c.company_id, c.name, c.description, c.created_at, c.admin_email, c.is_suspended,
@@ -40,13 +101,22 @@ async function listCompanies(req, res) {
          em.embed_slug,
          (SELECT COUNT(*) FROM leads l WHERE l.company_id = c.company_id AND l.deleted_at IS NULL) AS lead_count,
          (SELECT COUNT(*) FROM chat_sessions s WHERE s.company_id = c.company_id) AS conversation_count
-       FROM chatbots c
-       LEFT JOIN chat_settings ch ON ch.company_id = c.company_id
-       LEFT JOIN embed_settings em ON em.company_id = c.company_id
-       WHERE c.company_id NOT IN ('_scrape_jobs')
-       ORDER BY c.created_at DESC`
+       ${baseFromSql}
+       ORDER BY c.created_at DESC
+       LIMIT ${limitPh}
+       OFFSET ${offsetPh}`,
+      listParams
     );
-    return res.json(rows);
+
+    const currentPage = Math.floor(offset / limit) + 1;
+    return res.json({
+      rows,
+      total,
+      limit,
+      page: currentPage,
+      offset,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
   } catch (err) {
     console.error('[super admin] listCompanies:', err);
     return res.status(500).json({ error: err.message });

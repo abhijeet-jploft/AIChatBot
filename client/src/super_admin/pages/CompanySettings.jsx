@@ -7,6 +7,7 @@ import {
   normalizeUrlForSubmit,
   splitPhoneForForm,
   validatePhone,
+  validateEmail,
 } from '../../lib/contactValidation';
 
 function defaultAutoTrigger() {
@@ -145,6 +146,20 @@ export default function CompanySettings() {
     if (!phoneCheck.valid) {
       showToast(phoneCheck.error, 'error');
       return;
+    }
+    if (bizContactEmail.trim()) {
+      const emailCheck = validateEmail(bizContactEmail);
+      if (!emailCheck.valid) {
+        showToast('Business contact email: ' + emailCheck.error, 'error');
+        return;
+      }
+    }
+    if (leadNotificationEmail.trim()) {
+      const leadEmailCheck = validateEmail(leadNotificationEmail);
+      if (!leadEmailCheck.valid) {
+        showToast('Lead notification email: ' + leadEmailCheck.error, 'error');
+        return;
+      }
     }
     const normalizedIconUrl = normalizeUrlForSubmit(iconUrl);
     if (normalizedIconUrl === null) {

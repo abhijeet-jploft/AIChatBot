@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import PasswordInput from '../../components/PasswordInput';
 import { useAdminToast } from '../context/AdminToastContext';
 import { hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../../constants/adminVisibility';
 import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
@@ -9,6 +8,7 @@ import {
   normalizeUrlForSubmit,
   splitPhoneForForm,
   validatePhone,
+  validateEmail,
 } from '../../lib/contactValidation';
 
 /** Origin where the chat app + /embed/* is served (API host without /api). */
@@ -105,6 +105,8 @@ export default function Settings() {
   const [settingsCompanyId, setSettingsCompanyId] = useState('');
   const [chatbotName, setChatbotName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
+  const [iconUploadPending, setIconUploadPending] = useState(false);
+  const [iconUploadError, setIconUploadError] = useState('');
   const [greetingMessage, setGreetingMessage] = useState('');
   const [bizName, setBizName] = useState('');
   const [bizDescription, setBizDescription] = useState('');
@@ -126,16 +128,7 @@ export default function Settings() {
   const [autoTrigger, setAutoTrigger] = useState(defaultAutoTrigger);
   const [escalation, setEscalation] = useState(defaultEscalation);
   const [safety, setSafety] = useState(defaultSafety);
-  const [sessions, setSessions] = useState([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [logoutAllPending, setLogoutAllPending] = useState(false);
   const [embed, setEmbed] = useState(null);
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  const [changingPassword, setChangingPassword] = useState(false);
   const [adminVisibility, setAdminVisibility] = useState(() => mergeAdminVisibility());
   const [activeTab, setActiveTab] = useState('general');
   /** Sub-sections inside General (reduces scrolling). */
@@ -148,7 +141,6 @@ export default function Settings() {
     const t = ['general'];
     if (tabChatVisible) t.push('chat');
     if (tabPoliciesVisible) t.push('policies');
-    t.push('account');
     return t;
   }, [tabChatVisible, tabPoliciesVisible]);
 
@@ -222,22 +214,50 @@ export default function Settings() {
       .catch(() => showToast('Failed to load settings', 'error'));
   }, [authFetch, showToast]);
 
-  const loadSessions = () => {
-    setSessionsLoading(true);
-    authFetch('/settings/sessions')
-      .then(async (res) => {
-        if (res.ok) {
-          const data = await res.json();
-          setSessions(data.sessions || []);
-        }
-      })
-      .finally(() => setSessionsLoading(false));
+  const validateIconUploadFile = (file) => {
+    if (!file) return 'Please choose an icon file.';
+    if (file.size <= 0) return 'Selected icon file is empty.';
+    if (file.size > 1024 * 1024) return 'Icon must be 1MB or smaller.';
+
+    const name = String(file.name || '').toLowerCase();
+    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
+    const allowedExt = new Set(['.ico', '.png', '.jpg', '.jpeg', '.webp', '.svg']);
+    if (!allowedExt.has(ext)) {
+      return 'Only ICO, PNG, JPG, JPEG, WEBP, or SVG files are allowed.';
+    }
+    return '';
   };
 
-  useEffect(() => {
-    loadSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const uploadIconFile = async (file) => {
+    const validationError = validateIconUploadFile(file);
+    if (validationError) {
+      setIconUploadError(validationError);
+      return;
+    }
+
+    setIconUploadPending(true);
+    setIconUploadError('');
+    try {
+      const formData = new FormData();
+      formData.append('icon', file);
+      const res = await authFetch('/settings/icon-upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Failed to upload icon.');
+      const nextIconUrl = String(payload.iconUrl || '').trim();
+      if (!nextIconUrl) throw new Error('Upload succeeded but icon URL is missing.');
+      setIconUrl(nextIconUrl);
+      showToast('Icon uploaded successfully.', 'success');
+    } catch (err) {
+      const msg = err.message || 'Failed to upload icon.';
+      setIconUploadError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setIconUploadPending(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -250,6 +270,20 @@ export default function Settings() {
     if (!phoneCheck.valid) {
       showToast(phoneCheck.error, 'error');
       return;
+    }
+    if (bizContactEmail.trim()) {
+      const emailCheck = validateEmail(bizContactEmail);
+      if (!emailCheck.valid) {
+        showToast('Business contact email: ' + emailCheck.error, 'error');
+        return;
+      }
+    }
+    if (leadNotificationEmail.trim()) {
+      const leadEmailCheck = validateEmail(leadNotificationEmail);
+      if (!leadEmailCheck.valid) {
+        showToast('Lead notification email: ' + leadEmailCheck.error, 'error');
+        return;
+      }
     }
     const normalizedIconUrl = normalizeUrlForSubmit(iconUrl);
     if (normalizedIconUrl === null) {
@@ -333,50 +367,6 @@ export default function Settings() {
     }
   };
 
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-      showToast('Please fill all password fields', 'error');
-      return;
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      showToast('New password and confirmation do not match', 'error');
-      return;
-    }
-
-    setChangingPassword(true);
-    try {
-      const res = await authFetch('/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(passwordForm),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update password');
-
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      showToast('Password updated successfully', 'success');
-    } catch (err) {
-      showToast(err.message || 'Failed to update password', 'error');
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
-  const handleLogoutAll = () => {
-    if (!window.confirm('Log out all admin sessions for this company? You will need to sign in again.')) return;
-    setLogoutAllPending(true);
-    authFetch('/settings/sessions', { method: 'DELETE' })
-      .then(async (res) => {
-        if (res.ok) {
-          showToast('All sessions logged out', 'success');
-          loadSessions();
-          window.location.href = '/admin';
-        } else showToast('Failed to log out sessions', 'error');
-      })
-      .finally(() => setLogoutAllPending(false));
-  };
-
   const updateEscalationTrigger = (key, value) => {
     setEscalation((e) => ({ ...e, triggers: { ...e.triggers, [key]: value } }));
   };
@@ -423,11 +413,6 @@ export default function Settings() {
               </button>
             </li>
           ) : null}
-          <li className="nav-item" role="presentation">
-            <button type="button" className={tabBtnClass('account')} onClick={() => setActiveTab('account')} style={{ color: activeTab === 'account' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'account' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
-              Account
-            </button>
-          </li>
         </ul>
 
         {activeTab === 'general' && (
@@ -486,7 +471,7 @@ export default function Settings() {
             {generalSubTab === 'branding' && (
             <>
             <div className="mb-3" id="company-name">
-              <label className="form-label">Company name</label>
+              <label className="form-label">Company name <span className="text-danger">*</span></label>
               <input
                 type="text"
                 className="form-control"
@@ -523,15 +508,42 @@ export default function Settings() {
                 type="text"
                 className="form-control"
                 value={iconUrl}
-                onChange={(e) => setIconUrl(e.target.value)}
+                onChange={(e) => {
+                  setIconUrl(e.target.value);
+                  if (iconUploadError) setIconUploadError('');
+                }}
                 placeholder="https://example.com/icon.ico or /favicon.ico"
                 inputMode="url"
                 autoComplete="off"
                 style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               />
+              <div className="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                <label className="btn btn-sm btn-outline-secondary mb-0">
+                  {iconUploadPending ? 'Uploading...' : 'Upload icon file'}
+                  <input
+                    type="file"
+                    accept=".ico,.png,.jpg,.jpeg,.webp,.svg,image/x-icon,image/vnd.microsoft.icon,image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="d-none"
+                    disabled={iconUploadPending}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) uploadIconFile(file);
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+                <span className="small" style={{ color: 'var(--chat-muted)' }}>
+                  Max 1MB. Allowed: ICO, PNG, JPG, JPEG, WEBP, SVG.
+                </span>
+              </div>
               <div className="form-text" style={{ color: 'var(--chat-muted)' }}>
                 PNG, SVG, or ICO. Use a full <code>https://…</code> URL, or a path like <code>/favicon.ico</code> relative to your site.
               </div>
+              {iconUploadError ? (
+                <div className="small mt-1" style={{ color: '#dc3545' }}>
+                  {iconUploadError}
+                </div>
+              ) : null}
               {iconUrl && (
                 <div className="mt-2">
                   <img
@@ -1134,77 +1146,6 @@ export default function Settings() {
           </div>
         </div>
         )}
-        </div>
-        )}
-
-        {activeTab === 'account' && (
-        <div className="settings-tab-panel">
-        {/* Sessions */}
-        <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
-          <div className="mb-3" style={headingStyle}>Sessions</div>
-          <p className="small mb-3" style={mutedStyle}>Active admin sessions for this company.</p>
-          {sessionsLoading ? (
-            <p className="small" style={mutedStyle}>Loading...</p>
-          ) : sessions.length === 0 ? (
-            <p className="small" style={mutedStyle}>No other active sessions.</p>
-          ) : (
-            <ul className="small mb-3 ps-3" style={mutedStyle}>
-              {sessions.slice(0, 10).map((s, i) => (
-                <li key={s.id || i}>Session — created {s.created_at ? new Date(s.created_at).toLocaleString() : ''}</li>
-              ))}
-              {sessions.length > 10 && <li>... and {sessions.length - 10} more</li>}
-            </ul>
-          )}
-          <button type="button" className="btn btn-outline-danger btn-sm"
-            onClick={handleLogoutAll}
-            disabled={logoutAllPending}>
-            {logoutAllPending ? 'Logging out...' : 'Log out all sessions'}
-          </button>
-        </div>
-
-        {/* Password management */}
-        <div className="mt-4 p-3 p-md-4 rounded-3 mb-4" style={cardStyle}>
-          <div className="mb-3" style={headingStyle}>Password Management</div>
-          <p className="small mb-3" style={mutedStyle}>Change admin password with current password verification and strength validation.</p>
-          <div>
-            <div className="row g-2">
-              <div className="col-12 col-md-4">
-                <label className="form-label small" style={labelStyle}>Current password</label>
-                <PasswordInput
-                  className="form-control form-control-sm"
-                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
-                  autoComplete="current-password"
-                />
-              </div>
-              <div className="col-12 col-md-4">
-                <label className="form-label small" style={labelStyle}>New password</label>
-                <PasswordInput
-                  className="form-control form-control-sm"
-                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="col-12 col-md-4">
-                <label className="form-label small" style={labelStyle}>Confirm new password</label>
-                <PasswordInput
-                  className="form-control form-control-sm"
-                  style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                  autoComplete="new-password"
-                />
-              </div>
-            </div>
-            <div className="form-text mt-2" style={mutedStyle}>Use at least 8 characters with uppercase, lowercase and a number.</div>
-            <button type="button" className="btn btn-outline-primary btn-sm mt-3" disabled={changingPassword} onClick={handleChangePassword}>
-              {changingPassword ? 'Updating password...' : 'Update password'}
-            </button>
-          </div>
-        </div>
         </div>
         )}
 

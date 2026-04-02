@@ -26,7 +26,19 @@ const PROJECT_LINK_INTENT_RE = /\b(project|projects|portfolio|case\s*stud(y|ies)
 const CHAT_CONTEXT_MAX_MESSAGES = Math.max(2, parseInt(process.env.CHAT_CONTEXT_MAX_MESSAGES || '18', 10));
 const CHAT_CONTEXT_MAX_CHARS = Math.max(2000, parseInt(process.env.CHAT_CONTEXT_MAX_CHARS || '18000', 10));
 const CHAT_MESSAGE_MAX_CHARS = Math.max(500, parseInt(process.env.CHAT_MESSAGE_MAX_CHARS || '6000', 10));
-const CHAT_AI_TIMEOUT_MS = Math.max(1000, parseInt(process.env.CHAT_AI_TIMEOUT_MS || '45000', 10));
+
+// In-memory dedup cache for idempotent chat requests (keyed by client idempotency key)
+const _recentIdempotencyKeys = new Map();
+const IDEMPOTENCY_TTL_MS = 60_000; // 60s
+const IDEMPOTENCY_MAX_SIZE = 2000;
+
+function pruneIdempotencyCache() {
+  if (_recentIdempotencyKeys.size <= IDEMPOTENCY_MAX_SIZE) return;
+  const now = Date.now();
+  for (const [key, entry] of _recentIdempotencyKeys) {
+    if (now - entry.time > IDEMPOTENCY_TTL_MS) _recentIdempotencyKeys.delete(key);
+  }
+}
 
 function shouldReturnProjectLinks(query = '') {
   return PROJECT_LINK_INTENT_RE.test(String(query || ''));
@@ -108,34 +120,20 @@ function trimMessagesForAi(messages = []) {
   return kept.reverse();
 }
 
-async function withTimeout(promise, timeoutMs, label) {
-  const ms = Number(timeoutMs);
-  if (!Number.isFinite(ms) || ms <= 0) return promise;
-
-  let timer = null;
-  try {
-    return await Promise.race([
-      Promise.resolve(promise),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => {
-          const err = new Error(`${label} timed out after ${ms}ms`);
-          err.code = 'ETIMEDOUT';
-          err.timeoutMs = ms;
-          reject(err);
-        }, ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 function deriveChatErrorStatus(err) {
   if (String(err?.code || '').toUpperCase() === 'ETIMEDOUT') return 504;
   const upstreamStatus = Number(err?.status || err?.httpStatus || err?.response?.status);
   if (upstreamStatus === 429) return 503;
   if (upstreamStatus >= 500 && upstreamStatus < 600) return 502;
   return 500;
+}
+
+function hasProviderApiKey(provider, config = {}) {
+  const normalized = String(provider || '').trim().toLowerCase();
+  if (normalized === 'gemini') {
+    return Boolean(String(config?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim());
+  }
+  return Boolean(String(config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '').trim());
 }
 
 async function trackApiUsage({
@@ -276,9 +274,24 @@ async function postMessage(req, res) {
   let userMsg = null;
   const requestStartedAt = Date.now();
   try {
-    const { messages, companyId: requestCompanyId = '_default', sessionId } = req.body || {};
+    const {
+      messages,
+      companyId: requestCompanyId = '_default',
+      sessionId,
+      clientTime,
+      clientTimezone,
+    } = req.body || {};
     companyId = requestCompanyId;
     stage = 'validate_request';
+
+    // Idempotency: if client sends an idempotencyKey, return cached response for duplicates.
+    const clientIdempotencyKey = req.body?.idempotencyKey;
+    if (clientIdempotencyKey) {
+      const cached = _recentIdempotencyKeys.get(clientIdempotencyKey);
+      if (cached && Date.now() - cached.time < IDEMPOTENCY_TTL_MS) {
+        return res.json(cached.response);
+      }
+    }
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages array is required' });
@@ -402,7 +415,14 @@ async function postMessage(req, res) {
           }
         }
 
-        return res.json({ content: pausedMessage, sessionId: sid, voice: pausedVoice, requestId });
+        return res.json({
+          content: pausedMessage,
+          sessionId: sid,
+          voice: pausedVoice,
+          requestId,
+          createdAt: new Date().toISOString(),
+          provider: 'system',
+        });
       }
 
       recordLiveMessage(
@@ -433,6 +453,17 @@ async function postMessage(req, res) {
     let response = '';
     const configuredBusinessInfo = pickConfiguredBusinessInfo(chatbot);
     let aiResponseMs = 0;
+    let usedAiProvider = aiConfig.provider;
+    const temporalParts = [`Current server datetime (ISO 8601 UTC): ${new Date().toISOString()}`];
+    const safeClientTime = String(clientTime || '').trim();
+    if (safeClientTime) {
+      temporalParts.push(`Client-reported datetime: ${safeClientTime}`);
+    }
+    const safeClientTimezone = String(clientTimezone || '').trim();
+    if (safeClientTimezone) {
+      temporalParts.push(`Client timezone: ${safeClientTimezone}`);
+    }
+    const temporalContext = temporalParts.join('\n');
     if (shouldReturnProjectLinks(userMsg?.content)) {
       const matchedLinks = findProjectLinks(companyId, userMsg?.content || '', { max: 50 });
       if (matchedLinks.length > 0) {
@@ -443,53 +474,107 @@ async function postMessage(req, res) {
     if (!response) {
       stage = 'ai_generation';
       const aiStartedAt = Date.now();
-      const effectiveAiModel = resolveEffectiveModel(aiConfig.provider, aiConfig.model);
-      try {
-        response = aiConfig.provider === 'gemini'
-          ? await withTimeout(sendGeminiMessage(companyId, aiConversation, {
-            modeId: selectedModeId,
-            safetyConfig,
-            model: aiConfig.model,
-            apiKey: aiConfig.geminiApiKey,
-            assistantName: aiConfig.assistantName,
-            languageConfig: aiConfig.language,
-            configuredBusinessInfo,
-          }), CHAT_AI_TIMEOUT_MS, 'Gemini request')
-          : await withTimeout(sendAnthropicMessage(companyId, aiConversation, {
-            modeId: selectedModeId,
-            safetyConfig,
-            model: aiConfig.model,
-            apiKey: aiConfig.anthropicApiKey,
-            assistantName: aiConfig.assistantName,
-            languageConfig: aiConfig.language,
-            configuredBusinessInfo,
-          }), CHAT_AI_TIMEOUT_MS, 'Anthropic request');
-        await trackApiUsage({
-          companyId,
-          sessionId: sid,
-          provider: aiConfig.provider,
-          category: 'chat',
-          model: effectiveAiModel,
-          requestContext: 'training_loader_context',
-          latencyMs: Date.now() - aiStartedAt,
-          success: true,
-          metadata: { modeId: selectedModeId || null },
-        });
-      } catch (aiErr) {
-        await trackApiUsage({
-          companyId,
-          sessionId: sid,
-          provider: aiConfig.provider,
-          category: 'chat',
-          model: effectiveAiModel,
-          requestContext: 'training_loader_context',
-          latencyMs: Date.now() - aiStartedAt,
-          success: false,
-          errorMessage: aiErr?.message || 'AI call failed',
-          metadata: { modeId: selectedModeId || null },
-        });
-        throw aiErr;
+      const primaryProvider = aiConfig.provider === 'gemini' ? 'gemini' : 'anthropic';
+      const fallbackProvider = primaryProvider === 'gemini' ? 'anthropic' : 'gemini';
+      const providersToTry = hasProviderApiKey(fallbackProvider, aiConfig)
+        ? [primaryProvider, fallbackProvider]
+        : [primaryProvider];
+
+      let lastProviderError = null;
+      for (let providerIndex = 0; providerIndex < providersToTry.length; providerIndex += 1) {
+        const provider = providersToTry[providerIndex];
+        const modelForProvider = provider === primaryProvider ? aiConfig.model : null;
+        const effectiveAiModel = resolveEffectiveModel(provider, modelForProvider);
+        const providerStartedAt = Date.now();
+
+        try {
+          response = provider === 'gemini'
+            ? await sendGeminiMessage(companyId, aiConversation, {
+              modeId: selectedModeId,
+              safetyConfig,
+              model: modelForProvider,
+              apiKey: aiConfig.geminiApiKey,
+              assistantName: aiConfig.assistantName,
+              languageConfig: aiConfig.language,
+              configuredBusinessInfo,
+              temporalContext,
+            })
+            : await sendAnthropicMessage(companyId, aiConversation, {
+              modeId: selectedModeId,
+              safetyConfig,
+              model: modelForProvider,
+              apiKey: aiConfig.anthropicApiKey,
+              assistantName: aiConfig.assistantName,
+              languageConfig: aiConfig.language,
+              configuredBusinessInfo,
+              temporalContext,
+            });
+
+          await trackApiUsage({
+            companyId,
+            sessionId: sid,
+            provider,
+            category: 'chat',
+            model: effectiveAiModel,
+            requestContext: 'training_loader_context',
+            latencyMs: Date.now() - providerStartedAt,
+            success: true,
+            metadata: {
+              modeId: selectedModeId || null,
+              fallbackFrom: provider === primaryProvider ? null : primaryProvider,
+            },
+          });
+
+          usedAiProvider = provider;
+          if (provider !== primaryProvider) {
+            appendSystemLog('warn', 'Primary AI provider failed, fallback provider used', {
+              companyId,
+              sessionId: sid || undefined,
+              requestId,
+              primaryProvider,
+              fallbackProvider: provider,
+              primaryError: lastProviderError?.message || undefined,
+            });
+          }
+          break;
+        } catch (providerErr) {
+          lastProviderError = providerErr;
+          await trackApiUsage({
+            companyId,
+            sessionId: sid,
+            provider,
+            category: 'chat',
+            model: effectiveAiModel,
+            requestContext: 'training_loader_context',
+            latencyMs: Date.now() - providerStartedAt,
+            success: false,
+            errorMessage: providerErr?.message || 'AI call failed',
+            metadata: {
+              modeId: selectedModeId || null,
+              fallbackAttempt: provider !== primaryProvider,
+            },
+          });
+
+          const hasAnotherProvider = providerIndex < providersToTry.length - 1;
+          if (hasAnotherProvider) {
+            appendSystemLog('warn', 'Primary AI provider failed, retrying with fallback provider', {
+              companyId,
+              sessionId: sid || undefined,
+              requestId,
+              primaryProvider: provider,
+              fallbackProvider: providersToTry[providerIndex + 1],
+              error: providerErr?.message || undefined,
+            });
+            continue;
+          }
+          throw providerErr;
+        }
       }
+
+      if (!response && lastProviderError) {
+        throw lastProviderError;
+      }
+
       aiResponseMs = Date.now() - aiStartedAt;
     }
     let voice = null;
@@ -622,16 +707,22 @@ async function postMessage(req, res) {
       companyId,
       sessionId: sid,
       requestId,
-      aiProvider: aiConfig.provider,
+        aiProvider: usedAiProvider,
       aiResponseMs,
-      totalRequestMs: Date.now() - requestStartedAt,
-      originalMessageCount: originalMetrics.count,
-      aiMessageCount: aiMetrics.count,
-      originalInputChars: originalMetrics.chars,
-      aiInputChars: aiMetrics.chars,
-      historyTrimmed: originalMetrics.count !== aiMetrics.count || originalMetrics.chars !== aiMetrics.chars,
-    });
-    res.json({ content: response, sessionId: sid, voice, requestId });
+        totalRequestMs: Date.now() - requestStartedAt,
+        serverTimeIso: new Date().toISOString(),
+        originalMessageCount: originalMetrics.count,
+        aiMessageCount: aiMetrics.count,
+        originalInputChars: originalMetrics.chars,
+        aiInputChars: aiMetrics.chars,
+        historyTrimmed: originalMetrics.count !== aiMetrics.count || originalMetrics.chars !== aiMetrics.chars,
+      });
+    const responsePayload = { content: response, sessionId: sid, voice, requestId, createdAt: new Date().toISOString(), provider: usedAiProvider };
+    if (clientIdempotencyKey) {
+      _recentIdempotencyKeys.set(clientIdempotencyKey, { time: Date.now(), response: responsePayload });
+      pruneIdempotencyCache();
+    }
+    res.json(responsePayload);
   } catch (err) {
     const message = err?.message || 'Failed to get AI response';
     const originalMetrics = summarizeConversation(originalConversation);

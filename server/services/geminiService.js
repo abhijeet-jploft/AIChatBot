@@ -35,10 +35,12 @@ function buildBaseSystemPrompt(
   languageInstruction = '',
   businessProfilePrompt = '',
   companyProfile = null,
-  configuredBusinessInfoPrompt = ''
+  configuredBusinessInfoPrompt = '',
+  temporalContext = ''
 ) {
   return [
     BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName, companyProfile }),
+    temporalContext ? `Temporal context:\n- ${String(temporalContext).trim()}` : '',
     languageInstruction,
     businessProfilePrompt,
     configuredBusinessInfoPrompt,
@@ -60,7 +62,8 @@ function buildPrompt(
   modeContext,
   assistantName = '',
   languageConfig = {},
-  configuredBusinessInfo = null
+  configuredBusinessInfo = null,
+  temporalContext = ''
 ) {
   const latestUserMessage = [...(messages || [])].reverse().find((m) => m?.role === 'user')?.content || '';
   const context = loadCompanyContext(companyId, latestUserMessage);
@@ -81,7 +84,8 @@ function buildPrompt(
       }),
       buildBusinessProfilePrompt(companyProfile),
       companyProfile,
-      configuredBizPrompt
+      configuredBizPrompt,
+      temporalContext
     ),
     context
       ? `## Company Knowledge Base\nUse the following information to answer accurately and contextually:\n\n${context}`
@@ -106,6 +110,7 @@ async function sendMessage(companyId, messages, options = {}) {
     assistantName,
     languageConfig,
     configuredBusinessInfo,
+    temporalContext,
     ..._rest
   } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
@@ -128,7 +133,8 @@ async function sendMessage(companyId, messages, options = {}) {
     modeContext,
     assistantName,
     languageConfig,
-    configuredBusinessInfo
+    configuredBusinessInfo,
+    temporalContext
   );
   const candidates = [modelName, ...GEMINI_MODEL_FALLBACKS].filter((v, i, arr) => v && arr.indexOf(v) === i);
   try {

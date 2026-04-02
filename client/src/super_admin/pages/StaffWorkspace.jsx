@@ -34,7 +34,7 @@ export default function StaffWorkspace() {
         <div>
           <h2 className="sa-page-title">Staff Workspace</h2>
           <p className="sa-text-muted sa-mb">
-            Signed in as {admin?.name || admin?.email}. Your roles: <strong>{admin?.roleName || 'Staff'}</strong>.
+            Signed in as {admin?.name.toUpperCase() || admin?.email}. Your roles: <strong>{admin?.roleName || 'Staff'}</strong>.
           </p>
         </div>
       </div>

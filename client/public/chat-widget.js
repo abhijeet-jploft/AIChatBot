@@ -207,6 +207,10 @@
   var stopActivationWatchers = null;
   var messages = [];
   var sessionId = null;
+  var initialSessionIdFromQuery = null;
+  var pendingInitialSessionLoad = false;
+  var initialSessionLoadStarted = false;
+  var sessionLoadGeneration = 0;
   var sessions = [];
   var loading = false;
   var persistedWidgetOpen = false;
@@ -234,11 +238,13 @@
   var speechRecognition = null;
   var keepMicOpen = false;
   var micRecording = false;
+  var lastMicTranscript = '';
+  var lastMicTranscriptTime = 0;
   var voiceEnabled = false;
   var voiceResponseEnabled = true;
   var voiceGender = 'female';
   var voiceIgnoreEmoji = false;
-  var leadCaptureDraft = { name: '', phone: '', email: '' };
+  var leadCaptureDraft = { name: '', phone: '', phoneCode: '+1', phoneLocal: '', email: '' };
 
   var root = null;
   var launcher = null;
@@ -269,13 +275,57 @@
   var viewport = getViewport();
   var widgetButtonPos = getDefaultWidgetButtonPosition(viewport.width, viewport.height);
 
+  function getNowIso() {
+    return new Date().toISOString();
+  }
+
+  function normalizeMessageObject(message, fallbackCreatedAt) {
+    if (!message || typeof message !== 'object') return null;
+    var role = String(message.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
+    var content = String(message.content || '').trim();
+    if (!content) return null;
+
+    var createdAtRaw = message.createdAt || message.created_at || fallbackCreatedAt || getNowIso();
+    var createdAt = new Date(createdAtRaw);
+    var safeCreatedAt = isNaN(createdAt.getTime()) ? getNowIso() : createdAt.toISOString();
+
+    return {
+      role: role,
+      content: content,
+      createdAt: safeCreatedAt,
+      voiceUrl: message.voiceUrl || message.voice_url || undefined,
+    };
+  }
+
+  function normalizeMessageList(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (entry) {
+      return normalizeMessageObject(entry);
+    }).filter(Boolean);
+  }
+
+  function formatMessageDateTime(value) {
+    if (!value) return '';
+    var dt = new Date(value);
+    if (isNaN(dt.getTime())) return '';
+
+    var now = new Date();
+    var sameDay = dt.getFullYear() === now.getFullYear()
+      && dt.getMonth() === now.getMonth()
+      && dt.getDate() === now.getDate();
+
+    var time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (sameDay) return time;
+    return dt.toLocaleDateString() + ' ' + time;
+  }
+
   (function readPersistedState() {
     try {
       var raw = typeof localStorage !== 'undefined' && localStorage.getItem(CHAT_STATE_KEY);
       if (!raw) return;
       var s = JSON.parse(raw);
       if (s && typeof s === 'object' && s.companyId && s.companyId === companyId) {
-        if (Array.isArray(s.messages)) messages = s.messages;
+        if (Array.isArray(s.messages)) messages = normalizeMessageList(s.messages);
         if (s.sessionId != null) sessionId = s.sessionId;
         if (s.openingMessageShown != null) openingMessageShown = s.openingMessageShown;
         if (s.widgetButtonPos && typeof s.widgetButtonPos.x === 'number' && typeof s.widgetButtonPos.y === 'number') {
@@ -283,6 +333,20 @@
         }
         if (s.widgetOpen === true) persistedWidgetOpen = true;
       }
+    } catch (e) {}
+  })();
+
+  (function readSessionFromQuery() {
+    try {
+      if (!window || !window.location) return;
+      var params = new URLSearchParams(window.location.search || '');
+      var querySessionId = String(params.get('sessionId') || params.get('session_id') || '').trim();
+      if (!querySessionId) return;
+      initialSessionIdFromQuery = querySessionId;
+      sessionId = querySessionId;
+      messages = [];
+      openingMessageShown = true;
+      pendingInitialSessionLoad = true;
     } catch (e) {}
   })();
 
@@ -665,12 +729,13 @@
     fetch(apiUrl + '/sessions/' + encodeURIComponent(id), { method: 'DELETE', headers: mergeHeaders() })
       .then(function () {
         if (sessionId === id) {
+          sessionLoadGeneration += 1;
           stopMicCapture();
           pauseAssistantVoice();
           sessionId = null;
           messages = [];
           openingMessageShown = false;
-          messages.push({ role: 'assistant', content: getOpeningMessage() });
+          messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
           openingMessageShown = true;
           renderMessages();
           persistState();
@@ -727,13 +792,17 @@
     }
     sendPresenceTyping(false);
     requestGeneration++;
+    sessionLoadGeneration += 1;
+    pendingInitialSessionLoad = false;
+    initialSessionLoadStarted = true;
+    hideEmbedPageLoadingScreen();
     loading = false;
     sessionId = null;
-    leadCaptureDraft = { name: '', phone: '', email: '' };
+    leadCaptureDraft = { name: '', phone: '', phoneCode: '+1', phoneLocal: '', email: '' };
     sendPresenceRegister(undefined);
     messages = [];
     openingMessageShown = false;
-    messages.push({ role: 'assistant', content: getOpeningMessage() });
+    messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
     openingMessageShown = true;
     if (inputEl) {
       inputEl.value = '';
@@ -745,7 +814,9 @@
     if (sidebarEl && isFullscreen) renderSidebar();
   }
 
-  function selectSession(id) {
+  function selectSession(id, options) {
+    options = options || {};
+    var currentLoadGeneration = ++sessionLoadGeneration;
     stopMicCapture();
     pauseAssistantVoice();
     sessionId = id;
@@ -755,7 +826,11 @@
     fetch(apiUrl + '/sessions/' + encodeURIComponent(id) + '/messages', { headers: mergeHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        messages = Array.isArray(data) ? data.map(function (m) {
+        if (currentLoadGeneration !== sessionLoadGeneration) {
+          if (typeof options.onComplete === 'function') options.onComplete(false);
+          return;
+        }
+        var sourceMessages = Array.isArray(data) ? data.map(function (m) {
           var content = m.role === 'assistant'
             ? normalizeAssistantNameInText(m.content, chatbotDisplayName)
             : m.content;
@@ -763,22 +838,43 @@
             role: m.role,
             content: content,
             voiceUrl: m.voice_url || m.voiceUrl || undefined,
+            createdAt: m.createdAt || m.created_at || getNowIso(),
           };
         }) : [];
+        messages = normalizeMessageList(sourceMessages);
         loading = false;
         setSendButtonState();
         applyVoiceFeatureState();
         renderMessages();
         persistState();
         if (sidebarEl && isFullscreen) renderSidebar();
+        if (typeof options.onComplete === 'function') options.onComplete(true);
       })
       .catch(function () {
+        if (currentLoadGeneration !== sessionLoadGeneration) {
+          if (typeof options.onComplete === 'function') options.onComplete(false);
+          return;
+        }
         messages = [];
         loading = false;
         setSendButtonState();
         renderMessages();
         if (sidebarEl && isFullscreen) renderSidebar();
+        if (typeof options.onComplete === 'function') options.onComplete(false);
       });
+  }
+
+  function startInitialSessionLoadIfNeeded() {
+    if (!pendingInitialSessionLoad || !initialSessionIdFromQuery) return;
+    if (initialSessionLoadStarted) return;
+
+    initialSessionLoadStarted = true;
+    selectSession(initialSessionIdFromQuery, {
+      onComplete: function () {
+        pendingInitialSessionLoad = false;
+        hideEmbedPageLoadingScreen();
+      },
+    });
   }
 
   function toggleFullscreen(event) {
@@ -854,6 +950,9 @@
       '#jploft-chat-root .jploft-bubble{position:relative;max-width:min(85%,780px);padding:8px 12px;border:1px solid var(--chat-border);box-shadow:0 12px 26px -22px rgba(0,0,0,.55);font-size:13.5px;line-height:1.45;word-break:break-word}',
       '#jploft-chat-root .jploft-bubble.user{background:var(--user-bubble,var(--chat-accent));color:var(--user-bubble-text,#fff);border-color:transparent;border-radius:16px 16px 0 16px}',
       '#jploft-chat-root .jploft-bubble.assistant{background:var(--assistant-bubble,var(--chat-surface));color:var(--chat-text);border-radius:16px 16px 16px 0}',
+      '#jploft-chat-root .jploft-msg-meta{margin-top:8px;font-size:11px;line-height:1.2;opacity:.78}',
+      '#jploft-chat-root .jploft-msg-meta.user{text-align:right;color:rgba(255,255,255,.88)}',
+      '#jploft-chat-root .jploft-msg-meta.assistant{text-align:left;color:var(--chat-muted)}',
       '#jploft-chat-root .jploft-content.user{white-space:pre-wrap}',
       '#jploft-chat-root .jploft-content.assistant p{margin:0 0 .45em;line-height:1.55}',
       '#jploft-chat-root .jploft-content.assistant p:last-child{margin-bottom:0}',
@@ -874,7 +973,11 @@
       '#jploft-chat-root .jploft-lead-field span{font-size:.76rem;font-weight:600;color:var(--chat-text-heading)}',
       '#jploft-chat-root .jploft-lead-field-full{grid-column:1 / -1}',
       '#jploft-chat-root .jploft-lead-field input{width:100%;min-width:0;border:1px solid var(--chat-border);border-radius:10px;background:var(--chat-surface);color:var(--chat-text);padding:.62rem .72rem;font-size:.9rem;outline:none}',
+      '#jploft-chat-root .jploft-lead-phone-row{display:flex;align-items:stretch;gap:.45rem}',
+      '#jploft-chat-root .jploft-lead-phone-code{width:92px;min-width:88px;border:1px solid var(--chat-border);border-radius:10px;background:var(--chat-surface);color:var(--chat-text);padding:.62rem .35rem;font-size:.82rem;outline:none}',
+      '#jploft-chat-root .jploft-lead-phone-local{flex:1}',
       '#jploft-chat-root .jploft-lead-field input:focus{border-color:var(--chat-accent);box-shadow:0 0 0 3px rgba(224,47,58,.14)}',
+      '#jploft-chat-root .jploft-lead-phone-code:focus{border-color:var(--chat-accent);box-shadow:0 0 0 3px rgba(224,47,58,.14)}',
       '#jploft-chat-root .jploft-lead-actions{display:flex;justify-content:flex-end;margin-top:.7rem}',
       '#jploft-chat-root .jploft-lead-submit{border:0;border-radius:10px;padding:.6rem .9rem;font-size:.88rem;font-weight:600;color:#fff;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));box-shadow:0 12px 26px -18px var(--chat-launcher-shadow);cursor:pointer}',
       '#jploft-chat-root .jploft-lead-submit:disabled{opacity:.65;cursor:not-allowed}',
@@ -1011,6 +1114,32 @@
   var CONTACT_PHONE_GLOBAL_RE = /(^|[^\w])((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)(?=$|[^\w])/g;
   var WHATSAPP_LABELLED_PHONE_RE = /(\b(?:whats\s*app|whatsapp|wa)\b(?:\s+(?:number|no\.?|contact|chat|support|mobile))?\s*[:=-]?\s*)((?:[+＋]|00)?\d[\d\s().\-‐‑‒–—﹣－]{6,}\d)/gi;
 
+  var LEAD_COUNTRY_CODE_OPTIONS = [
+    { code: '+1', label: 'US/CA (+1)' },
+    { code: '+44', label: 'UK (+44)' },
+    { code: '+91', label: 'India (+91)' },
+    { code: '+61', label: 'Australia (+61)' },
+    { code: '+64', label: 'New Zealand (+64)' },
+    { code: '+65', label: 'Singapore (+65)' },
+    { code: '+81', label: 'Japan (+81)' },
+    { code: '+82', label: 'South Korea (+82)' },
+    { code: '+86', label: 'China (+86)' },
+    { code: '+33', label: 'France (+33)' },
+    { code: '+49', label: 'Germany (+49)' },
+    { code: '+34', label: 'Spain (+34)' },
+    { code: '+39', label: 'Italy (+39)' },
+    { code: '+31', label: 'Netherlands (+31)' },
+    { code: '+41', label: 'Switzerland (+41)' },
+    { code: '+971', label: 'UAE (+971)' },
+    { code: '+966', label: 'Saudi Arabia (+966)' },
+    { code: '+27', label: 'South Africa (+27)' },
+    { code: '+55', label: 'Brazil (+55)' },
+    { code: '+52', label: 'Mexico (+52)' },
+  ];
+  var LEAD_COUNTRY_CODES_BY_LENGTH = LEAD_COUNTRY_CODE_OPTIONS
+    .map(function (item) { return item.code; })
+    .sort(function (a, b) { return b.length - a.length; });
+
   function normalizePhoneForHref(rawPhone) {
     var source = String(rawPhone || '').trim();
     if (!source) return '';
@@ -1018,6 +1147,79 @@
     var digits = source.replace(/\D/g, '');
     if (digits.length < 8 || digits.length > 15) return '';
     return (startsWithPlus ? '+' : '') + digits;
+  }
+
+  function normalizeLeadCountryCode(rawCode, fallbackCode) {
+    var source = String(rawCode || '').trim();
+    if (!source) source = String(fallbackCode || '+1').trim();
+    if (!source) source = '+1';
+    if (source.indexOf('00') === 0) source = '+' + source.slice(2);
+    if (source.charAt(0) !== '+') source = '+' + source;
+    source = '+' + source.slice(1).replace(/\D/g, '');
+    if (!/^\+\d{1,4}$/.test(source)) return '';
+    return source;
+  }
+
+  function normalizeLeadLocalPhone(rawLocal) {
+    return String(rawLocal || '').replace(/\D/g, '');
+  }
+
+  function splitLeadPhoneForForm(rawPhone, defaultCountryCode) {
+    var safeDefaultCode = normalizeLeadCountryCode(defaultCountryCode, '+1') || '+1';
+    var raw = String(rawPhone || '').trim();
+    if (!raw) return { countryCode: safeDefaultCode, localNumber: '' };
+
+    var compact = raw.replace(/[^\d+]/g, '');
+    if (!compact.startsWith('+')) {
+      return { countryCode: safeDefaultCode, localNumber: normalizeLeadLocalPhone(raw) };
+    }
+
+    var matchedCode = LEAD_COUNTRY_CODES_BY_LENGTH.find(function (code) {
+      return compact.indexOf(code) === 0;
+    });
+    if (!matchedCode) {
+      return { countryCode: safeDefaultCode, localNumber: compact.replace(/^\+/, '').replace(/\D/g, '') };
+    }
+
+    return {
+      countryCode: matchedCode,
+      localNumber: compact.slice(matchedCode.length).replace(/\D/g, ''),
+    };
+  }
+
+  function normalizeLeadPhoneForSubmit(rawPhoneOrCode, maybeLocalNumber) {
+    if (maybeLocalNumber !== undefined) {
+      var normalizedCode = normalizeLeadCountryCode(rawPhoneOrCode, '+1');
+      var normalizedLocal = normalizeLeadLocalPhone(maybeLocalNumber);
+      if (!normalizedLocal) return '';
+      if (!normalizedCode) return '';
+      return normalizedCode + normalizedLocal;
+    }
+
+    var parsed = splitLeadPhoneForForm(rawPhoneOrCode, '+1');
+    if (!parsed.localNumber) return '';
+    return parsed.countryCode + parsed.localNumber;
+  }
+
+  function isValidLeadPhoneWithCode(rawPhoneOrCode, maybeLocalNumber) {
+    var normalized = normalizeLeadPhoneForSubmit(rawPhoneOrCode, maybeLocalNumber);
+    return /^\+\d{6,15}$/.test(normalized);
+  }
+
+  function isValidLeadEmail(rawEmail) {
+    var email = String(rawEmail || '').trim();
+    if (!email) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+  }
+
+  function isValidLeadName(rawName) {
+    var name = String(rawName || '').trim();
+    if (name.length < 2 || name.length > 80) return false;
+    try {
+      return /^[\p{L}\p{M}][\p{L}\p{M}\s.'-]{1,79}$/u.test(name);
+    } catch (e) {
+      return /^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(name);
+    }
   }
 
   /** WhatsApp chat/deep link using +<countrycode><number> format. */
@@ -1319,10 +1521,18 @@
   }
 
   function renderLeadCaptureForm(draft) {
+    var parsedPhone = splitLeadPhoneForForm(draft.phone || '', draft.phoneCode || '+1');
+    var phoneCode = normalizeLeadCountryCode(draft.phoneCode, parsedPhone.countryCode || '+1') || '+1';
+    var phoneLocal = normalizeLeadLocalPhone(draft.phoneLocal || parsedPhone.localNumber || '');
+    var phoneCodeOptionsHtml = LEAD_COUNTRY_CODE_OPTIONS.map(function (item) {
+      var selected = item.code === phoneCode ? ' selected' : '';
+      return '<option value="' + escapeAttr(item.code) + '"' + selected + '>' + escapeHtml(item.label) + '</option>';
+    }).join('');
+
     return '<form class="jploft-lead-form">' +
       '<div class="jploft-lead-grid">' +
         '<label class="jploft-lead-field"><span>Name</span><input type="text" name="name" placeholder="Your name" value="' + escapeAttr(draft.name || '') + '"></label>' +
-        '<label class="jploft-lead-field"><span>Phone</span><input type="tel" name="phone" placeholder="+1 555 123 4567" value="' + escapeAttr(draft.phone || '') + '"></label>' +
+        '<label class="jploft-lead-field jploft-lead-field-full"><span>Phone</span><div class="jploft-lead-phone-row"><select name="phoneCode" class="jploft-lead-phone-code">' + phoneCodeOptionsHtml + '</select><input type="tel" name="phone" class="jploft-lead-phone-local" placeholder="5551234567" value="' + escapeAttr(phoneLocal) + '"></div></label>' +
         '<label class="jploft-lead-field jploft-lead-field-full"><span>Email</span><input type="email" name="email" placeholder="you@example.com" value="' + escapeAttr(draft.email || '') + '"></label>' +
       '</div>' +
       '<div class="jploft-lead-error" aria-live="polite"></div>' +
@@ -1425,6 +1635,18 @@
       : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
   }
 
+  function normalizeVoiceTranscript(rawValue) {
+    var normalized = String(rawValue || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+    normalized = normalized
+      .replace(/^(?:please\s+)?(?:text|new|voice)\s+message\b[:\s-]*/i, '')
+      .replace(/^(?:please\s+)?send\s+message\b[:\s-]*/i, '')
+      .trim();
+    if (!normalized) return '';
+    if (/^(text\s+message|new\s+message|message|send\s+message)$/i.test(normalized)) return '';
+    return normalized;
+  }
+
   function stopMicCapture() {
     keepMicOpen = false;
     if (speechRecognition) {
@@ -1453,10 +1675,17 @@
           finalTranscript += result[0].transcript;
         }
       }
-      if (finalTranscript.trim()) {
+      var normalizedTranscript = normalizeVoiceTranscript(finalTranscript);
+      if (normalizedTranscript) {
+        var now = Date.now();
+        if (lastMicTranscript === normalizedTranscript && now - lastMicTranscriptTime < 2500) {
+          return; // skip duplicate caused by recognition restart
+        }
+        lastMicTranscript = normalizedTranscript;
+        lastMicTranscriptTime = now;
         inputEl.value = inputEl.value
-          ? (inputEl.value.trim() + ' ' + finalTranscript.trim())
-          : finalTranscript.trim();
+          ? (inputEl.value.trim() + ' ' + normalizedTranscript)
+          : normalizedTranscript;
         onInputChange();
       }
     };
@@ -1693,14 +1922,23 @@
 
     var leadPromptIndex = findLeadPromptIndex(messages);
     var conversationDraft = extractLeadDraftFromMessages(messages);
+    var draftPhoneValue = leadCaptureDraft.phone || conversationDraft.phone || '';
+    var parsedDraftPhone = splitLeadPhoneForForm(draftPhoneValue, leadCaptureDraft.phoneCode || '+1');
+    var draftPhoneCode = normalizeLeadCountryCode(leadCaptureDraft.phoneCode, parsedDraftPhone.countryCode || '+1') || '+1';
+    var draftPhoneLocal = normalizeLeadLocalPhone(leadCaptureDraft.phoneLocal || parsedDraftPhone.localNumber || '');
+    var normalizedDraftPhone = normalizeLeadPhoneForSubmit(draftPhoneCode, draftPhoneLocal);
     var leadDraft = {
       name: leadCaptureDraft.name || conversationDraft.name || '',
-      phone: leadCaptureDraft.phone || conversationDraft.phone || '',
+      phone: normalizedDraftPhone || draftPhoneValue,
+      phoneCode: draftPhoneCode,
+      phoneLocal: draftPhoneLocal,
       email: leadCaptureDraft.email || conversationDraft.email || '',
     };
 
     var html = messages.map(function (m, i) {
       var cls = m.role === 'user' ? 'user' : 'assistant';
+      var metaLabel = formatMessageDateTime(m.createdAt || m.created_at || '');
+      var metaHtml = metaLabel ? '<div class="jploft-msg-meta ' + cls + '">' + escapeHtml(metaLabel) + '</div>' : '';
       var contentHtml = cls === 'assistant'
         ? renderAssistantContent(m.content)
         : escapeHtml(m.content).replace(/\n/g, '<br>');
@@ -1722,7 +1960,7 @@
           '</button>' + waveHtml + '</div>';
       }
       return '<div class="jploft-msg ' + cls + '"><div class="jploft-bubble ' + cls + '">' +
-        '<div class="jploft-content ' + cls + '">' + contentHtml + '</div>' + leadFormHtml + voiceHtml +
+        '<div class="jploft-content ' + cls + '">' + contentHtml + '</div>' + leadFormHtml + voiceHtml + metaHtml +
         '</div></div>';
     }).join('');
 
@@ -1744,22 +1982,59 @@
     });
     messagesEl.querySelectorAll('.jploft-lead-form').forEach(function (form) {
       var errorEl = form.querySelector('.jploft-lead-error');
-      ['name', 'phone', 'email'].forEach(function (field) {
-        var input = form.querySelector('[name="' + field + '"]');
-        if (!input) return;
-        input.addEventListener('input', function () {
-          leadCaptureDraft[field] = input.value;
+      var nameInput = form.querySelector('[name="name"]');
+      var emailInput = form.querySelector('[name="email"]');
+      var phoneCodeInput = form.querySelector('[name="phoneCode"]');
+      var phoneLocalInput = form.querySelector('[name="phone"]');
+
+      function syncLeadPhoneDraftFromForm() {
+        var countryCode = normalizeLeadCountryCode((phoneCodeInput && phoneCodeInput.value) || '', '+1') || '+1';
+        var localPhone = normalizeLeadLocalPhone((phoneLocalInput && phoneLocalInput.value) || '');
+        if (phoneCodeInput) phoneCodeInput.value = countryCode;
+        if (phoneLocalInput) phoneLocalInput.value = localPhone;
+        leadCaptureDraft.phoneCode = countryCode;
+        leadCaptureDraft.phoneLocal = localPhone;
+        leadCaptureDraft.phone = normalizeLeadPhoneForSubmit(countryCode, localPhone);
+      }
+
+      if (nameInput) {
+        nameInput.addEventListener('input', function () {
+          leadCaptureDraft.name = nameInput.value;
           if (errorEl) errorEl.textContent = '';
         });
-      });
+      }
+      if (emailInput) {
+        emailInput.addEventListener('input', function () {
+          leadCaptureDraft.email = emailInput.value;
+          if (errorEl) errorEl.textContent = '';
+        });
+      }
+      if (phoneCodeInput) {
+        phoneCodeInput.addEventListener('change', function () {
+          syncLeadPhoneDraftFromForm();
+          if (errorEl) errorEl.textContent = '';
+        });
+      }
+      if (phoneLocalInput) {
+        phoneLocalInput.addEventListener('input', function () {
+          syncLeadPhoneDraftFromForm();
+          if (errorEl) errorEl.textContent = '';
+        });
+        phoneLocalInput.addEventListener('blur', function () {
+          syncLeadPhoneDraftFromForm();
+        });
+      }
       form.onsubmit = function (event) {
         event.preventDefault();
         if (loading) return;
+        syncLeadPhoneDraftFromForm();
 
         var next = {
-          name: String((form.querySelector('[name="name"]') || {}).value || '').trim(),
-          phone: String((form.querySelector('[name="phone"]') || {}).value || '').trim(),
-          email: String((form.querySelector('[name="email"]') || {}).value || '').trim(),
+          name: String((form.querySelector('[name="name"]') || {}).value || '').replace(/\s+/g, ' ').trim(),
+          phoneCode: normalizeLeadCountryCode((form.querySelector('[name="phoneCode"]') || {}).value || '', '+1') || '+1',
+          phoneLocal: normalizeLeadLocalPhone((form.querySelector('[name="phone"]') || {}).value || ''),
+          phone: '',
+          email: String((form.querySelector('[name="email"]') || {}).value || '').trim().toLowerCase(),
         };
 
         if (!next.name) {
@@ -1767,12 +2042,34 @@
           return;
         }
 
-        if (!normalizePhoneForHref(next.phone) && !next.email) {
+        if (!isValidLeadName(next.name)) {
+          if (errorEl) errorEl.textContent = 'Please enter a valid name.';
+          return;
+        }
+
+        if (next.email && !isValidLeadEmail(next.email)) {
+          if (errorEl) errorEl.textContent = 'Please enter a valid email address.';
+          return;
+        }
+
+        if (next.phoneLocal) {
+          if (!next.phoneCode || !/^\+\d{1,4}$/.test(next.phoneCode)) {
+            if (errorEl) errorEl.textContent = 'Please select a valid country code.';
+            return;
+          }
+          next.phone = normalizeLeadPhoneForSubmit(next.phoneCode, next.phoneLocal);
+          if (!isValidLeadPhoneWithCode(next.phoneCode, next.phoneLocal)) {
+            if (errorEl) errorEl.textContent = 'Phone number must be 6 to 15 digits with country code.';
+            return;
+          }
+        }
+
+        if (!next.phone && !next.email) {
           if (errorEl) errorEl.textContent = 'Add a phone number or email address.';
           return;
         }
 
-        leadCaptureDraft = { name: '', phone: '', email: '' };
+        leadCaptureDraft = { name: '', phone: '', phoneCode: '+1', phoneLocal: '', email: '' };
         sendToApi(buildLeadCaptureMessage(next));
       };
     });
@@ -1810,7 +2107,11 @@
     var nextOpeningMessage = getOpeningMessage();
     if (messages[0].content === nextOpeningMessage) return;
 
-    messages[0] = { role: 'assistant', content: nextOpeningMessage };
+    messages[0] = {
+      role: 'assistant',
+      content: nextOpeningMessage,
+      createdAt: (messages[0] && messages[0].createdAt) || getNowIso(),
+    };
     if (messagesEl) renderMessages();
     persistState();
   }
@@ -1822,7 +2123,7 @@
     resetActivationWatchers();
 
     if (messages.length === 0 && !openingMessageShown) {
-      messages.push({ role: 'assistant', content: getOpeningMessage() });
+      messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
       openingMessageShown = true;
       renderMessages();
       persistState();
@@ -1862,8 +2163,19 @@
 
   function sendToApi(userContent, callback) {
     var gen = requestGeneration;
+    var nowIso = getNowIso();
+    var clientTimezone = '';
+    try {
+      if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
+        clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      }
+    } catch (e) {}
     // Optimistic: push the user message immediately so it's visible before the API responds.
-    messages.push({ role: 'user', content: userContent });
+    messages.push({
+      role: 'user',
+      content: userContent,
+      createdAt: nowIso,
+    });
     var msgs = messages.slice(); // snapshot for API (user msg already included)
     loading = true;
     setSendButtonState();
@@ -1871,11 +2183,17 @@
     renderMessages();
 
     var pageUrl = typeof window !== 'undefined' && window.location ? window.location.href : '';
+    var idempotencyKey = 'ik_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
     var payload = {
       companyId: companyId,
       sessionId: sessionId || undefined,
-      messages: msgs.map(function (m) { return { role: m.role, content: m.content }; }),
+      messages: msgs.map(function (m) {
+        return { role: m.role, content: m.content, createdAt: m.createdAt || getNowIso() };
+      }),
       pageUrl: pageUrl,
+      clientTime: nowIso,
+      clientTimezone: clientTimezone,
+      idempotencyKey: idempotencyKey,
     };
 
     function requestChatMessage(attempt) {
@@ -1912,8 +2230,9 @@
       .catch(function (err) {
         var status = Number(err && err.httpStatus);
         var retryable = !status || status >= 500 || status === 429;
-        if (attempt < 1 && retryable) {
-          return new Promise(function (resolve) { setTimeout(resolve, 700); })
+        if (attempt < 2 && retryable) {
+          var retryDelayMs = attempt === 0 ? 700 : 1300;
+          return new Promise(function (resolve) { setTimeout(resolve, retryDelayMs); })
             .then(function () { return requestChatMessage(attempt + 1); });
         }
         throw err;
@@ -1931,6 +2250,7 @@
         messages.push({
           role: 'assistant',
           content: assistantText,
+          createdAt: String((data && data.createdAt) || '') || getNowIso(),
           voiceUrl: voiceUrl || undefined,
         });
         loading = false;
@@ -1978,7 +2298,11 @@
           }).catch(function () {});
         } catch (ignore) {}
         // User message was already pushed optimistically — just add error assistant message.
-        messages.push({ role: 'assistant', content: 'We are facing some technical issue. Please try again.' });
+        messages.push({
+          role: 'assistant',
+          content: 'We are facing some technical issue. Please try again.',
+          createdAt: getNowIso(),
+        });
         loading = false;
         setSendButtonState();
         applyVoiceFeatureState();
@@ -1999,6 +2323,7 @@
       typingTimer = null;
     }
     sendPresenceTyping(false);
+    stopMicCapture();
 
     inputEl.value = '';
     resizeInput();
@@ -2140,12 +2465,13 @@
       if (panel) {
         panel.style.display = 'flex';
         if (messages.length === 0 && !openingMessageShown) {
-          messages.push({ role: 'assistant', content: getOpeningMessage() });
+          messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
           openingMessageShown = true;
         }
         renderMessages();
         updatePanelPosition();
       }
+      startInitialSessionLoadIfNeeded();
       persistState();
     }
 
@@ -2270,6 +2596,7 @@
             messages.push({
               role: 'assistant',
               content: assistantText,
+              createdAt: msg.createdAt || msg.created_at || getNowIso(),
               voiceUrl: msg.voice && msg.voice.audioDataUrl ? String(msg.voice.audioDataUrl) : undefined,
             });
             renderMessages();
@@ -2516,7 +2843,11 @@
         if (widgetRoot) setWidgetRootAwaitingCompanies(widgetRoot, false);
         resetActivationWatchers();
         if (!activated) runActivation();
-        hideEmbedPageLoadingScreen();
+        if (pendingInitialSessionLoad) {
+          startInitialSessionLoadIfNeeded();
+        } else {
+          hideEmbedPageLoadingScreen();
+        }
       });
   }
 
@@ -2531,6 +2862,7 @@
 
     if (launcher && !opened) launcher.style.display = 'flex';
     openPanel();
+    startInitialSessionLoadIfNeeded();
   }
 
   function runActivation() {

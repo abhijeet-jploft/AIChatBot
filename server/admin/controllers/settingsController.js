@@ -1,5 +1,8 @@
 const CompanyAdmin = require('../models/CompanyAdmin');
 const pool = require('../../db/index');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const { mergeCompanyTheme } = require('../../services/companyTheme');
 const {
   getModeCatalog,
@@ -38,10 +41,46 @@ const {
 } = require('../../services/adminSettingsAccess');
 const { normalizeHttpUrl, normalizePhoneWithCountryCode } = require('../../utils/contactValidation');
 
+const ICON_UPLOAD_MAX_BYTES = 1 * 1024 * 1024;
+const ICON_ALLOWED_EXTENSIONS = new Set(['.ico', '.png', '.jpg', '.jpeg', '.webp', '.svg']);
+const ICON_ALLOWED_MIME_HINTS = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/svg+xml',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+];
+
 function normalizeNotificationEmail(value) {
   if (value === undefined) return undefined;
   const email = String(value || '').trim().toLowerCase();
   return email || null;
+}
+
+function resolveIconUploadExtension(file = null) {
+  const originalName = String(file?.originalname || '').trim().toLowerCase();
+  const mime = String(file?.mimetype || '').trim().toLowerCase();
+  const extFromName = path.extname(originalName);
+
+  if (ICON_ALLOWED_EXTENSIONS.has(extFromName)) {
+    return extFromName === '.jpeg' ? '.jpg' : extFromName;
+  }
+
+  if (mime === 'image/png') return '.png';
+  if (mime === 'image/jpeg') return '.jpg';
+  if (mime === 'image/webp') return '.webp';
+  if (mime === 'image/svg+xml') return '.svg';
+  if (mime === 'image/x-icon' || mime === 'image/vnd.microsoft.icon') return '.ico';
+  if (mime === 'application/octet-stream' && extFromName === '.ico') return '.ico';
+
+  return '';
+}
+
+function isAllowedIconMime(file = null) {
+  const mime = String(file?.mimetype || '').trim().toLowerCase();
+  if (!mime) return true;
+  return ICON_ALLOWED_MIME_HINTS.includes(mime) || mime === 'application/octet-stream';
 }
 
 function isValidEmail(email) {
@@ -449,6 +488,50 @@ async function getSettings(req, res) {
   } catch (err) {
     console.error('[admin settings] get:', err);
     res.status(500).json({ error: err.message });
+  }
+}
+
+async function uploadCompanyIcon(req, res) {
+  try {
+    const file = req.file;
+    if (!file?.buffer) {
+      return res.status(400).json({ error: 'Icon file is required (field name: icon).' });
+    }
+
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      return res.status(400).json({ error: 'Uploaded icon is empty.' });
+    }
+
+    if (file.size > ICON_UPLOAD_MAX_BYTES) {
+      return res.status(400).json({ error: 'Icon must be 1MB or smaller.' });
+    }
+
+    if (!isAllowedIconMime(file)) {
+      return res.status(400).json({ error: 'Only ICO, PNG, JPG, JPEG, WEBP, or SVG images are allowed.' });
+    }
+
+    const ext = resolveIconUploadExtension(file);
+    if (!ext) {
+      return res.status(400).json({ error: 'Only ICO, PNG, JPG, JPEG, WEBP, or SVG images are allowed.' });
+    }
+
+    const safeCompanyId = String(req.adminCompanyId || '_default').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80) || '_default';
+    const uploadDir = path.join(__dirname, '../../../uploads/company-icons', safeCompanyId);
+    fs.mkdirSync(uploadDir, { recursive: true });
+
+    const fileName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+    const absolutePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(absolutePath, file.buffer);
+
+    const publicUrl = `/uploads/company-icons/${encodeURIComponent(safeCompanyId)}/${encodeURIComponent(fileName)}`;
+    await CompanyAdmin.updateSettings(req.adminCompanyId, {
+      icon_url: publicUrl,
+    });
+
+    return res.json({ iconUrl: publicUrl });
+  } catch (err) {
+    console.error('[admin settings] upload icon:', err);
+    return res.status(500).json({ error: err.message || 'Failed to upload icon.' });
   }
 }
 
@@ -984,6 +1067,7 @@ module.exports = {
   getSettings,
   getSettingsJsonForCompany,
   updateSettings,
+  uploadCompanyIcon,
   previewVoice,
   listVoices,
   debugVoices,

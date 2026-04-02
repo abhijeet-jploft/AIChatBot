@@ -40,6 +40,11 @@ function parseListFilters(query = {}) {
 
 function csvEscape(value) {
   const text = value === null || value === undefined ? '' : String(value);
+  if (!text) return text;
+  // Preserve phone numbers: wrap leading-+ values so Excel/Sheets don't mangle them.
+  if (/^\+?\d[\d\s()-]{4,}$/.test(text)) {
+    return `="${text.replace(/"/g, '""')}"`;
+  }
   if (!/[",\n\r]/.test(text)) return text;
   return `"${text.replace(/"/g, '""')}"`;
 }

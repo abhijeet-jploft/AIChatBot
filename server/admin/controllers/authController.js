@@ -2,8 +2,31 @@ const CompanyAdmin = require('../models/CompanyAdmin');
 const { hashPassword, verifyPassword, generateToken, getSessionExpiry } = require('../utils/auth');
 const { buildAdminVisibilityPayload } = require('../../services/adminSettingsAccess');
 
+function buildEmbedPayload(company) {
+  const slug = String(company?.embed_slug || '').trim();
+  const secret = String(company?.embed_secret || '').trim();
+  const companyId = String(company?.company_id || '').trim();
+  if (!slug || !secret || !companyId) {
+    return {
+      embedSlug: null,
+      embedPath: null,
+      embedUrl: null,
+    };
+  }
+
+  const embedPath = `/embed/${encodeURIComponent(slug)}/${encodeURIComponent(secret)}?companyId=${encodeURIComponent(companyId)}`;
+  const publicBase = String(process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+
+  return {
+    embedSlug: slug,
+    embedPath,
+    embedUrl: publicBase ? `${publicBase}${embedPath}` : null,
+  };
+}
+
 function buildMePayload(company) {
   if (!company) return null;
+  const embed = buildEmbedPayload(company);
   return {
     companyId: company.company_id,
     name: company.name,
@@ -18,6 +41,9 @@ function buildMePayload(company) {
     isSuspended: Boolean(company.is_suspended),
     iconUrl: company.icon_url || null,
     greetingMessage: company.greeting_message || null,
+    embedSlug: embed.embedSlug,
+    embedPath: embed.embedPath,
+    embedUrl: embed.embedUrl,
     adminVisibility: buildAdminVisibilityPayload(company),
   };
 }
@@ -70,6 +96,15 @@ async function login(req, res) {
       companyId: cid,
       companyName: company.name,
       adminEmail: company.admin_email || null,
+      embedSlug: companySettings?.embed_slug || null,
+      embedPath: (() => {
+        const embed = buildEmbedPayload(companySettings || company);
+        return embed.embedPath;
+      })(),
+      embedUrl: (() => {
+        const embed = buildEmbedPayload(companySettings || company);
+        return embed.embedUrl;
+      })(),
       adminVisibility: buildAdminVisibilityPayload(companySettings),
     });
   } catch (err) {

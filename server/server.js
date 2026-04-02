@@ -81,6 +81,10 @@ const superAdminUploadDir = path.join(__dirname, '../uploads/super-admin');
 fs.mkdirSync(superAdminUploadDir, { recursive: true });
 app.use('/uploads/super-admin', express.static(superAdminUploadDir));
 
+const companyIconUploadDir = path.join(__dirname, '../uploads/company-icons');
+fs.mkdirSync(companyIconUploadDir, { recursive: true });
+app.use('/uploads/company-icons', express.static(companyIconUploadDir));
+
 const clientDist = path.join(__dirname, '../client/dist');
 app.use(express.static(clientDist));
 

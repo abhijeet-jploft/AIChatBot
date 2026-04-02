@@ -251,14 +251,19 @@ function getSocketForSession(companyId, sessionId) {
 }
 
 /**
- * Push a message to a visitor's chat (admin take-over). Sends { type: 'message', content } on their WebSocket.
+ * Push a message to a visitor's chat (admin take-over).
+ * Sends { type: 'message', content, createdAt? } on their WebSocket.
  * Returns true if sent, false if no socket or not open.
  */
-function pushMessageToSession(companyId, sessionId, content) {
+function pushMessageToSession(companyId, sessionId, content, meta = {}) {
   const socket = getSocketForSession(companyId, sessionId);
   if (!socket) return false;
   try {
-    socket.send(JSON.stringify({ type: 'message', content: String(content || '') }));
+    socket.send(JSON.stringify({
+      type: 'message',
+      content: String(content || ''),
+      createdAt: meta?.createdAt || undefined,
+    }));
     return true;
   } catch (e) {
     return false;

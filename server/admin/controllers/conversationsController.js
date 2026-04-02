@@ -640,11 +640,12 @@ async function sendMessage(req, res) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
+    const createdAt = new Date().toISOString();
     await ChatMessage.create(sessionId, 'assistant', content);
     await ChatSession.touch(sessionId);
     recordLiveMessage(companyId, sessionId, 'assistant', content);
 
-    const pushed = pushMessageToSession(companyId, sessionId, content);
+    const pushed = pushMessageToSession(companyId, sessionId, content, { createdAt });
 
     res.json({ sent: true, pushedToLive: pushed });
   } catch (err) {

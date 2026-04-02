@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 import PasswordInput from '../../components/PasswordInput';
+import { validateEmail } from '../../lib/contactValidation';
 
 const cardStyle = {
   background: 'var(--chat-surface)',
@@ -58,6 +59,13 @@ export default function EmailSmtpSettings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (fromEmail.trim()) {
+      const emailCheck = validateEmail(fromEmail);
+      if (!emailCheck.valid) {
+        showToast('From address: ' + emailCheck.error, 'error');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const smtp = {
@@ -88,6 +96,13 @@ export default function EmailSmtpSettings() {
   };
 
   const handleTest = async () => {
+    if (testTo.trim()) {
+      const testCheck = validateEmail(testTo);
+      if (!testCheck.valid) {
+        showToast('Test recipient: ' + testCheck.error, 'error');
+        return;
+      }
+    }
     setTesting(true);
     try {
       const res = await authFetch('/email-smtp/test', {

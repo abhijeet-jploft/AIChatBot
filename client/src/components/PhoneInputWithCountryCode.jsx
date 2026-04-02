@@ -36,7 +36,7 @@ export default function PhoneInputWithCountryCode({
         autoComplete={autoComplete}
         disabled={disabled}
         className={inputClassName}
-        style={{ flex: '1 1 auto', minWidth: 220, ...inputStyle }}
+        style={{ flex: '1 1 auto', minWidth: 0, ...inputStyle }}
       />
     </div>
   );

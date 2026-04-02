@@ -41,10 +41,12 @@ function buildBaseSystemPrompt(
   languageInstruction = '',
   businessProfilePrompt = '',
   companyProfile = null,
-  configuredBusinessInfoPrompt = ''
+  configuredBusinessInfoPrompt = '',
+  temporalContext = ''
 ) {
   return [
     BASE_SYSTEM_PROMPT_PREFIX + buildDocxRulesPrompt({ assistantName, companyProfile }),
+    temporalContext ? `Temporal context:\n- ${String(temporalContext).trim()}` : '',
     languageInstruction,
     businessProfilePrompt,
     configuredBusinessInfoPrompt,
@@ -70,7 +72,8 @@ function buildSystemBlocks(
   modeContext = null,
   assistantName = '',
   languageConfig = {},
-  configuredBusinessInfo = null
+  configuredBusinessInfo = null,
+  temporalContext = ''
 ) {
   const modePrompt = buildConversationModePrompt(modeId, modeContext);
   const context = loadCompanyContext(companyId, userQuery);
@@ -89,7 +92,8 @@ function buildSystemBlocks(
     languageInstruction,
     buildBusinessProfilePrompt(companyProfile),
     companyProfile,
-    configuredBizPrompt
+    configuredBizPrompt,
+    temporalContext
   );
 
   if (context) {
@@ -170,6 +174,7 @@ async function sendMessage(companyId, messages, options = {}) {
     assistantName,
     languageConfig,
     configuredBusinessInfo,
+    temporalContext,
     ...anthropicOptions
   } = options || {};
   const modeId = normalizeConversationModeId(requestedModeId);
@@ -189,7 +194,8 @@ async function sendMessage(companyId, messages, options = {}) {
       modeContext,
       assistantName,
       languageConfig,
-      configuredBusinessInfo
+      configuredBusinessInfo,
+      temporalContext
     ),
     messages: buildCachedMessages(messages),
     ...anthropicOptions,

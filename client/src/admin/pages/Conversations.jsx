@@ -6,6 +6,7 @@ import {
   clampToNotBeforeFrom,
   nextToAfterFromChange,
 } from '../../utils/dateRangeFields';
+import { buildVisitorPreviewUrl } from '../lib/visitorPreview';
 
 async function toggleElementFullscreen(element) {
   if (!element) return;
@@ -117,6 +118,7 @@ export default function Conversations() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
   const [showConvertLeadModal, setShowConvertLeadModal] = useState(false);
+  const [convertLeadTargetId, setConvertLeadTargetId] = useState(null);
   const [convertLeadDraft, setConvertLeadDraft] = useState({ name: '', phone: '', email: '', location: '' });
   const [convertingLead, setConvertingLead] = useState(false);
   const [convertLeadError, setConvertLeadError] = useState('');
@@ -171,7 +173,7 @@ export default function Conversations() {
   }, [authFetch]);
 
   const openConvertLeadModal = (conversation) => {
-    setDetailId(conversation.id);
+    setConvertLeadTargetId(conversation.id);
     setConvertLeadDraft({
       name: conversation.visitorName || '',
       phone: '',
@@ -183,11 +185,11 @@ export default function Conversations() {
   };
 
   const submitConvertLead = async () => {
-    if (!detailId) return;
+    if (!convertLeadTargetId) return;
     setConvertingLead(true);
     setConvertLeadError('');
     try {
-      const res = await authFetch(`/conversations/${detailId}/convert-lead`, {
+      const res = await authFetch(`/conversations/${convertLeadTargetId}/convert-lead`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(convertLeadDraft),
@@ -195,8 +197,8 @@ export default function Conversations() {
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error || 'Failed to convert lead');
       setShowConvertLeadModal(false);
+      setConvertLeadTargetId(null);
       await loadConversations();
-      await openDetail(detailId);
     } catch (err) {
       setConvertLeadError(err.message || 'Failed to convert lead');
     } finally {
@@ -445,7 +447,7 @@ export default function Conversations() {
                               Operate Chat
                             </Link>
                             <a
-                              href={`/?sessionId=${encodeURIComponent(conv.id)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                              href={buildVisitorPreviewUrl(company, conv.id)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="btn btn-sm btn-outline-secondary"

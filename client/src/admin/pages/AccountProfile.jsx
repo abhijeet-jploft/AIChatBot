@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 import {
@@ -9,10 +8,12 @@ import {
   buildIndustryToSave,
 } from '../../lib/accountProfileIndustry';
 import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
+import PasswordInput from '../../components/PasswordInput';
 import {
   normalizeUrlForSubmit,
   splitPhoneForForm,
   validatePhone,
+  validateEmail,
 } from '../../lib/contactValidation';
 
 export default function AccountProfile() {
@@ -27,6 +28,17 @@ export default function AccountProfile() {
   const [industrySelect, setIndustrySelect] = useState('');
   const [industryOtherSpecify, setIndustryOtherSpecify] = useState('');
   const [saving, setSaving] = useState(false);
+
+  /* --- Password & sessions state --- */
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [logoutAllPending, setLogoutAllPending] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     if (!company) return;
@@ -56,6 +68,11 @@ export default function AccountProfile() {
     }
 
     const industryCategory = buildIndustryToSave(industrySelect, specify);
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.valid) {
+      showToast(emailCheck.error, 'error');
+      return;
+    }
     const phoneCheck = validatePhone(phoneCountryCode, phoneLocal);
     if (!phoneCheck.valid) {
       showToast(phoneCheck.error, 'error');
@@ -94,6 +111,86 @@ export default function AccountProfile() {
 
   const showOtherInput = industrySelect === OTHER_VALUE;
 
+  /* --- Sessions loader --- */
+  const loadSessions = () => {
+    setSessionsLoading(true);
+    authFetch('/settings/sessions')
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data.sessions || []);
+        }
+      })
+      .finally(() => setSessionsLoading(false));
+  };
+
+  useEffect(() => {
+    loadSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* --- Password change handler --- */
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      showToast('Please fill all password fields', 'error');
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      showToast('New password must be at least 8 characters', 'error');
+      return;
+    }
+    if (!/[A-Z]/.test(passwordForm.newPassword)) {
+      showToast('New password must contain at least one uppercase letter', 'error');
+      return;
+    }
+    if (!/[a-z]/.test(passwordForm.newPassword)) {
+      showToast('New password must contain at least one lowercase letter', 'error');
+      return;
+    }
+    if (!/[0-9]/.test(passwordForm.newPassword)) {
+      showToast('New password must contain at least one number', 'error');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      showToast('New password and confirmation do not match', 'error');
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const res = await authFetch('/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      showToast('Password updated successfully', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to update password', 'error');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  /* --- Logout all sessions handler --- */
+  const handleLogoutAll = () => {
+    if (!window.confirm('Log out all admin sessions for this company? You will need to sign in again.')) return;
+    setLogoutAllPending(true);
+    authFetch('/settings/sessions', { method: 'DELETE' })
+      .then(async (res) => {
+        if (res.ok) {
+          showToast('All sessions logged out', 'success');
+          loadSessions();
+          window.location.href = '/admin';
+        } else showToast('Failed to log out sessions', 'error');
+      })
+      .finally(() => setLogoutAllPending(false));
+  };
+
   return (
     <div className="p-4" id="account-profile-top">
       <div className="mb-3">
@@ -121,7 +218,7 @@ export default function AccountProfile() {
               />
             </div>
             <div className="col-md-6">
-              <label className="form-label small" style={{ color: 'var(--chat-text)' }}>Email address</label>
+              <label className="form-label small" style={{ color: 'var(--chat-text)' }}>Email address <span className="text-danger">*</span></label>
               <input
                 type="email"
                 className="form-control form-control-sm"
@@ -144,7 +241,7 @@ export default function AccountProfile() {
               />
             </div>
             <div className="col-md-6">
-              <label className="form-label small" style={{ color: 'var(--chat-text)' }}>Company name</label>
+              <label className="form-label small" style={{ color: 'var(--chat-text)' }}>Company name <span className="text-danger">*</span></label>
               <input
                 type="text"
                 className="form-control form-control-sm"
@@ -182,7 +279,7 @@ export default function AccountProfile() {
             {showOtherInput ? (
               <div className="col-12">
                 <label className="form-label small" style={{ color: 'var(--chat-text)' }}>
-                  Please specify your industry
+                  Please specify your industry <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -205,12 +302,81 @@ export default function AccountProfile() {
             <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
-            <Link to="/admin/settings" className="btn btn-outline-secondary btn-sm">
-              Change password (Settings)
-            </Link>
           </div>
         </div>
       </form>
+
+      {/* Sessions */}
+      <div className="card mt-4" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)', maxWidth: 640 }}>
+        <div className="card-body">
+          <h6 className="mb-1" style={{ color: 'var(--chat-text-heading)' }}>Sessions</h6>
+          <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>Active admin sessions for this company.</p>
+          {sessionsLoading ? (
+            <p className="small" style={{ color: 'var(--chat-muted)' }}>Loading...</p>
+          ) : sessions.length === 0 ? (
+            <p className="small" style={{ color: 'var(--chat-muted)' }}>No other active sessions.</p>
+          ) : (
+            <ul className="small mb-3 ps-3" style={{ color: 'var(--chat-muted)' }}>
+              {sessions.slice(0, 10).map((s, i) => (
+                <li key={s.id || i}>Session — created {s.created_at ? new Date(s.created_at).toLocaleString() : ''}</li>
+              ))}
+              {sessions.length > 10 && <li>... and {sessions.length - 10} more</li>}
+            </ul>
+          )}
+          <button type="button" className="btn btn-outline-danger btn-sm"
+            onClick={handleLogoutAll}
+            disabled={logoutAllPending}>
+            {logoutAllPending ? 'Logging out...' : 'Log out all sessions'}
+          </button>
+        </div>
+      </div>
+
+      {/* Password management */}
+      <div className="card mt-4" style={{ background: 'var(--chat-surface)', borderColor: 'var(--chat-border)', maxWidth: 640 }}>
+        <div className="card-body">
+          <h6 className="mb-1" style={{ color: 'var(--chat-text-heading)' }}>Password Management</h6>
+          <p className="small mb-3" style={{ color: 'var(--chat-muted)' }}>Change admin password with current password verification and strength validation.</p>
+          <div className="row g-2">
+            <div className="col-12 col-md-4">
+              <label className="form-label small" style={{ color: 'var(--chat-text)' }}>Current password <span className="text-danger">*</span></label>
+              <PasswordInput
+                className="form-control form-control-sm"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            <div className="col-12 col-md-4">
+              <label className="form-label small" style={{ color: 'var(--chat-text)' }}>New password <span className="text-danger">*</span></label>
+              <PasswordInput
+                className="form-control form-control-sm"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+            <div className="col-12 col-md-4">
+              <label className="form-label small" style={{ color: 'var(--chat-text)' }}>Confirm new password <span className="text-danger">*</span></label>
+              <PasswordInput
+                className="form-control form-control-sm"
+                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+          </div>
+          <div className="form-text mt-2" style={{ color: 'var(--chat-muted)' }}>Use at least 8 characters with uppercase, lowercase and a number.</div>
+          <button type="button" className="btn btn-outline-primary btn-sm mt-3" disabled={changingPassword} onClick={handleChangePassword}>
+            {changingPassword ? 'Updating password...' : 'Update password'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

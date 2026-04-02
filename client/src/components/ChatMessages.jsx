@@ -6,18 +6,48 @@ import {
   detectLeadCapturePrompt,
   extractLeadDraftFromMessages,
   hasLeadContactInMessages,
-  hasUsableLeadContact,
   preprocessAssistantMarkdown,
   sanitizeAssistantHref,
   userWantsToShareDetails,
 } from '../lib/chatMessageFormatting';
+import {
+  COUNTRY_CODE_OPTIONS,
+  splitPhoneForForm,
+  validatePhone,
+} from '../lib/contactValidation';
+
+function isValidLeadEmail(rawEmail) {
+  const email = String(rawEmail || '').trim();
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+function isValidLeadName(rawName) {
+  const name = String(rawName || '').trim();
+  if (name.length < 2 || name.length > 80) return false;
+  try {
+    return /^[\p{L}\p{M}][\p{L}\p{M}\s.'-]{1,79}$/u.test(name);
+  } catch {
+    return /^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(name);
+  }
+}
+
+function toLeadFormState(draft) {
+  const parsed = splitPhoneForForm(draft?.phone || '', '+1');
+  return {
+    name: String(draft?.name || ''),
+    phoneCode: String(draft?.phoneCode || parsed.countryCode || '+1'),
+    phoneLocal: String(draft?.phoneLocal || parsed.localNumber || ''),
+    email: String(draft?.email || ''),
+  };
+}
 
 function InlineLeadForm({ draft, disabled, onSubmit }) {
-  const [form, setForm] = useState(draft);
+  const [form, setForm] = useState(() => toLeadFormState(draft));
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setForm(draft);
+    setForm(toLeadFormState(draft));
     setError('');
   }, [draft]);
 
@@ -31,9 +61,10 @@ function InlineLeadForm({ draft, disabled, onSubmit }) {
     event.preventDefault();
 
     const next = {
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      email: form.email.trim(),
+      name: form.name.replace(/\s+/g, ' ').trim(),
+      phoneCode: String(form.phoneCode || '').trim(),
+      phoneLocal: String(form.phoneLocal || '').trim(),
+      email: form.email.trim().toLowerCase(),
     };
 
     if (!next.name) {
@@ -41,12 +72,32 @@ function InlineLeadForm({ draft, disabled, onSubmit }) {
       return;
     }
 
-    if (!hasUsableLeadContact(next)) {
+    if (!isValidLeadName(next.name)) {
+      setError('Please enter a valid name.');
+      return;
+    }
+
+    if (next.email && !isValidLeadEmail(next.email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    const phoneCheck = validatePhone(next.phoneCode, next.phoneLocal);
+    if (!phoneCheck.valid) {
+      setError(phoneCheck.error || 'Please enter a valid phone number.');
+      return;
+    }
+
+    if (!phoneCheck.normalized && !next.email) {
       setError('Add a phone number or email address.');
       return;
     }
 
-    onSubmit(buildLeadCaptureMessage(next));
+    onSubmit(buildLeadCaptureMessage({
+      name: next.name,
+      phone: phoneCheck.normalized || '',
+      email: next.email,
+    }));
   };
 
   return (
@@ -56,9 +107,28 @@ function InlineLeadForm({ draft, disabled, onSubmit }) {
           <span>Name</span>
           <input type="text" value={form.name} onChange={handleChange('name')} placeholder="Your name" disabled={disabled} />
         </label>
-        <label className="chat-inline-lead-field">
+        <label className="chat-inline-lead-field chat-inline-lead-field-full">
           <span>Phone</span>
-          <input type="tel" value={form.phone} onChange={handleChange('phone')} placeholder="+1 555 123 4567" disabled={disabled} />
+          <div className="chat-inline-lead-phone-row">
+            <select
+              value={form.phoneCode}
+              onChange={handleChange('phoneCode')}
+              className="chat-inline-lead-phone-code"
+              disabled={disabled}
+            >
+              {COUNTRY_CODE_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>{option.label}</option>
+              ))}
+            </select>
+            <input
+              type="tel"
+              value={form.phoneLocal}
+              onChange={handleChange('phoneLocal')}
+              className="chat-inline-lead-phone-local"
+              placeholder="5551234567"
+              disabled={disabled}
+            />
+          </div>
         </label>
         <label className="chat-inline-lead-field chat-inline-lead-field-full">
           <span>Email</span>
@@ -135,8 +205,31 @@ function MessageContent({ content, isUser }) {
   );
 }
 
+function formatMessageDateTime(value) {
+  if (!value) return '';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return '';
+
+  const now = new Date();
+  const isSameDay = dt.getFullYear() === now.getFullYear()
+    && dt.getMonth() === now.getMonth()
+    && dt.getDate() === now.getDate();
+
+  const timePart = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (isSameDay) return timePart;
+  const datePart = dt.toLocaleDateString();
+  return `${datePart} ${timePart}`;
+}
+
 export default function ChatMessages({ messages, loading, greetingMessage, onPlayVoice, onPauseVoice, playingMessageIndex, voiceEnabled, voiceResponseEnabled = true, onPlayBrowserVoice, onSend }) {
-  const leadDraft = extractLeadDraftFromMessages(messages);
+  const leadDraftRaw = extractLeadDraftFromMessages(messages);
+  const parsedLeadPhone = splitPhoneForForm(leadDraftRaw.phone || '', '+1');
+  const leadDraft = {
+    ...leadDraftRaw,
+    phone: leadDraftRaw.phone || '',
+    phoneCode: parsedLeadPhone.countryCode || '+1',
+    phoneLocal: parsedLeadPhone.localNumber || '',
+  };
   const hasLeadContact = hasLeadContactInMessages(messages);
   const wantsToShareDetails = userWantsToShareDetails(messages);
   let leadPromptIndex = -1;
@@ -206,6 +299,9 @@ export default function ChatMessages({ messages, loading, greetingMessage, onPla
           >
             <div className="message-content">
               <MessageContent content={msg.content} isUser={msg.role === 'user'} />
+            </div>
+            <div className={`chat-message-meta ${msg.role === 'user' ? 'user' : 'assistant'}`}>
+              {formatMessageDateTime(msg.createdAt || msg.created_at)}
             </div>
             {msg.role === 'assistant' && i === leadPromptIndex && typeof onSend === 'function' ? (
               <InlineLeadForm draft={leadDraft} disabled={loading} onSubmit={onSend} />

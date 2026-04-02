@@ -109,6 +109,9 @@ export function AuthProvider({ children }) {
           companyWebsite: d.companyWebsite ?? null,
           industryCategory: d.industryCategory ?? null,
           isSuspended: Boolean(d.isSuspended),
+          embedPath: d.embedPath ?? null,
+          embedUrl: d.embedUrl ?? null,
+          embedSlug: d.embedSlug ?? null,
           adminVisibility: mergeAdminVisibility(d.adminVisibility),
         })
       )
@@ -143,6 +146,9 @@ export function AuthProvider({ children }) {
       companyWebsite: data.companyWebsite ?? null,
       industryCategory: data.industryCategory ?? null,
       isSuspended: Boolean(data.isSuspended),
+      embedPath: data.embedPath ?? null,
+      embedUrl: data.embedUrl ?? null,
+      embedSlug: data.embedSlug ?? null,
       adminVisibility: mergeAdminVisibility(data.adminVisibility),
     });
   }, [setToken]);
@@ -163,6 +169,9 @@ export function AuthProvider({ children }) {
       companyWebsite: d.companyWebsite ?? null,
       industryCategory: d.industryCategory ?? null,
       isSuspended: Boolean(d.isSuspended),
+      embedPath: d.embedPath ?? null,
+      embedUrl: d.embedUrl ?? null,
+      embedSlug: d.embedSlug ?? null,
       adminVisibility: mergeAdminVisibility(d.adminVisibility),
     });
     return d;

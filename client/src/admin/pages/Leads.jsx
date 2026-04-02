@@ -927,9 +927,6 @@ export default function Leads() {
                       </div>
                     </div>
                     <div className="d-flex gap-2 flex-wrap">
-                      <button className="btn btn-outline-primary btn-sm" onClick={handleTranscriptFullscreen}>
-                        {isTranscriptFullscreen ? 'Exit Full Screen' : 'Open Full Conversation'}
-                      </button>
                       {selectedLead.session_id ? (
                         <button
                           className="btn btn-primary btn-sm"

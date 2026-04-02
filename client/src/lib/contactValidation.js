@@ -92,3 +92,14 @@ export function normalizeUrlForSubmit(rawValue) {
 export function isValidUrlInput(rawValue) {
   return normalizeUrlForSubmit(rawValue) !== null;
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export function validateEmail(value) {
+  const v = String(value || '').trim();
+  if (!v) return { valid: true, normalized: '' };
+  if (!EMAIL_RE.test(v)) {
+    return { valid: false, error: 'Please enter a valid email address (e.g. user@example.com).' };
+  }
+  return { valid: true, normalized: v };
+}

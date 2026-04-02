@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { buildVisitorPreviewUrl } from '../lib/visitorPreview';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const LIVE_POLL_MS = 10000;
@@ -218,7 +219,7 @@ export default function LiveMonitoring() {
                         <div className="admin-action-stack admin-action-stack-end">
                           <Link to={`/admin/chat/${session.sessionId}`} className="btn btn-sm btn-primary">Operate Chat</Link>
                           <a
-                            href={`/?sessionId=${encodeURIComponent(session.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                            href={buildVisitorPreviewUrl(company, session.sessionId)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn btn-sm btn-outline-secondary"

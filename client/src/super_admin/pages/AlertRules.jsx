@@ -143,7 +143,7 @@ export default function AlertRules() {
             </div>
             <form onSubmit={handleCreate}>
               <div className="sa-field">
-                <label>Name</label>
+                <label>Name <span style={{ color: '#ef4444' }}>*</span></label>
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div className="sa-field">

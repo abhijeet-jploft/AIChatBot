@@ -15,6 +15,7 @@ import {
   normalizeUrlForSubmit,
   splitPhoneForForm,
   validatePhone,
+  validateEmail,
 } from '../../lib/contactValidation';
 
 const TRAINING_PERMISSION_CHECKS = [
@@ -100,8 +101,11 @@ export default function CompanyDetail() {
     if (industrySelect === OTHER_VALUE && !specify) {
       showToast('Please specify the industry when “Other” is selected.', 'error');
       return;
-    }
-    const industryCategory = buildIndustryToSave(industrySelect, specify);
+    }    const emailCheck = validateEmail(editAdminEmail);
+    if (!emailCheck.valid) {
+      showToast(emailCheck.error, 'error');
+      return;
+    }    const industryCategory = buildIndustryToSave(industrySelect, specify);
     const phoneCheck = validatePhone(editPhoneCode, editPhoneLocal);
     if (!phoneCheck.valid) {
       showToast(phoneCheck.error, 'error');
@@ -288,7 +292,7 @@ export default function CompanyDetail() {
           <h3 className="sa-panel-title">Company Info</h3>
           <form onSubmit={handleEdit}>
             <div className="sa-field">
-              <label>Name</label>
+              <label>Name <span style={{ color: '#ef4444' }}>*</span></label>
               <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required disabled={!canEditCompanyInfo} />
             </div>
             <div className="sa-field">
@@ -296,7 +300,7 @@ export default function CompanyDetail() {
               <textarea rows={3} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} disabled={!canEditCompanyInfo} />
             </div>
             <div className="sa-field">
-              <label>Admin login email</label>
+              <label>Admin login email <span style={{ color: '#ef4444' }}>*</span></label>
               <input
                 type="email"
                 value={editAdminEmail}
@@ -365,7 +369,7 @@ export default function CompanyDetail() {
             </div>
             {industrySelect === OTHER_VALUE ? (
               <div className="sa-field">
-                <label>Please specify industry</label>
+                <label>Please specify industry <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="text"
                   value={industryOtherSpecify}
@@ -445,7 +449,7 @@ export default function CompanyDetail() {
           </p>
           <form onSubmit={handleResetPassword}>
             <div className="sa-field">
-              <label>New Admin Password</label>
+              <label>New Admin Password <span style={{ color: '#ef4444' }}>*</span></label>
               <PasswordInput
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}

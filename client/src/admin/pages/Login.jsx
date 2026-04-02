@@ -38,7 +38,7 @@ export default function Login() {
           </p>
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label className="form-label" style={{ color: 'var(--chat-text)' }}>Email</label>
+              <label className="form-label" style={{ color: 'var(--chat-text)' }}>Email <span className="text-danger">*</span></label>
               <input
                 type="email"
                 autoComplete="username"
@@ -51,7 +51,7 @@ export default function Login() {
               />
             </div>
             <div className="mb-3">
-              <label className="form-label" style={{ color: 'var(--chat-text)' }}>Password</label>
+              <label className="form-label" style={{ color: 'var(--chat-text)' }}>Password <span className="text-danger">*</span></label>
               <PasswordInput
                 autoComplete="current-password"
                 className="form-control"

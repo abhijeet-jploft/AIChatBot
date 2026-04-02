@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { buildVisitorPreviewUrl } from '../lib/visitorPreview';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const LIVE_POLL_MS = 8000;
@@ -219,7 +220,7 @@ export default function TakeOver() {
   const toRow = Math.min(allData.page * allData.limit, allData.total);
 
   const visitorPreviewUrl = (sid) =>
-    `/?sessionId=${encodeURIComponent(sid)}&companyId=${encodeURIComponent(company?.companyId || '')}`;
+    buildVisitorPreviewUrl(company, sid);
 
   return (
     <div className="p-4" id="take-over-top">

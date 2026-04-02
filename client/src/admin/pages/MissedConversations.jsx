@@ -6,6 +6,7 @@ import {
   clampToNotBeforeFrom,
   nextToAfterFromChange,
 } from '../../utils/dateRangeFields';
+import { buildVisitorPreviewUrl } from '../lib/visitorPreview';
 
 const PAGE_SIZE = 20;
 const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
@@ -218,7 +219,7 @@ export default function MissedConversations() {
                               Operate Chat
                             </Link>
                             <a
-                              href={`/?sessionId=${encodeURIComponent(row.sessionId)}&companyId=${encodeURIComponent(company?.companyId || '')}`}
+                              href={buildVisitorPreviewUrl(company, row.sessionId)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="btn btn-sm btn-outline-secondary"

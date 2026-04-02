@@ -31,6 +31,7 @@ router.post('/auth/change-password', requireAuth, authController.changePassword)
 
 router.get('/settings', requireAuth, settingsController.getSettings);
 router.put('/settings', requireAuth, settingsController.updateSettings);
+router.post('/settings/icon-upload', requireAuth, uploadMemory.single('icon'), settingsController.uploadCompanyIcon);
 router.post('/settings/voice-preview', requireAuth, settingsController.previewVoice);
 router.post('/settings/voice-train', requireAuth, uploadMemory.array('samples', 8), settingsController.trainCustomVoice);
 router.get('/settings/voices/debug', requireAuth, settingsController.debugVoices);
