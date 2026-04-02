@@ -21,6 +21,14 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend, Filler);
 
+function formatStatusLabel(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return 'Unknown';
+  return normalized
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function formatDateTimeFull(value) {
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return String(value || '');
@@ -78,7 +86,7 @@ export default function Reports() {
   const convDayRaw = data?.conversationsByDay?.map((d) => d.day) || [];
   const convLabels = convDayRaw.map((d) => String(d || '').slice(5, 10));
   const convValues = data?.conversationsByDay?.map((d) => Number(d.n || 0)) || [];
-  const leadsStatusLabels = data?.leadsByStatus?.map((s) => s.status) || [];
+  const leadsStatusLabels = data?.leadsByStatus?.map((s) => formatStatusLabel(s.status)) || [];
   const leadsStatusValues = data?.leadsByStatus?.map((s) => Number(s.n || 0)) || [];
   const periodLabel = formatPeriodLabel(data?.period?.from, data?.period?.to);
 

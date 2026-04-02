@@ -298,6 +298,30 @@
   width: 10%;
 }
 
+@media (max-width: 991.98px) {
+  .admin-conversations-table {
+    table-layout: auto;
+    min-width: 1040px;
+  }
+
+  .admin-conversations-table th {
+    white-space: normal;
+    line-height: 1.25;
+  }
+
+  .admin-conversations-table th:nth-child(1),
+  .admin-conversations-table th:nth-child(2),
+  .admin-conversations-table th:nth-child(3),
+  .admin-conversations-table th:nth-child(4),
+  .admin-conversations-table th:nth-child(5),
+  .admin-conversations-table th:nth-child(6),
+  .admin-conversations-table th:nth-child(7),
+  .admin-conversations-table th:nth-child(8),
+  .admin-conversations-table th:nth-child(9) {
+    width: auto;
+  }
+}
+
 .admin-content {
   flex: 1;
   min-height: 0;

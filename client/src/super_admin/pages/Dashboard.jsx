@@ -16,6 +16,14 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend);
 
+function formatStatusLabel(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return 'Unknown';
+  return normalized
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 export default function Dashboard() {
   const { saFetch } = useSuperAuth();
   const { showToast } = useSuperToast();
@@ -73,7 +81,7 @@ export default function Dashboard() {
       y: { beginAtZero: true, ticks: { color: chartText }, grid: { color: chartGrid } },
     },
   };
-  const leadsStatusLabels = (charts?.leadsByStatus || []).map((item) => item.status || 'unknown');
+  const leadsStatusLabels = (charts?.leadsByStatus || []).map((item) => formatStatusLabel(item.status));
   const leadsStatusValues = (charts?.leadsByStatus || []).map((item) => Number(item.n || 0));
   const leadsStatusData = {
     labels: leadsStatusLabels,
