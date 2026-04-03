@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import { formatDateTime, formatDateTimeInput, formatDateOnly } from '../../utils/dateFormat';
+import SortableHeader from '../components/SortableHeader';
 import {
   clampFromNotAfterTo,
   clampToNotBeforeFrom,
@@ -51,26 +53,6 @@ function humanize(value = '') {
   return String(value || '')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (ch) => ch.toUpperCase());
-}
-
-function formatDateTime(value) {
-  if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString();
-}
-
-function formatDateTimeInput(value) {
-  if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
 const LEADS_PAGE_SIZE = 20;
@@ -163,6 +145,7 @@ export default function Leads() {
   const [reminderNoteValue, setReminderNoteValue] = useState('');
   const [isTranscriptFullscreen, setIsTranscriptFullscreen] = useState(false);
   const transcriptPanelRef = useRef(null);
+  const [colSort, setColSort] = useState({ field: null, dir: null });
 
   const selectedLead = detail?.lead || null;
   const isDetailRoute = Boolean(leadIdFromUrl);
@@ -317,6 +300,21 @@ export default function Leads() {
       showToast('Fullscreen mode is not available in this browser.', 'error');
     }
   }, [showToast]);
+
+  const sortedLeads = useMemo(() => {
+    if (!colSort.field || !colSort.dir) return leads;
+    const sorted = [...leads];
+    sorted.sort((a, b) => {
+      let av, bv;
+      if (colSort.field === 'name') { av = (a.display_name || a.name || a.email || '').toLowerCase(); bv = (b.display_name || b.name || b.email || '').toLowerCase(); }
+      else if (colSort.field === 'created_at') { av = new Date(a.created_at).getTime(); bv = new Date(b.created_at).getTime(); }
+      else return 0;
+      if (av < bv) return colSort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return colSort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [leads, colSort.field, colSort.dir]);
 
   const totalPages = Math.max(1, Math.ceil(total / (appliedFilters.limit || LEADS_PAGE_SIZE)));
   const fromRow = total === 0 ? 0 : (appliedFilters.page - 1) * (appliedFilters.limit || LEADS_PAGE_SIZE) + 1;
@@ -588,8 +586,23 @@ export default function Leads() {
 
   const markConverted = async () => {
     if (!selectedLead?.id) return;
-    setDetail((prev) => (prev ? { ...prev, lead: { ...prev.lead, status: 'converted' } } : prev));
-    await saveStatus();
+    setSavingStatus(true);
+    try {
+      const res = await authFetch(`/leads/${selectedLead.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'converted' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark as converted');
+      setDetail((prev) => (prev ? { ...prev, lead: data.lead } : prev));
+      await Promise.all([loadLeads(appliedFilters), loadLeadDetail(selectedLead.id)]);
+      showToast('Lead marked as converted', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to mark as converted', 'error');
+    } finally {
+      setSavingStatus(false);
+    }
   };
 
   return (
@@ -743,19 +756,19 @@ export default function Leads() {
                 <>
                 <div className="table-responsive" style={{ maxHeight: 680 }}>
                   <table className="table table-sm table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
-                    <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)', position: 'sticky', top: 0, zIndex: 1 }}>
+                    <thead>
                       <tr>
-                        <th className="py-2" style={{ width: 34 }} />
-                        <th className="py-2">Lead name</th>
-                        <th className="py-2">Requirement summary</th>
-                        <th className="py-2">Status</th>
-                        <th className="py-2">Lead score</th>
-                        <th className="py-2">Date received</th>
-                        <th className="py-2">Contact method</th>
+                        <th className="border-0 py-2" style={{ width: 34 }} />
+                        <SortableHeader label="Lead name" field="name" sort={colSort} onSort={setColSort} className="border-0 py-2" />
+                        <th className="border-0 py-2">Requirement summary</th>
+                        <th className="border-0 py-2">Status</th>
+                        <th className="border-0 py-2">Lead score</th>
+                        <SortableHeader label="Date received" field="created_at" sort={colSort} onSort={setColSort} className="border-0 py-2" />
+                        <th className="border-0 py-2">Contact method</th>
                       </tr>
                     </thead>
                     <tbody>
-                        {leads.map((lead) => {
+                        {sortedLeads.map((lead) => {
                         const selected = selectedLeadId === lead.id;
                         const overdue = Boolean(lead.reminder_overdue);
                         const dueToday = Boolean(lead.reminder_due_today);
@@ -820,7 +833,7 @@ export default function Leads() {
                               </span>
                             </td>
                             <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
-                              {new Date(lead.created_at).toLocaleDateString()}
+                              {formatDateOnly(lead.created_at)}
                             </td>
                             <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
                               <div>{humanize(lead.contact_method || 'unknown')}</div>

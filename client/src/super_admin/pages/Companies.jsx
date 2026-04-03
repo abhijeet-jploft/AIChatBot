@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import PasswordInput from '../../components/PasswordInput';
 import { useSuperToast } from '../context/ToastContext';
+import { formatDateOnly } from '../../utils/dateFormat';
 import { hasAnyAiModePermission, hasPermission } from '../lib/permissions';
 import { validateEmail } from '../../lib/contactValidation';
 
@@ -95,7 +96,8 @@ export default function Companies() {
       showToast('Company created', 'success');
       setShowCreate(false);
       setForm({ companyId: '', name: '', description: '', adminEmail: '', adminPassword: '' });
-      setPage(1);
+      if (page === 1) load({ nextPage: 1 });
+      else setPage(1);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -110,7 +112,8 @@ export default function Companies() {
       if (!res.ok) throw new Error(data.error || 'Failed to delete');
       showToast('Company deleted', 'success');
       setDeleteTarget(null);
-      setPage(1);
+      if (page === 1) load({ nextPage: 1 });
+      else setPage(1);
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -298,10 +301,6 @@ export default function Companies() {
 
       {loading ? (
         <div className="sa-loading">Loading companies...</div>
-      ) : data.total === 0 ? (
-        <div className="sa-empty">
-          {hasActiveFilters ? 'No companies match the current search or filters.' : 'No companies yet. Create one above.'}
-        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="sa-panel sa-panel-compact">
@@ -350,7 +349,13 @@ export default function Companies() {
             </div>
           </div>
 
-          <div className="sa-table-wrap">
+          {data.total === 0 ? (
+            <div className="sa-empty">
+              {hasActiveFilters ? 'No companies match the current search or filters.' : 'No companies yet. Create one above.'}
+            </div>
+          ) : (
+            <>
+              <div className="sa-table-wrap">
             <table className="sa-table">
               <thead>
                 <tr>
@@ -362,7 +367,7 @@ export default function Companies() {
                   <th>Leads</th>
                   <th>Conversations</th>
                   <th>Created</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -398,7 +403,7 @@ export default function Companies() {
                       </td>
                       <td>{company.lead_count}</td>
                       <td>{company.conversation_count}</td>
-                      <td>{new Date(company.created_at).toLocaleDateString()}</td>
+                      <td>{formatDateOnly(company.created_at)}</td>
                       <td>
                         <div className="sa-row-actions">
                           {canViewCompanyDetails && (
@@ -469,6 +474,8 @@ export default function Companies() {
               Next
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

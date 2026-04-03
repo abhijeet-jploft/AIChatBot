@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState, Fragment } from 'react';
+import { useCallback, useEffect, useMemo, useState, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { formatDateTime } from '../../utils/dateFormat';
+import SortableHeader from '../components/SortableHeader';
 
 const PAGE_SIZE = 50;
 const PER_PAGE_OPTIONS = [10, 50, 100, 500];
@@ -8,13 +10,6 @@ const TYPES = [
   { value: 'chat', label: 'Chat' },
   { value: 'system', label: 'System' },
 ];
-
-function formatDateTime(value) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
 
 function levelBadge(level) {
   const l = (level || 'info').toLowerCase();
@@ -31,6 +26,7 @@ export default function Logs() {
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, offset: 0 });
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [sort, setSort] = useState({ field: null, dir: null });
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -58,6 +54,20 @@ export default function Logs() {
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
+
+  const sortedRows = useMemo(() => {
+    if (!sort.field || !sort.dir) return data.rows;
+    const sorted = [...data.rows];
+    sorted.sort((a, b) => {
+      if (sort.field === 'ts') {
+        const av = new Date(a.ts).getTime(); const bv = new Date(b.ts).getTime();
+        if (av < bv) return sort.dir === 'asc' ? -1 : 1;
+        if (av > bv) return sort.dir === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [data.rows, sort.field, sort.dir]);
 
   const totalPages = Math.max(1, Math.ceil(data.total / data.limit));
   const currentPage = data.total === 0 ? 1 : Math.floor(data.offset / data.limit) + 1;
@@ -110,9 +120,9 @@ export default function Logs() {
             <>
               <div className="table-responsive">
                 <table className="table table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
-                  <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
+                  <thead>
                     <tr>
-                      <th className="border-0 py-2">Time</th>
+                      <SortableHeader label="Time" field="ts" sort={sort} onSort={setSort} className="border-0 py-2" />
                       <th className="border-0 py-2">Type</th>
                       <th className="border-0 py-2">Level</th>
                       <th className="border-0 py-2">Message</th>
@@ -120,17 +130,17 @@ export default function Logs() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.rows.map((row) => (
+                    {sortedRows.map((row) => (
                       <Fragment key={row.id}>
                         <tr>
                           <td className="align-middle small text-nowrap" style={{ color: 'var(--chat-muted)' }}>
                             {formatDateTime(row.ts)}
                           </td>
                           <td className="align-middle">
-                            <span className="badge bg-secondary">{row.type}</span>
+                            <span className="badge bg-secondary">{row.type ? row.type.charAt(0).toUpperCase() + row.type.slice(1) : row.type}</span>
                           </td>
                           <td className="align-middle">
-                            <span className={`badge ${levelBadge(row.level)}`}>{row.level}</span>
+                            <span className={`badge ${levelBadge(row.level)}`}>{row.level ? row.level.charAt(0).toUpperCase() + row.level.slice(1) : row.level}</span>
                           </td>
                           <td className="align-middle">
                             <span

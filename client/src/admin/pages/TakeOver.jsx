@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildVisitorPreviewUrl } from '../lib/visitorPreview';
+import { formatTimeAgo } from '../../utils/dateFormat';
+import SortableHeader from '../components/SortableHeader';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const LIVE_POLL_MS = 8000;
@@ -14,18 +16,6 @@ const TAB_ALL = 'all';
 
 function canTakeOver(sessionId) {
   return typeof sessionId === 'string' && sessionId.length === 36 && sessionId.includes('-');
-}
-
-function formatTimeAgo(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  const now = new Date();
-  const sec = Math.floor((now - d) / 1000);
-  if (sec < 60) return 'Just now';
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
-  return d.toLocaleDateString();
 }
 
 export default function TakeOver() {
@@ -52,6 +42,8 @@ export default function TakeOver() {
   const [replyTo, setReplyTo] = useState(null);
   const [replyDraft, setReplyDraft] = useState('');
   const [replySending, setReplySending] = useState(false);
+  const [liveSort, setLiveSort] = useState({ field: null, dir: null });
+  const [allSort, setAllSort] = useState({ field: null, dir: null });
 
   const fetchLive = useCallback(async () => {
     try {
@@ -215,6 +207,34 @@ export default function TakeOver() {
     setPage(1);
   };
 
+  const sortedLiveSessions = useMemo(() => {
+    if (!liveSort.field || !liveSort.dir) return liveSessions;
+    const sorted = [...liveSessions];
+    sorted.sort((a, b) => {
+      if (liveSort.field === 'lastSeen') {
+        const av = new Date(a.lastSeen || 0).getTime(); const bv = new Date(b.lastSeen || 0).getTime();
+        if (av < bv) return liveSort.dir === 'asc' ? -1 : 1;
+        if (av > bv) return liveSort.dir === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [liveSessions, liveSort.field, liveSort.dir]);
+
+  const sortedAllRows = useMemo(() => {
+    if (!allSort.field || !allSort.dir) return allData.rows;
+    const sorted = [...allData.rows];
+    sorted.sort((a, b) => {
+      if (allSort.field === 'updatedAt') {
+        const av = new Date(a.updatedAt || 0).getTime(); const bv = new Date(b.updatedAt || 0).getTime();
+        if (av < bv) return allSort.dir === 'asc' ? -1 : 1;
+        if (av > bv) return allSort.dir === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [allData.rows, allSort.field, allSort.dir]);
+
   const totalPages = Math.max(1, Math.ceil(allData.total / allData.limit));
   const fromRow = allData.total === 0 ? 0 : (allData.page - 1) * allData.limit + 1;
   const toRow = Math.min(allData.page * allData.limit, allData.total);
@@ -277,16 +297,16 @@ export default function TakeOver() {
             ) : (
               <div className="table-responsive">
                 <table className="table table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
-                  <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
+                  <thead>
                     <tr>
                       <th className="border-0 py-2">Session / Page</th>
                       <th className="border-0 py-2 text-center d-none d-md-table-cell">Messages</th>
-                      <th className="border-0 py-2 d-none d-lg-table-cell">Last seen</th>
+                      <SortableHeader label="Last seen" field="lastSeen" sort={liveSort} onSort={setLiveSort} className="border-0 py-2 d-none d-lg-table-cell" />
                       <th className="border-0 py-2 text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {liveSessions.map((s) => {
+                    {sortedLiveSessions.map((s) => {
                       const canSend = canTakeOver(s.sessionId);
                       return (
                         <tr key={s.sessionId}>
@@ -311,7 +331,7 @@ export default function TakeOver() {
                             {s.lastSeen ? formatTimeAgo(new Date(s.lastSeen).toISOString()) : '—'}
                           </td>
                           <td className="align-middle">
-                            <div className="d-flex flex-wrap gap-1 justify-content-end align-items-center">
+                            <div className="d-flex flex-column gap-1 align-items-end">
                               {canSend ? (
                                 <>
                                   <div className="admin-action-stack">
@@ -330,7 +350,7 @@ export default function TakeOver() {
                                       Visitor preview
                                     </a>
                                   </div>
-                                  <div className="d-flex gap-1 align-items-center mt-1 mt-md-0">
+                                  <div className="d-flex gap-1 align-items-center">
                                     <input
                                       type="text"
                                       className="form-control form-control-sm"
@@ -412,18 +432,18 @@ export default function TakeOver() {
                 <>
                   <div className="table-responsive">
                     <table className="table table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
-                      <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
+                      <thead>
                         <tr>
                           <th className="border-0 py-2">First message / Title</th>
                           <th className="border-0 py-2 text-center d-none d-sm-table-cell">Messages</th>
                           <th className="border-0 py-2 d-none d-md-table-cell">Lead</th>
                           <th className="border-0 py-2 d-none d-lg-table-cell">Status</th>
-                          <th className="border-0 py-2 d-none d-lg-table-cell">Updated</th>
+                          <SortableHeader label="Updated" field="updatedAt" sort={allSort} onSort={setAllSort} className="border-0 py-2 d-none d-lg-table-cell" />
                           <th className="border-0 py-2 text-end">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {allData.rows.map((conv) => (
+                        {sortedAllRows.map((conv) => (
                           <tr key={conv.id}>
                             <td className="align-middle">
                               <span
@@ -444,7 +464,7 @@ export default function TakeOver() {
                             </td>
                             <td className="align-middle d-none d-lg-table-cell">
                               <span className={`badge ${conv.status === 'active' ? 'text-bg-success' : 'text-bg-secondary'}`}>
-                                {conv.status}
+                                {conv.status ? conv.status.charAt(0).toUpperCase() + conv.status.slice(1) : conv.status}
                               </span>
                             </td>
                             <td className="align-middle small d-none d-lg-table-cell" style={{ color: 'var(--chat-muted)' }}>

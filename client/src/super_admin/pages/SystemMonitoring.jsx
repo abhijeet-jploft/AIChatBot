@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { formatDateTime, formatTimeOnly } from '../../utils/dateFormat';
 
 const LOG_TABS = [
   { id: 'error_reports', label: 'Error Reports' },
@@ -109,7 +110,7 @@ export default function SystemMonitoring() {
               <ul className="sa-info-list">
                 <li><span>Recent errors</span><strong className="sa-text-err">{status.metrics?.errors?.recentErrors ?? 0}</strong></li>
                 <li><span>Recent warnings</span><strong>{status.metrics?.errors?.recentWarnings ?? 0}</strong></li>
-                <li><span>Generated</span><strong>{status.generatedAt ? new Date(status.generatedAt).toLocaleTimeString() : '-'}</strong></li>
+                <li><span>Generated</span><strong>{status.generatedAt ? formatTimeOnly(status.generatedAt) : '-'}</strong></li>
               </ul>
             </div>
           </div>
@@ -148,7 +149,7 @@ export default function SystemMonitoring() {
                   <tbody>
                     {entries.map((entry) => (
                       <tr key={`${entry.type}-${entry.id}-${entry.ts}`}>
-                        <td>{new Date(entry.ts).toLocaleString()}</td>
+                        <td>{formatDateTime(entry.ts)}</td>
                         <td><span className={`sa-badge ${entry.level === 'error' ? 'sa-badge-hot' : entry.level === 'warn' ? 'sa-badge-warn' : 'sa-badge-cold'}`}>{entry.level}</span></td>
                         <td>{entry.type}</td>
                         <td>

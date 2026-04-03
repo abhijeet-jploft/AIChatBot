@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import { formatDateTime } from '../../utils/dateFormat';
 import {
   INDUSTRY_PRESETS,
   OTHER_VALUE,
@@ -318,7 +319,7 @@ export default function AccountProfile() {
           ) : (
             <ul className="small mb-3 ps-3" style={{ color: 'var(--chat-muted)' }}>
               {sessions.slice(0, 10).map((s, i) => (
-                <li key={s.id || i}>Session — created {s.created_at ? new Date(s.created_at).toLocaleString() : ''}</li>
+                <li key={s.id || i}>Session — created {s.created_at ? formatDateTime(s.created_at) : ''}</li>
               ))}
               {sessions.length > 10 && <li>... and {sessions.length - 10} more</li>}
             </ul>

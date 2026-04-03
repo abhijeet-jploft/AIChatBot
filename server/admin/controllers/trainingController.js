@@ -57,7 +57,7 @@ async function startScrape(req, res) {
     if (!assertTrainingModule(req, res, company, 'scrape')) return;
 
     if (!url || typeof url !== 'string') {
-      return res.status(400).json({ error: 'url is required' });
+      return res.status(400).json({ error: 'URL is required' });
     }
 
     let parsed;

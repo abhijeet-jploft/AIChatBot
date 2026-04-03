@@ -610,7 +610,7 @@ async function getMessages(req, res) {
     }
 
     const rows = await ChatMessage.listBySession(sessionId);
-    res.json(rows.map((r) => ({ role: r.role, content: r.content })));
+    res.json(rows.map((r) => ({ role: r.role, content: r.content, created_at: r.created_at })));
   } catch (err) {
     console.error('[admin conversations] messages:', err);
     res.status(500).json({ error: err.message });

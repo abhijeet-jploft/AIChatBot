@@ -70,7 +70,7 @@ async function setup(req, res) {
 
     const { username, email, password } = req.body;
     if (!username || !password) {
-      return res.status(400).json({ error: 'username and password are required' });
+      return res.status(400).json({ error: 'Username and Password are required' });
     }
     const pwErr = validatePasswordStrength(password);
     if (pwErr) return res.status(400).json({ error: pwErr });
@@ -101,7 +101,7 @@ async function login(req, res) {
     const identifier = String(req.body?.username || req.body?.identifier || req.body?.email || '').trim();
     const { password } = req.body;
     if (!identifier || !password) {
-      return res.status(400).json({ error: 'username or email and password are required' });
+      return res.status(400).json({ error: 'Username or Email and Password are required' });
     }
 
     const admin = await SuperAdmin.findByUsername(identifier);
@@ -208,7 +208,7 @@ async function updateProfile(req, res) {
     if (req.isSuperAdmin) {
       const username = String(req.body?.username || '').trim();
       const email = String(req.body?.email || '').trim();
-      if (!username) return res.status(400).json({ error: 'username is required' });
+      if (!username) return res.status(400).json({ error: 'Username is required' });
       if (username.length < 2 || username.length > 100) {
         return res.status(400).json({ error: 'Username must be between 2 and 100 characters.' });
       }
@@ -242,7 +242,7 @@ async function updateProfile(req, res) {
 
     const name = String(req.body?.name || req.body?.username || '').trim();
     const email = String(req.body?.email || '').trim().toLowerCase();
-    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!name) return res.status(400).json({ error: 'Name is required' });
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'A valid email address is required.' });
     }

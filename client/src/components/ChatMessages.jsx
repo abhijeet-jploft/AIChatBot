@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { formatMessageDateTime } from '../utils/dateFormat';
 import {
   buildLeadCaptureMessage,
   detectLeadCapturePrompt,
@@ -203,22 +204,6 @@ function MessageContent({ content, isUser }) {
       </ReactMarkdown>
     </div>
   );
-}
-
-function formatMessageDateTime(value) {
-  if (!value) return '';
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return '';
-
-  const now = new Date();
-  const isSameDay = dt.getFullYear() === now.getFullYear()
-    && dt.getMonth() === now.getMonth()
-    && dt.getDate() === now.getDate();
-
-  const timePart = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (isSameDay) return timePart;
-  const datePart = dt.toLocaleDateString();
-  return `${datePart} ${timePart}`;
 }
 
 export default function ChatMessages({ messages, loading, greetingMessage, onPlayVoice, onPauseVoice, playingMessageIndex, voiceEnabled, voiceResponseEnabled = true, onPlayBrowserVoice, onSend }) {

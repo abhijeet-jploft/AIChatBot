@@ -1,17 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildVisitorPreviewUrl } from '../lib/visitorPreview';
+import { formatDateTime } from '../../utils/dateFormat';
+import SortableHeader from '../components/SortableHeader';
 
 const PAGE_SIZE = 20;
 const PER_PAGE_OPTIONS = [10, 20, 50, 100, 500];
 
-function formatDateTime(value) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
+
 
 export default function SupportRequests() {
   const { authFetch, company } = useAuth();
@@ -27,6 +24,7 @@ export default function SupportRequests() {
   const [threadRows, setThreadRows] = useState([]);
   const [reply, setReply] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [sort, setSort] = useState({ field: null, dir: null });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,6 +58,20 @@ export default function SupportRequests() {
     }, 15000);
     return () => clearInterval(id);
   }, [load]);
+
+  const sortedRows = useMemo(() => {
+    if (!sort.field || !sort.dir) return data.rows;
+    const sorted = [...data.rows];
+    sorted.sort((a, b) => {
+      if (sort.field === 'requestedAt') {
+        const av = new Date(a.requestedAt).getTime(); const bv = new Date(b.requestedAt).getTime();
+        if (av < bv) return sort.dir === 'asc' ? -1 : 1;
+        if (av > bv) return sort.dir === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [data.rows, sort.field, sort.dir]);
 
   const totalPages = Math.max(1, Math.ceil(data.total / data.limit));
   const fromRow = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
@@ -175,17 +187,17 @@ export default function SupportRequests() {
             <>
               <div className="table-responsive">
                 <table className="table table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
-                  <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
+                  <thead>
                     <tr>
                       <th className="border-0 py-2">Message / trigger</th>
                       <th className="border-0 py-2">Source</th>
                       <th className="border-0 py-2">Status</th>
-                      <th className="border-0 py-2">Requested at</th>
+                      <SortableHeader label="Requested at" field="requestedAt" sort={sort} onSort={setSort} className="border-0 py-2" />
                       <th className="border-0 py-2 text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.rows.map((row) => (
+                    {sortedRows.map((row) => (
                       <tr key={row.id}>
                         <td className="align-middle">
                           <span
@@ -205,7 +217,7 @@ export default function SupportRequests() {
                         </td>
                         <td className="align-middle small">
                           <span className={`badge ${row.status === 'resolved' ? 'bg-success' : row.status === 'closed' ? 'bg-dark' : 'bg-info text-dark'}`}>
-                            {row.status || 'pending'}
+                            {(row.status || 'pending').charAt(0).toUpperCase() + (row.status || 'pending').slice(1)}
                           </span>
                         </td>
                         <td className="align-middle small" style={{ color: 'var(--chat-muted)' }}>
@@ -307,7 +319,7 @@ export default function SupportRequests() {
           <div className="modal-dialog modal-lg modal-dialog-centered">
             <div className="modal-content" style={{ background: 'var(--chat-surface)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}>
               <div className="modal-header" style={{ borderColor: 'var(--chat-border)' }}>
-                <h5 className="modal-title">Ticket Thread — {activeTicket.status || 'pending'}</h5>
+                <h5 className="modal-title">Ticket Thread — {(activeTicket.status || 'pending').charAt(0).toUpperCase() + (activeTicket.status || 'pending').slice(1)}</h5>
                 <button type="button" className="btn-close" onClick={() => setActiveTicket(null)} />
               </div>
               <div className="modal-body">

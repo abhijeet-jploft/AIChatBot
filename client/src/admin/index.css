@@ -1,5 +1,12 @@
 /* Admin panel visual system */
 
+/* Global: ensure all button text follows Title Case */
+.admin-shell button,
+.admin-shell .btn,
+.admin-shell a.btn {
+  text-transform: capitalize;
+}
+
 .admin-shell {
   min-height: 100vh;
   background:
@@ -267,7 +274,7 @@
   font-weight: 600;
   white-space: normal;
   line-height: 1.25;
-  font-size: 12px;
+  font-size: 16px;
   vertical-align: top;
 }
 
@@ -307,7 +314,6 @@
 
 .admin-content .card {
   border: 1px solid #e0e1e6 !important;
-  border-radius: 16px;
   box-shadow: 0 10px 24px -24px rgba(26, 26, 32, 0.55);
 }
 
@@ -487,4 +493,91 @@
   .admin-content .p-4 {
     padding: 14px !important;
   }
+}
+
+/* ── Admin Tables: unified font, sticky header, sort icons ── */
+
+/* Consistent table header font across all admin modules */
+.admin-content .table thead th {
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--chat-text-heading, #252938);
+  background: var(--chat-sidebar, #f4f4f6);
+  white-space: nowrap;
+  border-bottom: 2px solid #d4d8e4;
+}
+
+/* Consistent table cell font */
+.admin-content .table tbody td {
+  font-size: 13.5px;
+  color: var(--chat-text, #1a1d29);
+  vertical-align: middle;
+}
+
+/* Sticky table header on y-scroll */
+.admin-content .table-responsive {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.admin-content .table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* Consistent filter label styling */
+.admin-content .form-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  text-transform: capitalize;
+  color: #4b5563;
+}
+
+/* Consistent filter select styling */
+.admin-content .form-select,
+.admin-content .form-control {
+  font-size: 13px;
+}
+
+/* Sortable column headers */
+.admin-content .table thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.admin-content .table thead th.sortable:hover {
+  background: #eaecf2;
+}
+
+.admin-content .table thead th.sortable .sort-icon {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: middle;
+  margin-left: auto;
+  padding-left: 6px;
+  line-height: 1;
+  font-size: 9px;
+  opacity: 0.3;
+  float: right;
+  margin-top: 2px;
+  gap: 1px;
+}
+
+.admin-content .table thead th.sortable .sort-icon.asc,
+.admin-content .table thead th.sortable .sort-icon.desc {
+  opacity: 1;
+}
+
+.admin-content .table thead th.sortable .sort-icon.asc .arrow-down,
+.admin-content .table thead th.sortable .sort-icon.desc .arrow-up {
+  opacity: 0.25;
+}
+
+.admin-content .table thead th.sortable .sort-icon .arrow-up,
+.admin-content .table thead th.sortable .sort-icon .arrow-down {
+  line-height: 1;
 }

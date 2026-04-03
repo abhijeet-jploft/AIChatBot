@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
 import { hasPermission } from '../lib/permissions';
+import { formatDateTime } from '../../utils/dateFormat';
 
 const STATUS_OPTIONS = ['pending', 'resolved', 'closed'];
 const PRIORITY_OPTIONS = ['all', 'low', 'normal', 'high', 'urgent'];
@@ -155,9 +156,9 @@ export default function SupportTickets() {
           <div className="sa-field" style={{ marginBottom: 0 }}>
             <label>Status</label>
             <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="all">all</option>
+              <option value="all">All</option>
               {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
               ))}
             </select>
           </div>
@@ -166,7 +167,7 @@ export default function SupportTickets() {
             <label>Priority</label>
             <select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }}>
               {PRIORITY_OPTIONS.map((p) => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
               ))}
             </select>
           </div>
@@ -175,7 +176,7 @@ export default function SupportTickets() {
             <label>Source</label>
             <select value={source} onChange={(e) => { setSource(e.target.value); setPage(1); }}>
               {SOURCE_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
               ))}
             </select>
           </div>
@@ -219,8 +220,8 @@ export default function SupportTickets() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 12 }}>
-        <div className="sa-panel">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 12, alignItems: 'stretch' }}>
+        <div className="sa-panel" style={{ display: 'flex', flexDirection: 'column' }}>
           <h3 className="sa-panel-title" style={{ marginTop: 0 }}>Tickets</h3>
 
           {loading ? (
@@ -274,10 +275,10 @@ export default function SupportTickets() {
                             {t.message || '-'}
                           </div>
                         </td>
-                        <td>{t.source || '-'}</td>
-                        <td>{t.priority || '-'}</td>
-                        <td>{t.status || 'pending'}</td>
-                        <td>{new Date(t.createdAt).toLocaleString()}</td>
+                        <td style={{ textTransform: 'capitalize' }}>{t.source || '-'}</td>
+                        <td style={{ textTransform: 'capitalize' }}>{t.priority || '-'}</td>
+                        <td>{(t.status || 'pending').charAt(0).toUpperCase() + (t.status || 'pending').slice(1)}</td>
+                        <td>{formatDateTime(t.createdAt)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -327,7 +328,7 @@ export default function SupportTickets() {
           )}
         </div>
 
-        <div className="sa-panel">
+        <div className="sa-panel" style={{ display: 'flex', flexDirection: 'column' }}>
           <h3 className="sa-panel-title" style={{ marginTop: 0 }}>Ticket Detail</h3>
 
           {!selectedTicket ? (
@@ -341,11 +342,11 @@ export default function SupportTickets() {
                 </div>
                 <div style={{ color: 'var(--sa-text)' }}>
                   <strong style={{ color: 'var(--sa-text-heading)' }}>Status:</strong>{' '}
-                  {selectedTicket.status}
+                  {(selectedTicket.status || '').charAt(0).toUpperCase() + (selectedTicket.status || '').slice(1)}
                 </div>
                 <div style={{ color: 'var(--sa-text)' }}>
                   <strong style={{ color: 'var(--sa-text-heading)' }}>Priority:</strong>{' '}
-                  {selectedTicket.priority}
+                  {(selectedTicket.priority || '').charAt(0).toUpperCase() + (selectedTicket.priority || '').slice(1)}
                 </div>
                 <div style={{ color: 'var(--sa-text)' }}>
                   <strong style={{ color: 'var(--sa-text-heading)' }}>Initial message:</strong>{' '}
@@ -362,7 +363,7 @@ export default function SupportTickets() {
                     onClick={() => handleStatusChange(selectedTicket.id, s)}
                     disabled={!canEditTickets}
                   >
-                    Mark {s}
+                    Mark {s.charAt(0).toUpperCase() + s.slice(1)}
                   </button>
                 ))}
               </div>
@@ -376,7 +377,7 @@ export default function SupportTickets() {
                   messages.map((m) => (
                     <div key={m.id} style={{ marginBottom: 10 }}>
                       <div style={{ fontSize: 12, color: 'var(--sa-text-muted)' }}>
-                        {m.senderRole} {m.senderName ? `(${m.senderName})` : ''} • {new Date(m.createdAt).toLocaleString()}
+                        {m.senderRole} {m.senderName ? `(${m.senderName})` : ''} • {formatDateTime(m.createdAt)}
                       </div>
                       <div style={{ color: 'var(--sa-text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.message}</div>
                     </div>

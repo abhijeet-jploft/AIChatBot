@@ -248,7 +248,7 @@ export default function Settings() {
       if (!res.ok) throw new Error(payload.error || 'Failed to upload icon.');
       const nextIconUrl = String(payload.iconUrl || '').trim();
       if (!nextIconUrl) throw new Error('Upload succeeded but icon URL is missing.');
-      setIconUrl(nextIconUrl);
+      setIconUrl('');
       showToast('Icon uploaded successfully.', 'success');
     } catch (err) {
       const msg = err.message || 'Failed to upload icon.';

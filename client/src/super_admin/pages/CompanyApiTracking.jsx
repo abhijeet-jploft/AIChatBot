@@ -2,15 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { formatDateTime } from '../../utils/dateFormat';
 
 const PER_PAGE_OPTIONS = [10, 50, 100, 500];
-
-function dt(v) {
-  if (!v) return '-';
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString();
-}
 
 export default function CompanyApiTracking() {
   const { companyId } = useParams();
@@ -202,7 +196,7 @@ export default function CompanyApiTracking() {
             onChange={(e) => setQuery((prev) => ({ ...prev, provider: e.target.value, page: 1 }))}
           >
             <option value="">All providers</option>
-            {filterOptions.providers.map((v) => <option key={v} value={v}>{v}</option>)}
+            {filterOptions.providers.map((v) => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
           </select>
           <select
             className="sa-input-sm"
@@ -210,7 +204,7 @@ export default function CompanyApiTracking() {
             onChange={(e) => setQuery((prev) => ({ ...prev, category: e.target.value, page: 1 }))}
           >
             <option value="">All categories</option>
-            {filterOptions.categories.map((v) => <option key={v} value={v}>{v}</option>)}
+            {filterOptions.categories.map((v) => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
           </select>
           <select
             className="sa-input-sm"
@@ -218,7 +212,7 @@ export default function CompanyApiTracking() {
             onChange={(e) => setQuery((prev) => ({ ...prev, context: e.target.value, page: 1 }))}
           >
             <option value="">All contexts</option>
-            {filterOptions.contexts.map((v) => <option key={v} value={v}>{v}</option>)}
+            {filterOptions.contexts.map((v) => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
           </select>
           <select
             className="sa-input-sm"
@@ -248,7 +242,7 @@ export default function CompanyApiTracking() {
             <tbody>
               {data.recent.length ? data.recent.map((r) => (
                 <tr key={r.id}>
-                  <td>{dt(r.createdAt)}</td>
+                  <td>{formatDateTime(r.createdAt)}</td>
                   <td>{r.provider || '-'}</td>
                   <td>{r.category || '-'}</td>
                   <td>{r.model || '-'}</td>

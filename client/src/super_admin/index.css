@@ -1,6 +1,19 @@
 /* ─── Super Admin Design System ─── */
 /* Palette: Deep indigo / slate — darker, more authoritative than the admin panel */
 
+/* ─── Button text: Title Case ─── */
+.sa-shell button,
+.sa-shell .sa-btn,
+.sa-shell a.sa-btn {
+  text-transform: capitalize;
+}
+
+/* ─── Scrollbar (Chrome / WebKit) ─── */
+.sa-shell ::-webkit-scrollbar { width: 8px; height: 8px; }
+.sa-shell ::-webkit-scrollbar-track { background: var(--sa-bg); }
+.sa-shell ::-webkit-scrollbar-thumb { background: var(--sa-border-light); border-radius: 4px; }
+.sa-shell ::-webkit-scrollbar-thumb:hover { background: var(--sa-accent); }
+
 :root {
   --sa-bg:          #0f1117;
   --sa-surface:     #181c27;
@@ -276,7 +289,7 @@
   background: linear-gradient(90deg, var(--sa-success), var(--sa-info));
 }
 .sa-kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--sa-text-muted); margin-bottom: 6px; }
-.sa-kpi-value { font-size: 28px; font-weight: 700; color: var(--sa-text-heading); line-height: 1; }
+.sa-kpi-value { font-size: 20px; font-weight: 700; color: var(--sa-text-heading); line-height: 1; }
 
 /* ─── Table ─── */
 .sa-table-wrap { overflow-x: auto; border-radius: var(--sa-radius); border: 1px solid var(--sa-border); }

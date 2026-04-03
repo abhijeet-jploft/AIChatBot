@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { formatDateTime } from '../../utils/dateFormat';
+import SortableHeader from '../components/SortableHeader';
 import {
   clampFromNotAfterTo,
   clampToNotBeforeFrom,
@@ -58,13 +60,6 @@ const OUTCOME_OPTIONS = [
   { value: 'no_lead', label: 'No lead' },
 ];
 
-function formatDateTime(value) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
-
 function humanize(value) {
   return String(value || '')
     .replace(/_/g, ' ')
@@ -77,18 +72,6 @@ function formatConversationStatus(status) {
   if (normalized === 'closed') return 'Closed';
   if (normalized === 'escalated' || normalized === 'converted_to_lead') return 'Escalated';
   return humanize(status || 'closed');
-}
-
-function formatTimeAgo(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  const now = new Date();
-  const sec = Math.floor((now - d) / 1000);
-  if (sec < 60) return 'Just now';
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
-  return d.toLocaleDateString();
 }
 
 function buildConvertLeadDraft(detail) {
@@ -114,6 +97,7 @@ export default function Conversations() {
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [data, setData] = useState({ rows: [], total: 0, limit: PAGE_SIZE, page: 1 });
   const [loading, setLoading] = useState(false);
+  const [sort, setSort] = useState({ field: null, dir: null });
   const [detailId, setDetailId] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -260,6 +244,22 @@ export default function Conversations() {
     setPage(1);
   };
 
+  const sortedRows = useMemo(() => {
+    if (!sort.field || !sort.dir) return data.rows;
+    const sorted = [...data.rows];
+    sorted.sort((a, b) => {
+      let av, bv;
+      if (sort.field === 'visitorId') { av = (a.visitorId || a.id || '').toString().toLowerCase(); bv = (b.visitorId || b.id || '').toString().toLowerCase(); }
+      else if (sort.field === 'visitorName') { av = (a.visitorName || '').toLowerCase(); bv = (b.visitorName || '').toLowerCase(); }
+      else if (sort.field === 'createdAt') { av = new Date(a.createdAt).getTime(); bv = new Date(b.createdAt).getTime(); }
+      else return 0;
+      if (av < bv) return sort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [data.rows, sort.field, sort.dir]);
+
   const totalPages = Math.max(1, Math.ceil(data.total / data.limit));
   const fromRow = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
   const toRow = Math.min(data.page * data.limit, data.total);
@@ -372,11 +372,11 @@ export default function Conversations() {
             <>
               <div className="table-responsive">
                 <table className="table table-hover mb-0 admin-conversations-table" style={{ color: 'var(--chat-text)' }}>
-                  <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
+                  <thead>
                     <tr>
-                      <th className="border-0 py-2">Visitor ID</th>
-                      <th className="border-0 py-2">Visitor name</th>
-                      <th className="border-0 py-2">Date and time</th>
+                      <SortableHeader label="Visitor ID" field="visitorId" sort={sort} onSort={setSort} className="border-0 py-2" />
+                      <SortableHeader label="Visitor name" field="visitorName" sort={sort} onSort={setSort} className="border-0 py-2" />
+                      <SortableHeader label="Date and time" field="createdAt" sort={sort} onSort={setSort} className="border-0 py-2" />
                       <th className="border-0 py-2">Conversation status</th>
                       <th className="border-0 py-2">Lead captured</th>
                       <th className="border-0 py-2">Source page</th>
@@ -386,7 +386,7 @@ export default function Conversations() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.rows.map((conv) => (
+                    {sortedRows.map((conv) => (
                       <tr key={conv.id}>
                         <td className="align-middle">
                           <code className="small">{conv.visitorId || conv.id}</code>

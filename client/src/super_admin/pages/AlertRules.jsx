@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 const RULE_TYPES = ['lead_threshold', 'conversation_spike', 'system_memory', 'error_rate', 'custom'];
+
+function humanizeType(value) {
+  return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+}
 const EXAMPLE_RULE = {
   name: 'High error rate in last 5 minutes',
   description: 'Alert when application errors spike above acceptable threshold.',
@@ -153,7 +158,7 @@ export default function AlertRules() {
               <div className="sa-field">
                 <label>Rule Type</label>
                 <select value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })}>
-                  {RULE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {RULE_TYPES.map((t) => <option key={t} value={t}>{humanizeType(t)}</option>)}
                 </select>
               </div>
               <div className="sa-field">
@@ -204,7 +209,7 @@ export default function AlertRules() {
                       {r.enabled ? 'On' : 'Off'}
                     </button>
                   </td>
-                  <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td>{formatDateOnly(r.created_at)}</td>
                   <td>
                     <button type="button" className="sa-btn sa-btn-danger sa-btn-xs" onClick={() => handleDelete(r.id)}>Delete</button>
                   </td>

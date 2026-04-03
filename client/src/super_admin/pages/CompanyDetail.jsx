@@ -98,6 +98,10 @@ export default function CompanyDetail() {
   const handleEdit = async (e) => {
     e.preventDefault();
     const specify = industryOtherSpecify.trim();
+    if (!editName.trim()) {
+      showToast('Company name is required.', 'error');
+      return;
+    }
     if (industrySelect === OTHER_VALUE && !specify) {
       showToast('Please specify the industry when “Other” is selected.', 'error');
       return;
@@ -123,8 +127,8 @@ export default function CompanyDetail() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: editName,
-          description: editDesc,
+          name: editName.trim(),
+          description: editDesc.trim(),
           adminEmail: editAdminEmail.trim(),
           ownerName: editOwnerName.trim(),
           phone: phoneCheck.normalized,
@@ -267,7 +271,7 @@ export default function CompanyDetail() {
           )}
           {canEditAdminAccess && (
             <button type="button" className="sa-btn sa-btn-primary sa-btn-sm" onClick={handleOpenAsAdmin} disabled={openAdminBusy}>
-              {openAdminBusy ? 'Opening...' : 'Open as company admin'}
+              {openAdminBusy ? 'Opening...' : 'Open As Company Admin'}
             </button>
           )}
         </div>

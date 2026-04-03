@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
+import { formatDateOnly, formatDateShort } from '../../utils/dateFormat';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
   ArcElement,
@@ -94,7 +95,7 @@ export default function Dashboard() {
   };
 
   const convTrendLabels = (charts?.conversationsByDay || []).map((item) =>
-    new Date(item.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    formatDateShort(item.day, { month: 'short', day: 'numeric' })
   );
   const convTrendValues = (charts?.conversationsByDay || []).map((item) => Number(item.conversations || 0));
   const convTrendData = {
@@ -110,7 +111,7 @@ export default function Dashboard() {
   };
 
   const revenueTrendLabels = (charts?.revenueByMonth || []).map((item) =>
-    new Date(item.month).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+    formatDateShort(item.month, { month: 'short', year: '2-digit' })
   );
   const revenueTrendValues = (charts?.revenueByMonth || []).map((item) => Number(item.revenue || 0));
   const revenueTrendData = {
@@ -246,7 +247,7 @@ export default function Dashboard() {
                   <td>{l.company_name}</td>
                   <td><span className={`sa-badge sa-badge-${l.lead_score_category}`}>{l.lead_score_category}</span></td>
                   <td>{l.status}</td>
-                  <td>{new Date(l.created_at).toLocaleDateString()}</td>
+                  <td>{formatDateOnly(l.created_at)}</td>
                 </tr>
               ))}
             </tbody>

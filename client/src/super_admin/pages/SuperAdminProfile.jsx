@@ -67,6 +67,18 @@ export default function SuperAdminProfile() {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
+    if (!currentPassword) {
+      showToast('Current password is required.', 'error');
+      return;
+    }
+    if (!newPassword) {
+      showToast('New password is required.', 'error');
+      return;
+    }
+    if (newPassword.length < 8) {
+      showToast('New password must be at least 8 characters.', 'error');
+      return;
+    }
     setChangingPw(true);
     try {
       const res = await saFetch('/auth/change-password', {

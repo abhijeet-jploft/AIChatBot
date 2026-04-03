@@ -56,7 +56,7 @@ async function createSupportRequestHandler(req, res) {
     const message = String(req.body?.message || '').trim();
     const priorityRaw = String(req.body?.priority || 'normal').trim().toLowerCase();
     const priority = ['low', 'normal', 'high', 'urgent'].includes(priorityRaw) ? priorityRaw : 'normal';
-    if (!message) return res.status(400).json({ error: 'message is required' });
+    if (!message) return res.status(400).json({ error: 'Message is required' });
 
     addSupportRequest(companyId, {
       sessionId: null,
@@ -112,7 +112,7 @@ async function createSupportRequestMessageHandler(req, res) {
     const companyName = req.adminCompanyName || companyId;
     const { ticketId } = req.params;
     const message = String(req.body?.message || '').trim();
-    if (!message) return res.status(400).json({ error: 'message is required' });
+    if (!message) return res.status(400).json({ error: 'Message is required' });
 
     const ticketQ = await pool.query(
       `SELECT id FROM support_tickets WHERE id = $1 AND company_id = $2`,

@@ -51,8 +51,18 @@ export function normalizePhoneForSubmit(countryCode, localNumber) {
 }
 
 export function validatePhone(countryCode, localNumber) {
-  const number = String(localNumber || '').replace(/\D/g, '');
-  if (!number) return { valid: true, normalized: '' };
+  const raw = String(localNumber || '').trim();
+  const number = raw.replace(/\D/g, '');
+
+  if (!raw) return { valid: true, normalized: '' };
+
+  if (!number) {
+    return { valid: false, error: 'Phone number must contain digits.' };
+  }
+
+  if (/[a-zA-Z]/.test(raw)) {
+    return { valid: false, error: 'Phone number must not contain letters.' };
+  }
 
   const code = String(countryCode || '').trim();
   if (!/^\+\d{1,4}$/.test(code)) {

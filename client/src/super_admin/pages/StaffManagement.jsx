@@ -3,6 +3,7 @@ import { ACCESS_LEVELS, PERMISSION_MODULES, normalizePermissionMatrix } from '..
 import { useSuperAuth } from '../context/AuthContext';
 import { useSuperToast } from '../context/ToastContext';
 import { validateEmail } from '../../lib/contactValidation';
+import { formatDateTime } from '../../utils/dateFormat';
 import {
   clampFromNotAfterTo,
   clampToNotBeforeFrom,
@@ -351,6 +352,10 @@ export default function StaffManagement() {
   const saveRole = async (event) => {
     event.preventDefault();
     setSavingRole(true);
+    if (!roleForm.name.trim()) {
+      showToast('Role name is required.', 'error');
+      return;
+    }
     try {
       const method = roleForm.id ? 'PATCH' : 'POST';
       const path = roleForm.id ? `/staff/roles/${roleForm.id}` : '/staff/roles';
@@ -401,6 +406,10 @@ export default function StaffManagement() {
 
   const saveStaff = async (event) => {
     event.preventDefault();
+    if (!staffForm.name.trim()) {
+      showToast('Staff name is required.', 'error');
+      return;
+    }
     const emailCheck = validateEmail(staffForm.email);
     if (!emailCheck.valid) {
       showToast(emailCheck.error, 'error');
@@ -592,7 +601,7 @@ export default function StaffManagement() {
                       }))}
                       disabled={!canEdit}
                     >
-                      {ACCESS_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
+                      {ACCESS_LEVELS.map((level) => <option key={level} value={level}>{level.charAt(0).toUpperCase() + level.slice(1)}</option>)}
                     </select>
                   </div>
                 ))}
@@ -689,7 +698,7 @@ export default function StaffManagement() {
                     <td>{row.full_name}<div className="sa-table-subtext">{row.email}</div></td>
                     <td>{row.role_name?.trim() ? row.role_name : 'Unassigned'}</td>
                     <td>{row.is_active ? 'Active' : 'Inactive'}{row.must_change_password ? ' · reset pending' : ''}</td>
-                    <td>{row.last_login_at ? new Date(row.last_login_at).toLocaleString() : 'Never'}</td>
+                    <td>{row.last_login_at ? formatDateTime(row.last_login_at) : 'Never'}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
                         <button type="button" className="sa-btn sa-btn-ghost sa-btn-sm" onClick={() => handleSelectStaff(row)}>Edit</button>
@@ -867,7 +876,7 @@ export default function StaffManagement() {
                 ) : null}
                 {auditRows.map((row) => (
                   <tr key={row.id}>
-                    <td>{new Date(row.created_at).toLocaleString()}</td>
+                    <td>{formatDateTime(row.created_at)}</td>
                     <td>
                       <div>{row.actor_label}</div>
                       <div className="sa-table-subtext">{row.actor_type || '—'}</div>

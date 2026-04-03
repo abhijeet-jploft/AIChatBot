@@ -323,6 +323,7 @@ export default function Training() {
         timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
       if (data.saved || data.ok) {
         const linesAppended = data.linesAppended ?? data.savedLines ?? data.lines ?? 0;
         const linesSkipped = data.linesSkipped ?? 0;
@@ -359,6 +360,7 @@ export default function Training() {
         timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
       if (data.saved || data.ok) {
         showToast('Appended to conversational training.', 'success');
         setConvText('');
@@ -387,6 +389,7 @@ export default function Training() {
         timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
       if (data.saved || data.ok) {
         showToast(`Saved ${data.files?.length || data.results?.length || 0} document(s).`, 'success');
         setDocFiles(null);
@@ -416,6 +419,7 @@ export default function Training() {
         timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
       if (data.saved) {
         showToast(
           `Database knowledge saved. ${data.appended ?? 0} new entr(ies), ${data.skipped ?? 0} duplicate(s) skipped.`,
@@ -451,6 +455,7 @@ export default function Training() {
         timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
       if (data.saved) {
         showToast(
           `Saved ${data.files?.length || 0} media file(s). JSONL appended: ${data.linesAppended ?? 0}${data.linesSkipped ? ` (${data.linesSkipped} skipped as duplicates)` : ''}.`,
@@ -511,6 +516,7 @@ export default function Training() {
           timeoutMs: TRAINING_LONG_FETCH_MS,
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Save failed.');
         if (data.saved) {
           showToast(`Appended ${data.count} row(s).`, 'success');
           setStructuredFile(null);
@@ -545,6 +551,7 @@ export default function Training() {
         timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
       if (data.saved) {
         showToast(`Appended ${data.count} row(s).`, 'success');
         setStructuredJson('');
@@ -569,6 +576,7 @@ export default function Training() {
         timeoutMs: TRAINING_LONG_FETCH_MS,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
       if (data.saved || data.ok) {
         showToast('Manual knowledge saved.', 'success');
         loadFiles();

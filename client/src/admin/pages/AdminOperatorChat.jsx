@@ -182,7 +182,7 @@ export default function AdminOperatorChat() {
       }
       const data = await res.json();
       const next = Array.isArray(data)
-        ? data.map((m) => ({ role: toOperatorPerspectiveRole(m.role), content: m.content }))
+        ? data.map((m) => ({ role: toOperatorPerspectiveRole(m.role), content: m.content, createdAt: m.created_at || m.createdAt }))
         : [];
       setMessages([...next, ...pendingOutbox]);
       setLoadError(null);

@@ -6,6 +6,7 @@ import {
   clampToNotBeforeFrom,
   nextToAfterFromChange,
 } from '../../utils/dateRangeFields';
+import { formatDateTimeFull } from '../../utils/dateFormat';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   CategoryScale,
@@ -29,19 +30,6 @@ function formatStatusLabel(value) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-function formatDateTimeFull(value) {
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return String(value || '');
-  return dt.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
 function formatPeriodLabel(fromValue, toValue) {
   const fromDate = String(fromValue || '').slice(0, 10);
   const toDate = String(toValue || '').slice(0, 10);
@@ -59,6 +47,7 @@ export default function Reports() {
   const { showToast } = useSuperToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -206,11 +195,12 @@ export default function Reports() {
           <input
             type="date"
             value={from}
-            max={to || undefined}
+            max={to || today}
             onChange={(e) => {
               const v = e.target.value;
-              setFrom(clampFromNotAfterTo(to, v));
-              setTo((t) => nextToAfterFromChange(v, t));
+              const clamped = clampFromNotAfterTo(to, v);
+              setFrom(clamped);
+              setTo((t) => nextToAfterFromChange(clamped, t));
             }}
             className="sa-input-sm"
           />
@@ -219,6 +209,7 @@ export default function Reports() {
             type="date"
             value={to}
             min={from || undefined}
+            max={today}
             onChange={(e) => setTo(clampToNotBeforeFrom(from, e.target.value))}
             className="sa-input-sm"
           />
@@ -257,8 +248,9 @@ export default function Reports() {
                 <input
                   type="number"
                   min="0"
+                  max="999"
                   value={activityMinConversationsInput}
-                  onChange={(e) => setActivityMinConversationsInput(e.target.value)}
+                  onChange={(e) => { if (e.target.value.length <= 3) setActivityMinConversationsInput(e.target.value); }}
                   placeholder="0"
                 />
               </div>
@@ -267,8 +259,9 @@ export default function Reports() {
                 <input
                   type="number"
                   min="0"
+                  max="999"
                   value={activityMinLeadsInput}
-                  onChange={(e) => setActivityMinLeadsInput(e.target.value)}
+                  onChange={(e) => { if (e.target.value.length <= 3) setActivityMinLeadsInput(e.target.value); }}
                   placeholder="0"
                 />
               </div>
@@ -277,8 +270,9 @@ export default function Reports() {
                 <input
                   type="number"
                   min="0"
+                  max="999"
                   value={activityMinConvertedInput}
-                  onChange={(e) => setActivityMinConvertedInput(e.target.value)}
+                  onChange={(e) => { if (e.target.value.length <= 3) setActivityMinConvertedInput(e.target.value); }}
                   placeholder="0"
                 />
               </div>

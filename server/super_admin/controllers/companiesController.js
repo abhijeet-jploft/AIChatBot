@@ -128,12 +128,12 @@ async function createCompany(req, res) {
   try {
     const { companyId, name, description, adminPassword, adminEmail } = req.body;
     if (!companyId || !name) {
-      return res.status(400).json({ error: 'companyId and name are required' });
+      return res.status(400).json({ error: 'Company ID and Company Name are required' });
     }
 
     const email = normalizeAdminEmail(adminEmail);
     if (!email || !isValidAdminEmail(email)) {
-      return res.status(400).json({ error: 'A valid adminEmail is required for company admin login' });
+      return res.status(400).json({ error: 'A valid Admin Login Email is required for company admin login' });
     }
 
     const emailClash = await pool.query(
@@ -146,7 +146,7 @@ async function createCompany(req, res) {
 
     const cid = String(companyId).trim();
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(cid)) {
-      return res.status(400).json({ error: 'companyId may only contain letters, numbers, underscores, and hyphens (max 80 chars)' });
+      return res.status(400).json({ error: 'Company ID may only contain letters, numbers, underscores, and hyphens (max 80 chars)' });
     }
 
     const existing = await pool.query(`SELECT company_id FROM chatbots WHERE company_id = $1`, [cid]);
@@ -155,7 +155,7 @@ async function createCompany(req, res) {
     }
 
     if (adminPassword && String(adminPassword).length < 8) {
-      return res.status(400).json({ error: 'adminPassword must be at least 8 characters when provided' });
+      return res.status(400).json({ error: 'Admin Password must be at least 8 characters when provided' });
     }
 
     const passwordHash = adminPassword ? hashPassword(String(adminPassword)) : null;
@@ -276,7 +276,7 @@ async function updateCompany(req, res) {
     if (adminEmail !== undefined) {
       const email = normalizeAdminEmail(adminEmail);
       if (!email || !isValidAdminEmail(email)) {
-        return res.status(400).json({ error: 'adminEmail must be a valid email address' });
+        return res.status(400).json({ error: 'Admin Login Email must be a valid email address' });
       }
       const clash = await pool.query(
         `SELECT company_id FROM chatbots WHERE admin_email = $1 AND company_id <> $2`,
@@ -396,7 +396,7 @@ async function resetAdminPassword(req, res) {
     const { companyId } = req.params;
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 8) {
-      return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
+      return res.status(400).json({ error: 'New Password must be at least 8 characters' });
     }
     const hash = hashPassword(String(newPassword));
     const { rowCount } = await pool.query(

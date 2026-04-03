@@ -2,28 +2,12 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
+import { formatTimeAgo, formatTimeAgoTs } from '../../utils/dateFormat';
 
 const REFRESH_INTERVAL_MS = 30000;
 const LIVE_POLL_MS = 15000;
 const WS_RECONNECT_MS = 5000;
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
-
-function formatTimeAgo(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  const now = new Date();
-  const sec = Math.floor((now - d) / 1000);
-  if (sec < 60) return 'Just now';
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
-  return d.toLocaleDateString();
-}
-
-function formatTimeAgoTs(ts) {
-  if (!ts) return '—';
-  return formatTimeAgo(new Date(ts).toISOString());
-}
 
 export default function Dashboard() {
   const { authFetch, token, company } = useAuth();
@@ -402,9 +386,12 @@ export default function Dashboard() {
           {liveData?.sessions?.length > 0 && (
             <div className="mt-3 pt-2 border-top" style={{ borderColor: 'var(--chat-border)' }}>
               <div className="small mb-1" style={{ color: 'var(--chat-muted)' }}>Current pages</div>
-              <ul className="mb-0 ps-3 small" style={{ color: 'var(--chat-text)', maxHeight: 120, overflowY: 'auto' }}>
+              <ul className="mb-0 p-0 small" style={{ color: 'var(--chat-text)', maxHeight: 120, overflowY: 'auto', listStyle: 'none', paddingLeft: 0 }}>
                 {liveData.sessions.slice(0, 10).map((s, i) => (
-                  <li key={i} className="text-truncate" title={s.pageUrl}>{s.pageUrl || '—'} · {formatTimeAgoTs(s.lastSeen)}</li>
+                  <li key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+                    <span className="text-truncate" style={{ flex: '1 1 auto', minWidth: 0 }} title={s.pageUrl}>{s.pageUrl || '—'}</span>
+                    <span style={{ flex: '0 0 auto', color: 'var(--chat-muted)', whiteSpace: 'nowrap' }}>{formatTimeAgoTs(s.lastSeen)}</span>
+                  </li>
                 ))}
               </ul>
             </div>
@@ -493,7 +480,7 @@ export default function Dashboard() {
                           {conv.firstMessage}
                         </div>
                         <div className="small" style={{ color: 'var(--chat-muted)' }}>
-                          Duration: {conv.duration} · Lead: {conv.leadCaptured ? 'Yes' : 'No'} · Status: {conv.status}
+                          Duration: {conv.duration} · Lead: {conv.leadCaptured ? 'Yes' : 'No'} · Status: {conv.status ? conv.status.charAt(0).toUpperCase() + conv.status.slice(1) : conv.status}
                         </div>
                       </div>
                       <div className="d-flex flex-column gap-1 ms-2 align-items-start">

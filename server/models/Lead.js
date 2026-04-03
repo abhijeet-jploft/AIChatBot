@@ -540,7 +540,7 @@ async function updateReminder(companyId, leadId, reminderAt, reminderNote) {
     await addActivity(
       leadId,
       'reminder_set',
-      `Reminder set for ${new Date(nextReminderAt).toLocaleString()}`,
+      `Reminder set for ${new Date(nextReminderAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
       {
         reminderAt: nextReminderAt,
         reminderNote: nextReminderNote,

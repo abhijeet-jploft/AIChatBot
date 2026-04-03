@@ -1,22 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildVisitorPreviewUrl } from '../lib/visitorPreview';
+import { formatTimeAgo } from '../../utils/dateFormat';
+import SortableHeader from '../components/SortableHeader';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const LIVE_POLL_MS = 10000;
 const WS_RECONNECT_MS = 5000;
-
-function formatTimeAgo(value) {
-  if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '-';
-  const sec = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (sec < 60) return 'Just now';
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return `${Math.floor(sec / 86400)}d ago`;
-}
 
 function formatDuration(seconds) {
   const safe = Math.max(0, Number(seconds) || 0);
@@ -40,6 +31,7 @@ export default function LiveMonitoring() {
   const [loading, setLoading] = useState(true);
   const wsRef = useRef(null);
   const reconnectRef = useRef(null);
+  const [sort, setSort] = useState({ field: null, dir: null });
 
   const fetchLive = useCallback(async () => {
     try {
@@ -128,6 +120,21 @@ export default function LiveMonitoring() {
 
   const sessions = Array.isArray(live.sessions) ? live.sessions : [];
 
+  const sortedSessions = useMemo(() => {
+    if (!sort.field || !sort.dir) return sessions;
+    const sorted = [...sessions];
+    sorted.sort((a, b) => {
+      let av, bv;
+      if (sort.field === 'durationSeconds') { av = Number(a.durationSeconds) || 0; bv = Number(b.durationSeconds) || 0; }
+      else if (sort.field === 'lastMessageAt') { av = new Date(a.lastMessageAt || a.lastSeen || 0).getTime(); bv = new Date(b.lastMessageAt || b.lastSeen || 0).getTime(); }
+      else return 0;
+      if (av < bv) return sort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [sessions, sort.field, sort.dir]);
+
   return (
     <div className="p-4" id="live-monitoring-top">
       <h5 className="mb-2" style={{ color: 'var(--chat-text-heading)' }}>Live chat monitoring</h5>
@@ -181,18 +188,18 @@ export default function LiveMonitoring() {
           ) : (
             <div className="table-responsive">
               <table className="table table-hover mb-0" style={{ color: 'var(--chat-text)' }}>
-                <thead style={{ background: 'var(--chat-sidebar)', color: 'var(--chat-text-heading)' }}>
+                <thead>
                   <tr>
                     <th className="border-0 py-2">Visitor / Session</th>
                     <th className="border-0 py-2">Typing</th>
                     <th className="border-0 py-2">Current page</th>
-                    <th className="border-0 py-2">Duration</th>
-                    <th className="border-0 py-2">Last message</th>
+                    <SortableHeader label="Duration" field="durationSeconds" sort={sort} onSort={setSort} className="border-0 py-2" />
+                    <SortableHeader label="Last message" field="lastMessageAt" sort={sort} onSort={setSort} className="border-0 py-2" />
                     <th className="border-0 py-2 text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.map((session) => (
+                  {sortedSessions.map((session) => (
                     <tr key={session.sessionId}>
                       <td className="align-middle">
                         <div className="small" style={{ color: 'var(--chat-muted)' }}>Visitor ID</div>

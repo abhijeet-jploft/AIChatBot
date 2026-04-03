@@ -219,7 +219,7 @@ async function addActivity(req, res) {
     const text = String(details || '').trim();
 
     if (!text) {
-      return res.status(400).json({ error: 'details is required' });
+      return res.status(400).json({ error: 'Details is required' });
     }
 
     await Lead.addActivity(leadId, activityType, text, metadata || null);
