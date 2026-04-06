@@ -17,6 +17,7 @@ const { parseLanguageExtraLocalesJson, resolveSpeechLanguageCode } = require('..
 const { detectNaturalLanguageFromText } = require('../services/chatRules');
 const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
 const { findProjectLinks } = require('../services/trainingLoader');
+const { extractClientIp, lookupIpGeo } = require('../utils/ipGeo');
 const pool = require('../db/index');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
@@ -635,6 +636,8 @@ async function postMessage(req, res) {
       let leadCaptureResult = null;
       try {
         stage = 'lead_capture';
+        const clientIp = extractClientIp(req);
+        const geo = await lookupIpGeo(clientIp);
         leadCaptureResult = await captureLeadFromConversation({
           companyId,
           sessionId: sid,
@@ -644,6 +647,9 @@ async function postMessage(req, res) {
             origin: req.headers.origin,
             pageUrl: req.headers['x-page-url'],
             userAgent: req.headers['user-agent'],
+            ipAddress: clientIp,
+            ipCountry: geo.country,
+            ipCityState: geo.cityState,
           },
         });
 

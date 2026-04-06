@@ -163,6 +163,12 @@ async function upsertCapturedLead({
   aiDetectedIntent,
   leadScore = 0,
   contactMethod,
+  messageEnquiry,
+  ipAddress,
+  ipCountry,
+  ipCityState,
+  browser,
+  osName,
 }) {
   const existing = await findByCompanyAndSession(companyId, sessionId);
   const score = clampScore(leadScore);
@@ -186,9 +192,15 @@ async function upsertCapturedLead({
       status,
       lead_score,
       lead_score_category,
-      contact_method
+      contact_method,
+      message_enquiry,
+      ip_address,
+      ip_country,
+      ip_city_state,
+      browser,
+      os_name
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'new',$15,$16,$17
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'new',$15,$16,$17,$18,$19,$20,$21,$22,$23
     )
     ON CONFLICT (company_id, session_id)
     DO UPDATE SET
@@ -212,6 +224,12 @@ async function upsertCapturedLead({
         ELSE 'cold'
       END,
       contact_method = COALESCE(NULLIF(EXCLUDED.contact_method, ''), leads.contact_method),
+      message_enquiry = COALESCE(NULLIF(EXCLUDED.message_enquiry, ''), leads.message_enquiry),
+      ip_address = COALESCE(NULLIF(EXCLUDED.ip_address, ''), leads.ip_address),
+      ip_country = COALESCE(NULLIF(EXCLUDED.ip_country, ''), leads.ip_country),
+      ip_city_state = COALESCE(NULLIF(EXCLUDED.ip_city_state, ''), leads.ip_city_state),
+      browser = COALESCE(NULLIF(EXCLUDED.browser, ''), leads.browser),
+      os_name = COALESCE(NULLIF(EXCLUDED.os_name, ''), leads.os_name),
       updated_at = NOW()
     RETURNING *`,
     [
@@ -232,6 +250,12 @@ async function upsertCapturedLead({
       score,
       scoreCategoryFromScore(score),
       contactMethod || null,
+      messageEnquiry || null,
+      ipAddress || null,
+      ipCountry || null,
+      ipCityState || null,
+      browser || null,
+      osName || null,
     ]
   );
 

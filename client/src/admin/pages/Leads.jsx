@@ -966,6 +966,9 @@ export default function Leads() {
                       <div><strong>Email:</strong> {selectedLead.email || '-'}</div>
                       <button className="btn btn-link btn-sm p-0" onClick={() => copyToClipboard('Email', selectedLead.email)}>Copy email</button>
                     </div>
+                    {selectedLead.message_enquiry ? (
+                      <div className="col-12"><strong>Message/Enquiry:</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{selectedLead.message_enquiry}</span></div>
+                    ) : null}
                     <div className="col-md-6"><strong>Business Type:</strong> {selectedLead.business_type || '-'}</div>
                     <div className="col-md-6"><strong>Service Requested:</strong> {selectedLead.service_requested || '-'}</div>
                     <div className="col-md-6"><strong>Budget:</strong> {selectedLead.budget_range || '-'}</div>
@@ -973,6 +976,11 @@ export default function Leads() {
                     <div className="col-md-6"><strong>Location:</strong> {selectedLead.location || '-'}</div>
                     <div className="col-md-6"><strong>Landing Page:</strong> {selectedLead.landing_page || '-'}</div>
                     <div className="col-md-6"><strong>Device Type:</strong> {selectedLead.device_type || '-'}</div>
+                    <div className="col-md-6"><strong>Browser:</strong> {selectedLead.browser || '-'}</div>
+                    <div className="col-md-6"><strong>OS:</strong> {selectedLead.os_name || '-'}</div>
+                    <div className="col-md-6"><strong>IP Address:</strong> {selectedLead.ip_address || '-'}</div>
+                    <div className="col-md-6"><strong>IP Country:</strong> {selectedLead.ip_country || '-'}</div>
+                    <div className="col-md-6"><strong>IP City/State:</strong> {selectedLead.ip_city_state || '-'}</div>
                     <div className="col-md-6"><strong>Conversation ID:</strong> {selectedLead.session_id || '-'}</div>
                     <div className="col-md-6"><strong>Intent:</strong> {humanize(selectedLead.ai_detected_intent)}</div>
                     <div className="col-md-6"><strong>Contact Method:</strong> {selectedLead.contact_method || '-'}</div>

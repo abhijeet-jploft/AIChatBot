@@ -140,6 +140,57 @@ function inferDeviceType(userAgent = '') {
   return 'desktop';
 }
 
+function parseBrowserFromUA(userAgent = '') {
+  const ua = String(userAgent || '');
+  if (!ua) return '';
+  // Order matters — check specific browsers before generic engines
+  const browsers = [
+    [/Edg(?:e|A|iOS)?\/(\S+)/, 'Edge'],
+    [/OPR\/(\S+)|Opera\/(\S+)/, 'Opera'],
+    [/SamsungBrowser\/(\S+)/, 'Samsung Browser'],
+    [/UCBrowser\/(\S+)/, 'UC Browser'],
+    [/Brave/, 'Brave'],
+    [/Vivaldi\/(\S+)/, 'Vivaldi'],
+    [/YaBrowser\/(\S+)/, 'Yandex'],
+    [/Firefox\/(\S+)/, 'Firefox'],
+    [/CriOS\/(\S+)/, 'Chrome'],
+    [/FxiOS\/(\S+)/, 'Firefox'],
+    [/Chrome\/(\S+)/, 'Chrome'],
+    [/Safari\/(\S+).*Version\/(\S+)/, 'Safari'],
+    [/Safari\/(\S+)/, 'Safari'],
+  ];
+  for (const [re, name] of browsers) {
+    const m = ua.match(re);
+    if (m) {
+      const version = (m[1] || m[2] || '').split('.').slice(0, 2).join('.');
+      return version ? `${name} ${version}` : name;
+    }
+  }
+  return '';
+}
+
+function parseOSFromUA(userAgent = '') {
+  const ua = String(userAgent || '');
+  if (!ua) return '';
+  if (/Windows NT 10/.test(ua)) return /Windows NT 10.*Win64|WOW64/.test(ua) ? 'Windows 10/11' : 'Windows 10';
+  if (/Windows NT 6\.3/.test(ua)) return 'Windows 8.1';
+  if (/Windows NT 6\.2/.test(ua)) return 'Windows 8';
+  if (/Windows NT 6\.1/.test(ua)) return 'Windows 7';
+  if (/Windows/.test(ua)) return 'Windows';
+  const macMatch = ua.match(/Mac OS X (\d+[._]\d+)/);
+  if (macMatch) return `macOS ${macMatch[1].replace(/_/g, '.')}`;
+  if (/Macintosh|Mac OS/.test(ua)) return 'macOS';
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    const iosMatch = ua.match(/OS (\d+[._]\d+)/);
+    return iosMatch ? `iOS ${iosMatch[1].replace(/_/g, '.')}` : 'iOS';
+  }
+  const androidMatch = ua.match(/Android (\d+\.?\d*)/);
+  if (androidMatch) return `Android ${androidMatch[1]}`;
+  if (/Linux/.test(ua)) return 'Linux';
+  if (/CrOS/.test(ua)) return 'Chrome OS';
+  return '';
+}
+
 function buildProjectSummary(messages = []) {
   return buildLeadRequirementSummary({ messages });
 }
@@ -268,6 +319,10 @@ function deriveLeadFromConversation({ messages = [], requestMeta = {} }) {
 
   const landingPage = requestMeta.pageUrl || requestMeta.referer || requestMeta.origin || '';
   const deviceType = inferDeviceType(requestMeta.userAgent);
+  const browser = parseBrowserFromUA(requestMeta.userAgent);
+  const osName = parseOSFromUA(requestMeta.userAgent);
+  const ipAddress = requestMeta.ipAddress || '';
+  const messageEnquiry = latestUserMessage.slice(0, 2000);
 
   return {
     name,
@@ -284,6 +339,10 @@ function deriveLeadFromConversation({ messages = [], requestMeta = {} }) {
     leadScore,
     landingPage,
     deviceType,
+    browser,
+    osName,
+    ipAddress,
+    messageEnquiry,
     flags: {
       consultationRequested,
       pricingRequested,
@@ -330,6 +389,12 @@ async function captureLeadFromConversation({ companyId, sessionId, messages = []
     aiDetectedIntent: inferred.aiDetectedIntent,
     leadScore: inferred.leadScore,
     contactMethod: inferred.contactMethod,
+    messageEnquiry: inferred.messageEnquiry,
+    ipAddress: inferred.ipAddress,
+    ipCountry: requestMeta.ipCountry || '',
+    ipCityState: requestMeta.ipCityState || '',
+    browser: inferred.browser,
+    osName: inferred.osName,
   });
 
   if (!lead) {
