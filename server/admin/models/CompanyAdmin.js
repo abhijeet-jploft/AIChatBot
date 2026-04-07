@@ -105,7 +105,19 @@ async function findByCompanyId(companyId) {
             lg.language_manual_switch_enabled,
             lg.language_extra_locales,
             em.embed_slug,
-            em.embed_secret
+            em.embed_secret,
+            va.va_enabled,
+            va.liveavatar_api_key,
+            va.liveavatar_avatar_id,
+            va.liveavatar_avatar_name,
+            va.liveavatar_context_id,
+            va.liveavatar_context_name,
+            va.va_voice_source,
+            va.liveavatar_voice_id,
+            va.liveavatar_voice_name,
+            va.va_sandbox_mode,
+            va.va_video_quality,
+            av.admin_visibility_virtual_assistant
      FROM chatbots c
      INNER JOIN chat_settings ch ON ch.company_id = c.company_id
      INNER JOIN theme_settings th ON th.company_id = c.company_id
@@ -116,6 +128,7 @@ async function findByCompanyId(companyId) {
      INNER JOIN safety_settings sf ON sf.company_id = c.company_id
      INNER JOIN language_settings lg ON lg.company_id = c.company_id
      INNER JOIN embed_settings em ON em.company_id = c.company_id
+     INNER JOIN virtual_assistant_settings va ON va.company_id = c.company_id
      WHERE c.company_id = $1`,
     [companyId]
   );
@@ -267,6 +280,17 @@ async function updateSettings(companyId, {
   language_auto_detect_enabled,
   language_manual_switch_enabled,
   language_extra_locales,
+  va_enabled,
+  liveavatar_api_key,
+  liveavatar_avatar_id,
+  liveavatar_avatar_name,
+  liveavatar_context_id,
+  liveavatar_context_name,
+  va_voice_source,
+  liveavatar_voice_id,
+  liveavatar_voice_name,
+  va_sandbox_mode,
+  va_video_quality,
 }) {
   if (company_name !== undefined) {
     const n = String(company_name || '').trim().slice(0, 255);
@@ -554,6 +578,57 @@ async function updateSettings(companyId, {
     langValues.push(v && v.length ? v : null);
   }
 
+  // Virtual Assistant Settings Updates
+  const vaUpdates = [];
+  const vaValues = [];
+  let vai = 1;
+  if (va_enabled !== undefined) {
+    vaUpdates.push(`va_enabled = $${vai++}`);
+    vaValues.push(Boolean(va_enabled));
+  }
+  if (liveavatar_api_key !== undefined) {
+    vaUpdates.push(`liveavatar_api_key = $${vai++}`);
+    vaValues.push(String(liveavatar_api_key || '').trim() || null);
+  }
+  if (liveavatar_avatar_id !== undefined) {
+    vaUpdates.push(`liveavatar_avatar_id = $${vai++}`);
+    vaValues.push(String(liveavatar_avatar_id || '').trim() || null);
+  }
+  if (liveavatar_avatar_name !== undefined) {
+    vaUpdates.push(`liveavatar_avatar_name = $${vai++}`);
+    vaValues.push(String(liveavatar_avatar_name || '').trim().slice(0, 255) || null);
+  }
+  if (liveavatar_context_id !== undefined) {
+    vaUpdates.push(`liveavatar_context_id = $${vai++}`);
+    vaValues.push(String(liveavatar_context_id || '').trim() || null);
+  }
+  if (liveavatar_context_name !== undefined) {
+    vaUpdates.push(`liveavatar_context_name = $${vai++}`);
+    vaValues.push(String(liveavatar_context_name || '').trim().slice(0, 255) || null);
+  }
+  if (va_voice_source !== undefined) {
+    vaUpdates.push(`va_voice_source = $${vai++}`);
+    const src = String(va_voice_source || 'liveavatar').trim().toLowerCase();
+    vaValues.push(src === 'elevenlabs' ? 'elevenlabs' : 'liveavatar');
+  }
+  if (liveavatar_voice_id !== undefined) {
+    vaUpdates.push(`liveavatar_voice_id = $${vai++}`);
+    vaValues.push(String(liveavatar_voice_id || '').trim() || null);
+  }
+  if (liveavatar_voice_name !== undefined) {
+    vaUpdates.push(`liveavatar_voice_name = $${vai++}`);
+    vaValues.push(String(liveavatar_voice_name || '').trim().slice(0, 255) || null);
+  }
+  if (va_sandbox_mode !== undefined) {
+    vaUpdates.push(`va_sandbox_mode = $${vai++}`);
+    vaValues.push(Boolean(va_sandbox_mode));
+  }
+  if (va_video_quality !== undefined) {
+    vaUpdates.push(`va_video_quality = $${vai++}`);
+    const q = String(va_video_quality || 'high').trim().toLowerCase();
+    vaValues.push(['low', 'medium', 'high'].includes(q) ? q : 'high');
+  }
+
   const totalPatches =
     chatU.length +
     themeUpdates.length +
@@ -561,7 +636,8 @@ async function updateSettings(companyId, {
     voiceUpdates.length +
     escUpdates.length +
     safetyUpdates.length +
-    langUpdates.length;
+    langUpdates.length +
+    vaUpdates.length;
   if (totalPatches === 0) return;
 
   await ensureSettingsRow(companyId);
@@ -572,6 +648,7 @@ async function updateSettings(companyId, {
   await flushTableUpdate('escalation_settings', companyId, escUpdates, escValues);
   await flushTableUpdate('safety_settings', companyId, safetyUpdates, safetyValues);
   await flushTableUpdate('language_settings', companyId, langUpdates, langValues);
+  await flushTableUpdate('virtual_assistant_settings', companyId, vaUpdates, vaValues);
 }
 
 async function updateThemeSettings(companyId, {
@@ -635,6 +712,7 @@ async function updateAdminVisibility(companyId, {
   admin_visibility_allowed_ai_mode_ids,
   admin_visibility_training_modules,
   admin_visibility_allowed_chat_language_codes,
+  admin_visibility_virtual_assistant,
 }) {
   const updates = [];
   const values = [];
@@ -699,6 +777,10 @@ async function updateAdminVisibility(companyId, {
   if (admin_visibility_allowed_chat_language_codes !== undefined) {
     updates.push(`admin_visibility_allowed_chat_language_codes = $${i++}`);
     values.push(admin_visibility_allowed_chat_language_codes || null);
+  }
+  if (admin_visibility_virtual_assistant !== undefined) {
+    updates.push(`admin_visibility_virtual_assistant = $${i++}`);
+    values.push(Boolean(admin_visibility_virtual_assistant));
   }
 
   if (!updates.length) return;

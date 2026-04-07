@@ -53,6 +53,7 @@ const DEFAULT_ADMIN_VISIBILITY = Object.freeze({
     trainCustomVoice: true,
     allowedPresetVoiceKeys: {},
   },
+  virtualAssistant: true,
 });
 
 const GLOBAL_VOICE_SCOPE = '__global__';
@@ -131,6 +132,7 @@ export function mergeAdminVisibility(rawVisibility) {
       ...(rawVisibility?.voice || {}),
       allowedPresetVoiceKeys: voiceAllowedPresetVoiceKeys,
     },
+    virtualAssistant: rawVisibility?.virtualAssistant ?? DEFAULT_ADMIN_VISIBILITY.virtualAssistant,
   };
 }
 

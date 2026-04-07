@@ -247,7 +247,8 @@ async function listConversations(req, res) {
 
     const countSql = `SELECT COUNT(*)::int AS total
       FROM chat_sessions cs
-      WHERE ${countWhere.join(' AND ')}`;
+      WHERE ${countWhere.join(' AND ')}
+        AND (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = cs.id) >= 2`;
     const countResult = await pool.query(countSql, countValues);
     const total = countResult.rows[0]?.total ?? 0;
 
@@ -306,6 +307,7 @@ async function listConversations(req, res) {
         LIMIT 1
       ) lead ON TRUE
       WHERE ${listWhere.join(' AND ')}
+        AND msg.message_count >= 2
       ORDER BY cs.updated_at DESC
       LIMIT $${listValues.length + 1}
       OFFSET $${listValues.length + 2}

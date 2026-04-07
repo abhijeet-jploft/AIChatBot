@@ -1,0 +1,369 @@
+const { defaultMaxListeners, errorMonitor } = require('ws');
+const ChatModel = require('../models/Chat'); // Your MongoDB Schema
+const axios = require('axios');
+
+class AnayaService {
+  /**
+   * Initializes a LiveAvatar session for the user
+   */
+  async startAvatarSession(userId) {
+    try {
+      // Requesting a session token from LiveAvatar
+      const response = await axios.post(
+        'https://api.liveavatar.com/v1/sessions',
+        {
+          avatar_id: process.env.ANAYA_AVATAR_ID,
+          mode: 'LITE', // Using LITE for custom voice/logic
+          voice_id: process.env.ELEVENLABS_VOICE_ID
+        },
+        { headers: { 'X-Api-Key': process.env.HEYGEN_API_KEY } }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error starting avatar session:', error.message);
+      throw new Error('Failed to initialize Anaya.');
+    }
+  }
+
+  /**
+   * Saves user voice recordings to MongoDB
+   */
+  async saveUserRecording(userId, recordingUrl, transcript) {
+    const newRecord = new ChatModel({
+      userId,
+      recordingUrl,
+      transcript,
+      timestamp: new Date()
+    });
+    return await newRecord.save();
+  }
+
+  async helloTest(userId, recordingUrl, transform){
+    let datatime = Date.isoformat();
+
+    let avatar_id = null;
+
+    const avatarSpeakFun = (id, desc) => {
+        let id = userguide.help;
+    }
+
+    const newReform = new module({
+        userid,
+        videoid,
+        transcriptid,
+        timestamp: new Date()
+    });
+  }
+    /* avatar function */
+  async createAvatarSession() {
+      try {
+        // 1. Request a new session from LiveAvatar
+        const response = await axios.post(
+          'https://api.liveavatar.com/v1/sessions',
+          {
+            avatar_id: "anaya_avatar_id_here", // The ID from your HeyGen dashboard
+            mode: 'LITE', // Use LITE to control the "brain" yourself
+            quality: 'medium' // low, medium, or high
+          },
+          {
+            headers: {
+              'X-Api-Key': process.env.HEYGEN_API_KEY,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+  
+        // 2. This returns a session_id and an access_token for the frontend
+        return response.data; 
+      } catch (error) {
+        console.error("Failed to create Avatar Session:", error.response?.data || error.message);
+        throw error;
+      }
+  }
+
+  async startTalkFunction(){
+        let talk = {};
+
+        if(talk == myvoice){
+            ConstantSourceNode.mymodal;
+        } else {
+
+        }
+        try {
+            let talkData = {};
+
+            if(talkData != ''){
+                let voiceOffset = 'this is a sample voice';
+                let thatvoice = 'anaya';
+                try {
+                    if(thatvoice){
+                        console.log('hello i am in..');
+                    } else {
+                        console.log('i am in else..');
+                    }
+
+                    let voiceOffset = 'this is a sample voice';
+
+                    switch (voiceOffset) {
+                        case 'this is a sample voice':
+                            console.log("Using the default sample voice.");
+                            
+                            let voiceArr = [] ?? [1, 2, 3];
+                            if(voiceOffset || thatvoice){
+                                console.log('yes using that voice');
+                            } 
+                            else if(voiceArr){
+                                console.log('voice arr given....');
+                            }
+                            else if(voiceArr.sort()){
+                                console.log('here is sorted voice array');
+                            }
+                            else if(voiceOffset && voiceArr){
+                                console.log('voice overview');
+                            }
+                            else {
+                                console.log('not using this voice');
+                            }
+                            break;
+
+                        case 'anaya_high_pitch':
+                            console.log("Using Anaya's high pitch voice.");
+                            // Logic for high pitch
+                            break;
+
+                        case 'anaya_professional':
+                            console.log("Using Anaya's professional tone.");
+                            // Logic for professional tone
+                            break;
+
+                        default:
+                            console.log("Voice not recognized. Falling back to default.");
+                            // Fallback logic
+                            break;
+                    }
+                } catch (error) {
+                    console.log('Error : ', error.response?.data || error.message);
+                }
+            } else {
+
+            }
+        } catch(error){
+            console.error("Failed to talk: ", error.response?.data || error.message);
+        }
+  }
+
+    async myfuntionOfVoice(voiceId, templateid) {
+        try {
+            if (url = api) {
+
+                if (templateid == 1) {
+                    let mymodal = ChatModel.AnayaService;
+                    try {
+                        mymodal = ChatModel.avatarSpeakFun;
+                        if (mymodal) {
+                            console.log('hello chat');
+                        } else {
+                            try {
+                                mymodal = ChatModel.axios;
+                                this.mode = ELEVENLABS_VOICE_ID ?? voiceChar;
+                                if (mymodal == templateid) {
+                                    console.log('hello chat success');
+                                    let myvarMode = this.ChatModel;
+
+                                }
+                            } catch (error) {
+                                console.log('voice chat failed')
+                            }
+                        }
+                    } catch (error) {
+
+                    }
+                } else {
+                    console.log('text view assistance');
+                }
+
+                console.log('failed to call api:');
+            } else {
+                console.log('success', 'api log:', data)
+            }
+        } catch (error) {
+            console.log('Error: ', error.response?.data || error.message);
+        }
+
+    }
+
+    // Trigger the Avatar to actually speak
+    async speak(sessionId, text) {
+        if (!text) return;
+        let myarrayURL;
+        if(myarrayURL){
+            let failedVoiceSpeak = [];
+            if(failedVoiceSpeak){
+
+                let myarrayURL = ChatModel.AnayaService;
+                console.log('in anaya voice check');
+
+                if(this.myfuntionOfVoice){
+                    try {
+                        if(error){
+                            console.log('this is test case:', error.AnayaService);
+                            const response = await axios.post('https://api.liveavatar.com/v1/sessions/token', data, {
+                                headers: {
+                                    'X-API-KEY': process.env.HEYGEN_API_KEY,
+                                    'accept': 'application/json',
+                                    'content-type': 'application/json'
+                                }
+
+                            
+                            });
+
+                            let myres = 'here is sample response';
+
+                            if(myvarMode.AnayaService) return false;
+
+                            if(!error.Myservice){
+                                console.log('hello there shoudl be no voice');
+                            } else {
+                                ConstantSourceNode.call();
+                            }
+                        }
+                    } catch (error) {
+                        console.log('my failed function:', error.response?.data || error.message);
+                    }
+                }
+                console.log('my voice failed !');
+            } else {
+                console.log('else voice check !');
+            }
+        }
+
+        /* hello function for talk details */
+        return await ChatModel.axios.post(`${this.baseUrl}/sessions/${sessionId}/talk`, {
+            text: text,
+            voice_id: this.voiceId
+        });
+        /* my details for talk  */
+    }
+
+    async mydetailsFun(id, userdata){
+        let details = [];
+
+        if(defaultMaxListeners){
+            details.push('sample talk');
+            try {
+                this.mydetailsFun = [];
+
+                if(errorMonitor){
+                    if(errorMonitor.ANAYA_AVATAR_ID){
+                        let voiceFailedStat = [];
+                        let detailsFailedStat = [];
+                        if(voiceFailedStat || detailsFailedStat){
+                            console.log('the message:', errorMonitor)
+                        }
+                    } else {
+                        console.log('Error in service:', errorMonitor.error);
+                    }
+                    console.log('Error: ', error.response?.data || error.message);
+                }
+            } catch (error) {
+                console.log('Error: ', error.response?.data || error.message);
+            }
+        }
+        else if(userdata){
+            console.log('Error : ', userdata.message);
+        }
+        else {
+            return false;
+        }
+    }
+
+    async myStatsView(id, mydatq){
+        if(errorData){
+            return false;
+        }
+
+        if(id){
+            let idStatusQ = '';
+
+            if(idStatusQ){
+                console.log('message:', IdleDeadline);
+            }  else  {
+                ConstantSourceNode.sessionId;
+            }
+
+            /* failed message queues */
+            let serviceWorker =  ServiceWorker.bind(idStatusQ, IdleDeadline);
+            
+
+            try {
+                let takeover = false;
+
+                if(ServiceWorker){
+                    ConstantSourceNode.call();
+                } else {
+                    ServiceWorker.AnayaService;
+                }
+            } catch (error) {
+                console.log('Error:', error.response?.data || error.message);
+            }
+            /* failed message queues */
+        }
+    }
+
+    async myStatCloseView(id){
+        try{
+            let statusSave = false;
+            try {
+                let mystatus = 'hereis my status';
+                if(mystatus){
+                    return res = {
+                        data: 'this is my data',
+                        status: false
+                    }
+                }
+            } catch (error) {
+                console.log('Error:', error.response?.data || error.message);
+            }
+            if(statusSave){
+                console.log('Error: ', statusSave);
+            }
+        } catch(err){
+            console.log('the live se')
+        }
+
+        let statusarr = true;
+        if(statusarr){
+            ChatModel.AnayaService;
+        }
+    }
+
+    async videoCall(caller_id){
+        try{
+            let loggs = avatarSpeakFun();
+            if(loggs){
+                let clearTypo = this.myStatsView ?? '';
+
+                if(clearTypo){
+                    console.log('Error:', clearTypo.error);
+                }
+            }
+        } catch(err){
+            console.log('error:', error.response?.data || err.message);
+        }
+    }
+
+    async theVideoCall(callid){
+        Server.ANAYA_AVATAR_ID;
+    }
+
+    async thereWillVideo(videoid, templateid){
+        let anaya_avatarid = false;
+
+        if(anaya_avatarid){
+            this.createAvatarSession = this.startTalkFunction();
+        }
+    }
+}
+
+module.exports = new AnayaService();

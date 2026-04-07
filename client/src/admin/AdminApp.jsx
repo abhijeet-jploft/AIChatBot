@@ -21,6 +21,7 @@ import MissedConversations from './pages/MissedConversations';
 import SupportRequests from './pages/SupportRequests';
 import TakeOver from './pages/TakeOver';
 import AdminOperatorChat from './pages/AdminOperatorChat';
+import VirtualAssistant from './pages/VirtualAssistant';
 import './index.css';
 import { hasAnyTrainingModuleAccess, hasAnyVoiceSettingAccess, mergeAdminVisibility } from '../constants/adminVisibility';
 
@@ -45,6 +46,7 @@ const ADMIN_SEARCH_ENTRIES = [
   { page: 'Theme', text: 'Theme customization', to: '/admin/theme', hash: 'theme-top', keywords: 'colors widget theme' },
   { page: 'Voice settings', text: 'Voice provider settings', to: '/admin/voice-settings', hash: 'voice-settings-top', keywords: 'voice tts elevenlabs' },
   { page: 'AI Mode', text: 'AI mode controls', to: '/admin/modes', hash: 'modes-top', keywords: 'ai mode automation response mode' },
+  { page: 'Virtual Assistant', text: 'Avatar assistant settings', to: '/admin/virtual-assistant', hash: 'virtual-assistant-top', keywords: 'virtual assistant avatar liveavatar video ai' },
 ];
 
 function normalizeSearch(value) {
@@ -60,6 +62,7 @@ function AdminLayout({ children }) {
   const canAccessVoiceSettings = hasAnyVoiceSettingAccess(adminVisibility);
   const canAccessAiMode = Boolean(adminVisibility.aiMode);
   const canAccessTraining = hasAnyTrainingModuleAccess(adminVisibility);
+  const canAccessVA = Boolean(adminVisibility.virtualAssistant);
 
   const navGroups = [
     {
@@ -86,6 +89,7 @@ function AdminLayout({ children }) {
         ...(canAccessVoiceSettings ? [{ to: '/admin/voice-settings', label: 'Voice Settings' }] : []),
         { to: '/admin/theme', label: 'Theme' },
         ...(canAccessAiMode ? [{ to: '/admin/modes', label: 'AI Mode' }] : []),
+        ...(canAccessVA ? [{ to: '/admin/virtual-assistant', label: 'Virtual Assistant' }] : []),
       ],
     },
   ];
@@ -282,6 +286,7 @@ export default function AdminApp() {
   const canAccessVoiceSettings = hasAnyVoiceSettingAccess(adminVisibility);
   const canAccessAiMode = Boolean(adminVisibility.aiMode);
   const canAccessTraining = hasAnyTrainingModuleAccess(adminVisibility);
+  const canAccessVA = Boolean(adminVisibility.virtualAssistant);
 
   return (
     <AdminToastProvider>
@@ -430,6 +435,22 @@ export default function AdminApp() {
               canAccessAiMode ? (
                 <AdminLayout>
                   <ConversationMode />
+                </AdminLayout>
+              ) : (
+                <Navigate to="/admin/settings" replace />
+              )
+            ) : (
+              <Navigate to="/admin/login" replace />
+            )
+          }
+        />
+        <Route
+          path="virtual-assistant"
+          element={
+            token ? (
+              canAccessVA ? (
+                <AdminLayout>
+                  <VirtualAssistant />
                 </AdminLayout>
               ) : (
                 <Navigate to="/admin/settings" replace />

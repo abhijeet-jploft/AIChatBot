@@ -246,6 +246,15 @@
   var voiceIgnoreEmoji = false;
   var leadCaptureDraft = { name: '', phone: '', phoneCode: '+1', phoneLocal: '', email: '' };
 
+  // ── Virtual Assistant mode ──
+  var vaMode = Boolean(config.vaEnabled && config.vaAvatarEmbedUrl);
+  var vaAvatarEmbedUrl = config.vaAvatarEmbedUrl || '';
+  var vaTranscriptVisible = false;
+  var vaWelcomeSpoken = false;
+  var vaAutoSendTimer = null;
+  var vaPausedMicForTts = false;
+  var vaMicBtnEl = null;
+
   var root = null;
   var launcher = null;
   var panel = null;
@@ -1012,7 +1021,24 @@
 
       '@keyframes jploft-mic-bars{0%,100%{transform:scaleY(.6);opacity:.6}50%{transform:scaleY(1.2);opacity:1}}',
       '@keyframes jploft-blink{0%,60%,100%{opacity:.3}30%{opacity:1}}',
-      '@media(max-width:1024px){#jploft-chat-root .jploft-panel{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}#jploft-chat-root .jploft-lead-grid{grid-template-columns:minmax(0,1fr)}#jploft-chat-root .jploft-close-fab{display:none !important}#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{right:14px;bottom:14px}}'
+      '@media(max-width:1024px){#jploft-chat-root .jploft-panel{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}#jploft-chat-root .jploft-lead-grid{grid-template-columns:minmax(0,1fr)}#jploft-chat-root .jploft-close-fab{display:none !important}#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{right:14px;bottom:14px}}',
+
+      /* ── Virtual Assistant mode ── */
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-avatar-wrap{flex:1 1 auto;min-height:180px;background:#000;position:relative;overflow:hidden}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-iframe{width:100%;height:100%;border:none;display:block}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-controls{display:flex;flex-direction:column;align-items:center;padding:14px 16px 8px;gap:10px;background:var(--chat-surface);border-top:1px solid var(--chat-border);flex-shrink:0}',
+      '#jploft-chat-root .jploft-va-mic-btn{width:60px;height:60px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;box-shadow:0 6px 18px -4px var(--chat-launcher-shadow,rgba(224,47,58,.45))}',
+      '#jploft-chat-root .jploft-va-mic-btn:hover{transform:scale(1.06);box-shadow:0 8px 22px -4px var(--chat-launcher-shadow,rgba(224,47,58,.55))}',
+      '#jploft-chat-root .jploft-va-mic-btn.is-recording{background:#dc2626;box-shadow:0 0 0 5px rgba(220,38,38,.22);animation:jploft-va-pulse 1.5s ease-in-out infinite}',
+      '#jploft-chat-root .jploft-va-mic-btn:disabled{opacity:.55;cursor:not-allowed;transform:none}',
+      '#jploft-chat-root .jploft-va-transcript-toggle{display:flex;align-items:center;gap:6px;padding:7px 16px;border:none;border-radius:20px;background:var(--chat-bg);color:var(--chat-muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.02em}',
+      '#jploft-chat-root .jploft-va-transcript-toggle:hover{color:var(--chat-text);background:var(--chat-border)}',
+      '#jploft-chat-root .jploft-va-transcript-toggle svg{transition:transform .25s ease}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-fullscreen-inner{display:none !important}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-open .jploft-fullscreen-inner{display:flex !important;flex:1 1 auto;min-height:0}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-open .jploft-va-avatar-wrap{flex:0 0 38%;min-height:120px}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-btn,#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-close-fab{display:none !important}',
+      '@keyframes jploft-va-pulse{0%,100%{box-shadow:0 0 0 5px rgba(220,38,38,.22)}50%{box-shadow:0 0 0 10px rgba(220,38,38,.08)}}'
     ].join('\n');
 
     var style = document.createElement('style');
@@ -1626,13 +1652,20 @@
 
   function setMicButtonState(isRecording) {
     micRecording = Boolean(isRecording);
-    if (!micBtn) return;
-
-    micBtn.classList.toggle('is-recording', micRecording);
-    micBtn.setAttribute('aria-label', micRecording ? 'Stop voice input' : 'Start voice input');
-    micBtn.innerHTML = micRecording
-      ? '<span class="jploft-mic-wave"><span></span></span>'
-      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+    if (micBtn) {
+      micBtn.classList.toggle('is-recording', micRecording);
+      micBtn.setAttribute('aria-label', micRecording ? 'Stop voice input' : 'Start voice input');
+      micBtn.innerHTML = micRecording
+        ? '<span class="jploft-mic-wave"><span></span></span>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+    }
+    if (vaMicBtnEl) {
+      vaMicBtnEl.classList.toggle('is-recording', micRecording);
+      vaMicBtnEl.setAttribute('aria-label', micRecording ? 'Stop voice input' : 'Start voice input');
+      vaMicBtnEl.innerHTML = micRecording
+        ? '<span class="jploft-mic-wave" style="color:#fff"><span></span></span>'
+        : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+    }
   }
 
   function normalizeVoiceTranscript(rawValue) {
@@ -1687,6 +1720,19 @@
           ? (inputEl.value.trim() + ' ' + normalizedTranscript)
           : normalizedTranscript;
         onInputChange();
+        // VA mode: auto-send after voice input pause
+        if (vaMode && !loading) {
+          if (vaAutoSendTimer) clearTimeout(vaAutoSendTimer);
+          vaAutoSendTimer = setTimeout(function () {
+            var text = (inputEl && inputEl.value || '').trim();
+            if (text && !loading) {
+              inputEl.value = '';
+              resizeInput();
+              setSendButtonState();
+              sendToApi(text);
+            }
+          }, 1500);
+        }
       }
     };
 
@@ -1711,9 +1757,10 @@
 
   function onMicButtonClick(event) {
     event.preventDefault();
-    if (!voiceEnabled || loading) return;
+    if ((!voiceEnabled && !vaMode) || loading) return;
 
     if (micRecording) {
+      vaPausedMicForTts = false;
       stopMicCapture();
       return;
     }
@@ -1787,6 +1834,14 @@
       speechUtterance = null;
     } catch (e) {}
 
+    // VA mode: pause mic during TTS playback
+    if (vaMode && micRecording && speechRecognition) {
+      vaPausedMicForTts = true;
+      keepMicOpen = false;
+      try { speechRecognition.stop(); } catch (e) {}
+      setMicButtonState(false);
+    }
+
     playingMessageIndex = messageIndex;
     renderMessages();
 
@@ -1808,6 +1863,15 @@
           playingMessageIndex = null;
           renderMessages();
         }
+        // VA mode: resume mic after TTS finishes
+        if (vaPausedMicForTts) {
+          vaPausedMicForTts = false;
+          keepMicOpen = true;
+          var rec = ensureSpeechRecognition();
+          if (rec) {
+            try { rec.start(); setMicButtonState(true); } catch (eR) {}
+          }
+        }
       };
       audio.onended = clearPlaying;
       audio.onerror = clearPlaying;
@@ -1818,6 +1882,15 @@
     } catch (e) {
       playingMessageIndex = null;
       renderMessages();
+      // VA mode: resume mic on play error
+      if (vaPausedMicForTts) {
+        vaPausedMicForTts = false;
+        keepMicOpen = true;
+        var recErr = ensureSpeechRecognition();
+        if (recErr) {
+          try { recErr.start(); setMicButtonState(true); } catch (eRE) {}
+        }
+      }
     }
   }
 
@@ -1869,10 +1942,26 @@
         playAssistantVoice(audioDataUrl, messageIndex);
       })
       .catch(function () {
+        // VA mode: pause mic for browser voice fallback
+        if (vaMode && micRecording && speechRecognition) {
+          vaPausedMicForTts = true;
+          keepMicOpen = false;
+          try { speechRecognition.stop(); } catch (eStop) {}
+          setMicButtonState(false);
+        }
         speakWithBrowserVoice(msg.content, voiceGender, voiceIgnoreEmoji, function () {
           if (playingMessageIndex === messageIndex) {
             playingMessageIndex = null;
             renderMessages();
+          }
+          // VA mode: resume mic after browser voice
+          if (vaPausedMicForTts) {
+            vaPausedMicForTts = false;
+            keepMicOpen = true;
+            var rec = ensureSpeechRecognition();
+            if (rec) {
+              try { rec.start(); setMicButtonState(true); } catch (eR) {}
+            }
           }
         });
       });
@@ -1880,12 +1969,17 @@
 
   function applyVoiceFeatureState() {
     if (!inputEl) return;
-    inputEl.placeholder = voiceEnabled ? 'Type your message or use the mic...' : 'Type your message...';
+    var effectiveVoice = voiceEnabled || vaMode;
+    inputEl.placeholder = effectiveVoice ? 'Type your message or use the mic...' : 'Type your message...';
     if (micBtn) {
-      micBtn.style.display = voiceEnabled ? 'inline-flex' : 'none';
-      micBtn.disabled = loading || !voiceEnabled;
+      // In VA mode, hide footer mic (VA has its own mic button)
+      micBtn.style.display = (voiceEnabled && !vaMode) ? 'inline-flex' : 'none';
+      micBtn.disabled = loading || !effectiveVoice;
     }
-    if (!voiceEnabled) {
+    if (vaMicBtnEl) {
+      vaMicBtnEl.disabled = loading;
+    }
+    if (!effectiveVoice) {
       stopMicCapture();
     }
   }
@@ -1908,7 +2002,8 @@
     if (!sendBtn || !inputEl) return;
     var hasText = (inputEl.value || '').trim().length > 0;
     sendBtn.disabled = loading || !hasText;
-    if (micBtn) micBtn.disabled = loading || !voiceEnabled;
+    if (micBtn) micBtn.disabled = loading || (!voiceEnabled && !vaMode);
+    if (vaMicBtnEl) vaMicBtnEl.disabled = loading;
   }
 
   function resizeInput() {
@@ -2139,6 +2234,14 @@
     setTimeout(function () {
       if (inputEl) inputEl.focus();
     }, 0);
+
+    // VA mode: speak welcome message
+    if (vaMode && !vaWelcomeSpoken && messages.length > 0 && messages[0].role === 'assistant') {
+      vaWelcomeSpoken = true;
+      setTimeout(function () {
+        playMessageVoice(0);
+      }, 800);
+    }
   }
 
   function closePanel() {
@@ -2332,7 +2435,7 @@
       typingTimer = null;
     }
     sendPresenceTyping(false);
-    stopMicCapture();
+    if (!vaMode) stopMicCapture();
 
     inputEl.value = '';
     resizeInput();
@@ -2460,6 +2563,51 @@
     updatePanelPosition();
     window.addEventListener('resize', onViewportResize);
 
+    // ── VA mode: inject avatar, mic, transcript toggle ──
+    if (vaMode && vaAvatarEmbedUrl) {
+      panel.classList.add('jploft-va-mode');
+
+      var vaAvatarWrap = document.createElement('div');
+      vaAvatarWrap.className = 'jploft-va-avatar-wrap';
+      var vaFrame = document.createElement('iframe');
+      vaFrame.className = 'jploft-va-iframe';
+      vaFrame.src = vaAvatarEmbedUrl;
+      vaFrame.allow = 'camera;microphone;autoplay';
+      vaFrame.allowFullscreen = true;
+      vaAvatarWrap.appendChild(vaFrame);
+
+      var vaControlsArea = document.createElement('div');
+      vaControlsArea.className = 'jploft-va-controls';
+
+      vaMicBtnEl = document.createElement('button');
+      vaMicBtnEl.type = 'button';
+      vaMicBtnEl.className = 'jploft-va-mic-btn';
+      vaMicBtnEl.setAttribute('aria-label', 'Start voice input');
+      vaMicBtnEl.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+      vaMicBtnEl.addEventListener('click', onMicButtonClick);
+      vaControlsArea.appendChild(vaMicBtnEl);
+
+      var vaTranscriptToggle = document.createElement('button');
+      vaTranscriptToggle.type = 'button';
+      vaTranscriptToggle.className = 'jploft-va-transcript-toggle';
+      vaTranscriptToggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg><span>View Transcript</span>';
+      vaTranscriptToggle.addEventListener('click', function () {
+        vaTranscriptVisible = !vaTranscriptVisible;
+        panel.classList.toggle('jploft-va-transcript-open', vaTranscriptVisible);
+        var arrowSvg = vaTranscriptToggle.querySelector('svg');
+        if (arrowSvg) arrowSvg.style.transform = vaTranscriptVisible ? 'rotate(180deg)' : '';
+        vaTranscriptToggle.querySelector('span').textContent = vaTranscriptVisible ? 'Hide Transcript' : 'View Transcript';
+        if (vaTranscriptVisible && messagesEl) {
+          setTimeout(function () { messagesEl.scrollTop = messagesEl.scrollHeight; }, 60);
+        }
+      });
+      vaControlsArea.appendChild(vaTranscriptToggle);
+
+      var fullscreenInner = panel.querySelector('.jploft-fullscreen-inner');
+      panel.insertBefore(vaAvatarWrap, fullscreenInner);
+      panel.insertBefore(vaControlsArea, fullscreenInner);
+    }
+
     root.appendChild(launcher);
     root.appendChild(panel);
     root.appendChild(closeFab);
@@ -2482,6 +2630,13 @@
       }
       startInitialSessionLoadIfNeeded();
       persistState();
+      // VA mode: speak welcome message (persistedWidgetOpen path)
+      if (vaMode && !vaWelcomeSpoken && messages.length > 0 && messages[0].role === 'assistant') {
+        vaWelcomeSpoken = true;
+        setTimeout(function () {
+          playMessageVoice(0);
+        }, 800);
+      }
     }
 
     connectPresenceWs();
@@ -2692,6 +2847,11 @@
       voiceGender = 'female';
       companyVoiceTtsLanguage = '';
       voiceIgnoreEmoji = false;
+    }
+    // VA mode: always enable voice
+    if (vaMode) {
+      voiceEnabled = true;
+      voiceResponseEnabled = true;
     }
     if (company.autoTrigger && typeof company.autoTrigger === 'object') {
       var nextAutoTriggerMode = resolveAutoTriggerOpenMode(company.autoTrigger);

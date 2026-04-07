@@ -34,11 +34,17 @@ const _recentIdempotencyKeys = new Map();
 const IDEMPOTENCY_TTL_MS = 60_000; // 60s
 const IDEMPOTENCY_MAX_SIZE = 2000;
 
+// Track idempotency keys whose user message has already been saved to DB (prevents duplicate inserts on retry)
+const _savedMessageKeys = new Map();
+
 function pruneIdempotencyCache() {
   if (_recentIdempotencyKeys.size <= IDEMPOTENCY_MAX_SIZE) return;
   const now = Date.now();
   for (const [key, entry] of _recentIdempotencyKeys) {
     if (now - entry.time > IDEMPOTENCY_TTL_MS) _recentIdempotencyKeys.delete(key);
+  }
+  for (const [key, entry] of _savedMessageKeys) {
+    if (now - entry.time > IDEMPOTENCY_TTL_MS) _savedMessageKeys.delete(key);
   }
 }
 
@@ -380,12 +386,25 @@ async function postMessage(req, res) {
 
       voiceConfig = buildVoiceConfig(chatbot);
 
-      if (!sid) {
-        const { id } = await ChatSession.create(companyId);
-        sid = id;
-      }
+      // Deduplicate on retry: if this idempotencyKey already created a session and saved the
+      // user message (first attempt succeeded at DB but AI generation failed), reuse that
+      // session and skip the duplicate insert.
+      const alreadySaved = clientIdempotencyKey && _savedMessageKeys.get(clientIdempotencyKey);
+      if (alreadySaved && Date.now() - alreadySaved.time < IDEMPOTENCY_TTL_MS) {
+        // Reuse the session created on the first attempt
+        sid = alreadySaved.sid;
+      } else {
+        if (!sid) {
+          const { id } = await ChatSession.create(companyId);
+          sid = id;
+        }
 
-      await ChatMessage.create(sid, 'user', userMsg.content);
+        await ChatMessage.create(sid, 'user', userMsg.content);
+        if (clientIdempotencyKey) {
+          _savedMessageKeys.set(clientIdempotencyKey, { time: Date.now(), sid });
+          pruneIdempotencyCache();
+        }
+      }
 
       const session = await ChatSession.findById(sid);
       if (session?.title === 'New Chat') {

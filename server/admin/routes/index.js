@@ -13,6 +13,7 @@ const logsController = require('../controllers/logsController');
 const missedConversationsController = require('../controllers/missedConversationsController');
 const supportRequestsController = require('../controllers/supportRequestsController');
 const trainingController = require('../controllers/trainingController');
+const virtualAssistantController = require('../controllers/virtualAssistantController');
 const { requireAuth } = require('../middleware/requireAuth');
 
 const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -99,5 +100,15 @@ router.post('/training/structured/upload', requireAuth, uploadMemory.single('fil
 router.get('/training/manual', requireAuth, trainingController.getManual);
 router.put('/training/manual', requireAuth, trainingController.setManual);
 router.get('/training/files', requireAuth, trainingController.listFiles);
+
+// ─── Virtual Assistant ──────────────────────────────────────────────────────
+router.get('/virtual-assistant', requireAuth, virtualAssistantController.getSettings);
+router.put('/virtual-assistant', requireAuth, virtualAssistantController.updateSettings);
+router.get('/virtual-assistant/avatars', requireAuth, virtualAssistantController.listAvatars);
+router.get('/virtual-assistant/voices', requireAuth, virtualAssistantController.listVoices);
+router.get('/virtual-assistant/contexts', requireAuth, virtualAssistantController.listContexts);
+router.post('/virtual-assistant/contexts', requireAuth, virtualAssistantController.createContext);
+router.get('/virtual-assistant/credits', requireAuth, virtualAssistantController.getCredits);
+router.post('/virtual-assistant/embed', requireAuth, virtualAssistantController.createEmbed);
 
 module.exports = router;

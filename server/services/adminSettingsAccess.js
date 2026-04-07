@@ -54,6 +54,7 @@ const DEFAULT_ADMIN_VISIBILITY = Object.freeze({
     trainCustomVoice: true,
     allowedPresetVoiceKeys: {},
   },
+  virtualAssistant: true,
 });
 
 const GLOBAL_VOICE_SCOPE = '__global__';
@@ -67,6 +68,7 @@ function cloneDefaultAdminVisibility() {
     aiModeAllowedIds: DEFAULT_ADMIN_VISIBILITY.aiModeAllowedIds,
     training: { ...DEFAULT_ADMIN_VISIBILITY.training },
     voice: { ...DEFAULT_ADMIN_VISIBILITY.voice },
+    virtualAssistant: DEFAULT_ADMIN_VISIBILITY.virtualAssistant,
   };
 }
 
@@ -317,6 +319,8 @@ function buildAdminVisibilityPayload(company) {
     company?.admin_visibility_allowed_preset_voice_keys
   );
 
+  payload.virtualAssistant = company?.admin_visibility_virtual_assistant !== false;
+
   return payload;
 }
 
@@ -366,6 +370,8 @@ function normalizeAdminVisibilityPatchInput(payload) {
       payload?.voice?.presetVoices !== undefined ? Boolean(payload.voice.presetVoices) : undefined,
     admin_visibility_voice_custom_training:
       payload?.voice?.trainCustomVoice !== undefined ? Boolean(payload.voice.trainCustomVoice) : undefined,
+    admin_visibility_virtual_assistant:
+      payload?.virtualAssistant !== undefined ? Boolean(payload.virtualAssistant) : undefined,
   };
 
   const allowedKeys = normalizeAllowedPresetVoiceKeysInput(payload?.voice?.allowedPresetVoiceKeys);
