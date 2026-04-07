@@ -61,6 +61,8 @@ router.get('/conversations', requireAuth, conversationsController.listConversati
 router.get('/conversations/:sessionId', requireAuth, conversationsController.getConversationDetail);
 router.get('/conversations/:sessionId/messages', requireAuth, conversationsController.getMessages);
 router.post('/conversations/:sessionId/send', requireAuth, conversationsController.sendMessage);
+router.post('/conversations/:sessionId/operate', requireAuth, conversationsController.operateSession);
+router.post('/conversations/:sessionId/release', requireAuth, conversationsController.releaseSession);
 router.post('/conversations/:sessionId/convert-lead', requireAuth, conversationsController.convertConversationToLead);
 router.get('/logs', requireAuth, logsController.listLogs);
 router.get('/missed-conversations', requireAuth, missedConversationsController.listMissedConversations);

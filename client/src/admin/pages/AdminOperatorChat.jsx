@@ -8,13 +8,14 @@ import '../../index.css';
 
 const THEME_KEY = 'ai-chat-theme';
 const POLL_MS = 2500;
+const OPERATE_KEEPALIVE_MS = 60_000; // re-ping operate every 60s to prevent TTL expiry
 
 export default function AdminOperatorChat() {
   const { sessionId } = useParams();
   const { authFetch } = useAuth();
   const [settings, setSettings] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [theme, setTheme] = useState(() => {
     try {
@@ -165,6 +166,18 @@ export default function AdminOperatorChat() {
       .catch(() => setSettings(null));
   }, [authFetch]);
 
+  // Mark session as admin-operated on mount; release on unmount; keep-alive ping
+  useEffect(() => {
+    if (!sessionId) return undefined;
+    const mark = () => authFetch(`/conversations/${sessionId}/operate`, { method: 'POST' }).catch(() => {});
+    mark();
+    const keepAlive = setInterval(mark, OPERATE_KEEPALIVE_MS);
+    return () => {
+      clearInterval(keepAlive);
+      authFetch(`/conversations/${sessionId}/release`, { method: 'POST' }).catch(() => {});
+    };
+  }, [authFetch, sessionId]);
+
   const toOperatorPerspectiveRole = useCallback((role) => {
     // DB perspective: user=visitor, assistant=AI/admin.
     // Operator view should render visitor on left and operator on right.
@@ -203,8 +216,8 @@ export default function AdminOperatorChat() {
 
   const sendOperatorMessage = async (content) => {
     const text = String(content || '').trim();
-    if (!text || !sessionId || loading) return;
-    setLoading(true);
+    if (!text || !sessionId || sending) return;
+    setSending(true);
     const optimistic = { role: 'user', content: text };
     setPendingOutbox((prev) => [...prev, optimistic]);
     setMessages((prev) => [...prev, optimistic]);
@@ -221,7 +234,7 @@ export default function AdminOperatorChat() {
       setPendingOutbox((prev) => prev.filter((m, idx) => idx !== prev.length - 1));
       setMessages((prev) => [...prev, { role: 'assistant', content: 'Could not send message. Try again.' }]);
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   };
 
@@ -310,7 +323,7 @@ export default function AdminOperatorChat() {
       <div className="flex-grow-1 d-flex flex-column overflow-hidden" style={{ minHeight: 0 }}>
         <ChatMain
           messages={messages}
-          loading={loading}
+          loading={sending}
           onSend={sendOperatorMessage}
           companyName={chatbotTitle}
           companyIconUrl={companyIconUrl}

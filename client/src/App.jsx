@@ -1209,6 +1209,10 @@ export default function App() {
                 voiceUrl,
                 createdAt: msg.createdAt || msg.created_at || getNowIso(),
               })]);
+              setLoading(false);
+            }
+            if (msg.type === 'operator_released') {
+              setLoading(false);
             }
           } catch (_) {}
         };
@@ -1361,6 +1365,7 @@ export default function App() {
     const userMsg = normalizeMessageShape({ role: 'user', content: content.trim(), createdAt: getNowIso() });
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
+    let keepLoading = false;
 
     try {
       const requestPayload = {
@@ -1416,6 +1421,16 @@ export default function App() {
 
       const data = await requestChatMessage(0);
       if (requestGeneration !== requestGenerationRef.current) return;
+
+      // If operator is active for this session, skip AI assistant message and keep loader visible
+      if (data?.operatorActive) {
+        if (data.sessionId && data.sessionId !== sessionId) {
+          setSessionId(data.sessionId);
+        }
+        keepLoading = true;
+        return;
+      }
+
       const normalizedAssistantContent = normalizeAssistantNameInText(String(data?.content || ''), chatbotNameForOpening);
       const responseAudioDataUrl = data?.voice?.audioDataUrl;
       // Index of the new assistant message: we already added the user message earlier, so it's messages.length + 1
@@ -1482,7 +1497,7 @@ export default function App() {
         }),
       ]);
     } finally {
-      setLoading(false);
+      if (!keepLoading) setLoading(false);
     }
   };
 

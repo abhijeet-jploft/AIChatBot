@@ -3,7 +3,7 @@ const { normalizeCalendarRangeQuery, ISO_DATE } = require('../../utils/dateRange
 const ChatMessage = require('../../models/ChatMessage');
 const ChatSession = require('../../models/ChatSession');
 const Lead = require('../../models/Lead');
-const { pushMessageToSession, recordMessage: recordLiveMessage } = require('../../services/activeVisitorsService');
+const { pushMessageToSession, recordMessage: recordLiveMessage, setOperatorActive, getSocketForSession } = require('../../services/activeVisitorsService');
 const { deriveLeadFromConversation, normalizePhone } = require('../../services/leadCaptureService');
 const {
   buildConversationSummary,
@@ -644,6 +644,7 @@ async function sendMessage(req, res) {
     await ChatMessage.create(sessionId, 'assistant', content);
     await ChatSession.touch(sessionId);
     recordLiveMessage(companyId, sessionId, 'assistant', content);
+    setOperatorActive(companyId, sessionId, true);
 
     const pushed = pushMessageToSession(companyId, sessionId, content, { createdAt });
 
@@ -654,4 +655,47 @@ async function sendMessage(req, res) {
   }
 }
 
-module.exports = { listConversations, getConversationDetail, getMessages, sendMessage, convertConversationToLead };
+/**
+ * POST /admin/conversations/:sessionId/operate
+ * Mark session as admin-operated → AI responses paused for this session.
+ */
+async function operateSession(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const sessionId = req.params.sessionId;
+    if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+    setOperatorActive(companyId, sessionId, true);
+    res.json({ operating: true });
+  } catch (err) {
+    console.error('[admin conversations] operate:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/**
+ * POST /admin/conversations/:sessionId/release
+ * Release admin operation → AI responses resume for this session.
+ */
+async function releaseSession(req, res) {
+  try {
+    const companyId = req.adminCompanyId;
+    const sessionId = req.params.sessionId;
+    if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+    setOperatorActive(companyId, sessionId, false);
+
+    // Notify visitor chatbot to clear loading and resume AI
+    const socket = getSocketForSession(companyId, sessionId);
+    if (socket) {
+      try {
+        socket.send(JSON.stringify({ type: 'operator_released' }));
+      } catch (_) {}
+    }
+
+    res.json({ operating: false });
+  } catch (err) {
+    console.error('[admin conversations] release:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+module.exports = { listConversations, getConversationDetail, getMessages, sendMessage, convertConversationToLead, operateSession, releaseSession };

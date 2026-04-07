@@ -2244,6 +2244,15 @@
         if (gen !== requestGeneration) return;
         if (data.sessionId) sessionId = data.sessionId;
         sendPresenceRegister(sessionId);
+
+        // Operator is handling this session — keep loading visible, skip empty AI message
+        if (data.operatorActive) {
+          renderMessages();
+          persistState();
+          if (callback) callback();
+          return;
+        }
+
         var assistantText = normalizeAssistantNameInText(String(data.content || ''), chatbotDisplayName);
         var voiceUrl = data && data.voice && data.voice.audioDataUrl ? String(data.voice.audioDataUrl) : '';
         // User message already pushed optimistically before fetch — only push assistant.
@@ -2599,9 +2608,16 @@
               createdAt: msg.createdAt || msg.created_at || getNowIso(),
               voiceUrl: msg.voice && msg.voice.audioDataUrl ? String(msg.voice.audioDataUrl) : undefined,
             });
+            loading = false;
+            setSendButtonState();
             renderMessages();
             persistState();
             loadSessions();
+          }
+          if (msg.type === 'operator_released') {
+            loading = false;
+            setSendButtonState();
+            renderMessages();
           }
         } catch (e) {}
       };

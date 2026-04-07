@@ -7,6 +7,7 @@ const {
   record: recordActiveVisitor,
   recordMessage: recordLiveMessage,
   broadcastAlert,
+  isOperatorActive,
 } = require('../services/activeVisitorsService');
 const { evaluateEscalation } = require('../services/escalationService');
 const { appendChatLog, appendSystemLog } = require('../services/adminLogStore');
@@ -426,6 +427,27 @@ async function postMessage(req, res) {
         });
       }
 
+      // Per-session: if admin is operating this chat, suppress AI response
+      if (sid && isOperatorActive(companyId, sid)) {
+        stage = 'operator_active';
+        // Save user message to live view but do NOT generate AI response
+        recordLiveMessage(
+          companyId,
+          sid,
+          'user',
+          userMsg?.content,
+          req.headers['x-page-url'] || req.headers.referer || req.body.pageUrl
+        );
+        return res.json({
+          content: '',
+          sessionId: sid,
+          requestId,
+          createdAt: new Date().toISOString(),
+          provider: 'operator',
+          operatorActive: true,
+        });
+      }
+
       recordLiveMessage(
         companyId,
         sid,
@@ -578,6 +600,19 @@ async function postMessage(req, res) {
 
       aiResponseMs = Date.now() - aiStartedAt;
     }
+
+    // Mid-response check: if operator joined while AI was generating, discard AI response
+    if (sid && isOperatorActive(companyId, sid)) {
+      return res.json({
+        content: '',
+        sessionId: sid,
+        requestId,
+        createdAt: new Date().toISOString(),
+        provider: 'operator',
+        operatorActive: true,
+      });
+    }
+
     let voice = null;
 
     if (voiceConfig.responseEnabled) {

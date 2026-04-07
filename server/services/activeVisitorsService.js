@@ -8,8 +8,11 @@ const ACTIVE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 min
 const OPEN = 1;
 const TYPING_TTL_MS = 4500;
+const OPERATOR_TTL_MS = 5 * 60 * 1000; // 5 min auto-expire for operator flag
 
 const store = new Map();
+/** companyId:sessionId -> { active: true, since: timestamp } */
+const operatedSessions = new Map();
 /** socket -> { companyId, sessionId } for quick unregister on close */
 const socketToKey = new WeakMap();
 /** companyId -> Set<WebSocket> for dashboard subscribers */
@@ -343,6 +346,32 @@ function getActiveForCompany(companyId) {
   };
 }
 
+/**
+ * Mark a session as admin-operated (pauses AI responses for this session).
+ */
+function setOperatorActive(companyId, sessionId, active = true) {
+  const key = `${companyId}:${sessionId}`;
+  if (active) {
+    operatedSessions.set(key, { active: true, since: Date.now() });
+  } else {
+    operatedSessions.delete(key);
+  }
+}
+
+/**
+ * Check if a session is currently admin-operated (AI should be paused).
+ */
+function isOperatorActive(companyId, sessionId) {
+  const key = `${companyId}:${sessionId}`;
+  const entry = operatedSessions.get(key);
+  if (!entry) return false;
+  if (Date.now() - entry.since > OPERATOR_TTL_MS) {
+    operatedSessions.delete(key);
+    return false;
+  }
+  return true;
+}
+
 module.exports = {
   record,
   recordMessage,
@@ -357,4 +386,6 @@ module.exports = {
   subscribe,
   unsubscribe,
   broadcastAlert,
+  setOperatorActive,
+  isOperatorActive,
 };

@@ -21,6 +21,7 @@ export default function ChatMain({
   voiceEnabled = false,
   voiceResponseEnabled = true,
   onPlayBrowserVoice,
+  inputDisabled,
 }) {
   const scrollRef = useRef(null);
   const prevLoadingRef = useRef(loading);
@@ -112,7 +113,7 @@ export default function ChatMain({
         <ChatMessages messages={messages} loading={loading} greetingMessage={greetingMessage} onPlayVoice={onPlayVoice} onPauseVoice={onPauseVoice} playingMessageIndex={playingMessageIndex} voiceEnabled={voiceEnabled} voiceResponseEnabled={voiceResponseEnabled} onPlayBrowserVoice={onPlayBrowserVoice} onSend={onSend} />
       </div>
 
-      <ChatInput onSend={onSend} disabled={loading} showMic={showMic} onTypingChange={onTypingChange} />
+      <ChatInput onSend={onSend} disabled={inputDisabled !== undefined ? inputDisabled : loading} showMic={showMic} onTypingChange={onTypingChange} />
     </main>
   );
 }
