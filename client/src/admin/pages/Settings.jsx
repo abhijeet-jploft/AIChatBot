@@ -97,6 +97,17 @@ function defaultSafety() {
   };
 }
 
+function getActiveSettingsSection(activeTab, generalSubTab) {
+  if (activeTab === 'general') {
+    if (generalSubTab === 'business') return 'general-business';
+    if (generalSubTab === 'website') return 'general-website';
+    return 'general-branding';
+  }
+  if (activeTab === 'chat') return 'chat';
+  if (activeTab === 'policies') return 'policies';
+  return 'general-branding';
+}
+
 export default function Settings() {
   const { authFetch } = useAuth();
   const { showToast } = useAdminToast();
@@ -248,7 +259,7 @@ export default function Settings() {
       if (!res.ok) throw new Error(payload.error || 'Failed to upload icon.');
       const nextIconUrl = String(payload.iconUrl || '').trim();
       if (!nextIconUrl) throw new Error('Upload succeeded but icon URL is missing.');
-      setIconUrl('');
+      setIconUrl(nextIconUrl);
       showToast('Icon uploaded successfully.', 'success');
     } catch (err) {
       const msg = err.message || 'Failed to upload icon.';
@@ -261,42 +272,42 @@ export default function Settings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const activeSection = getActiveSettingsSection(activeTab, generalSubTab);
     const coName = companyName.trim();
-    if (!coName) {
-      showToast('Company name is required', 'error');
-      return;
-    }
-    const phoneCheck = validatePhone(bizContactPhoneCode, bizContactPhoneLocal);
-    if (!phoneCheck.valid) {
-      showToast(phoneCheck.error, 'error');
-      return;
-    }
-    if (bizContactEmail.trim()) {
-      const emailCheck = validateEmail(bizContactEmail);
-      if (!emailCheck.valid) {
-        showToast('Business contact email: ' + emailCheck.error, 'error');
+    var payload = {};
+
+    if (activeSection === 'general-branding') {
+      if (!coName) {
+        showToast('Company name is required', 'error');
         return;
       }
-    }
-    if (leadNotificationEmail.trim()) {
-      const leadEmailCheck = validateEmail(leadNotificationEmail);
-      if (!leadEmailCheck.valid) {
-        showToast('Lead notification email: ' + leadEmailCheck.error, 'error');
+      const normalizedIconUrl = normalizeUrlForSubmit(iconUrl, { allowRelativePath: true });
+      if (normalizedIconUrl === null) {
+        showToast('Please enter a valid Icon URL.', 'error');
         return;
       }
-    }
-    const normalizedIconUrl = normalizeUrlForSubmit(iconUrl);
-    if (normalizedIconUrl === null) {
-      showToast('Please enter a valid Icon URL.', 'error');
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
+      payload = {
         companyName: coName,
         chatbotName: chatbotName.trim(),
         iconUrl: normalizedIconUrl || undefined,
         greetingMessage: greetingMessage.trim(),
+      };
+    }
+
+    if (activeSection === 'general-business') {
+      const phoneCheck = validatePhone(bizContactPhoneCode, bizContactPhoneLocal);
+      if (!phoneCheck.valid) {
+        showToast(phoneCheck.error, 'error');
+        return;
+      }
+      if (bizContactEmail.trim()) {
+        const emailCheck = validateEmail(bizContactEmail);
+        if (!emailCheck.valid) {
+          showToast('Business contact email: ' + emailCheck.error, 'error');
+          return;
+        }
+      }
+      payload = {
         businessInformation: {
           businessName: bizName.trim(),
           businessDescription: bizDescription.trim(),
@@ -305,6 +316,18 @@ export default function Settings() {
           contactEmail: bizContactEmail.trim(),
           contactPhone: phoneCheck.normalized,
         },
+      };
+    }
+
+    if (activeSection === 'general-website') {
+      if (leadNotificationEmail.trim()) {
+        const leadEmailCheck = validateEmail(leadNotificationEmail);
+        if (!leadEmailCheck.valid) {
+          showToast('Lead notification email: ' + leadEmailCheck.error, 'error');
+          return;
+        }
+      }
+      payload = {
         widget: {
           position: widgetPosition,
         },
@@ -312,6 +335,11 @@ export default function Settings() {
           emailEnabled: leadEmailNotificationsEnabled,
           email: leadNotificationEmail.trim() || null,
         },
+      };
+    }
+
+    if (activeSection === 'chat') {
+      payload = {
         ...(adminVisibility.settings.autoTrigger ? {
           autoTrigger: {
             enabled: autoTrigger.openMode === 'auto',
@@ -324,6 +352,20 @@ export default function Settings() {
             selectedPages: autoTrigger.selectedPages,
           },
         } : {}),
+        ...(adminVisibility.settings.chatLanguages ? {
+          language: {
+            primary: languagePrimary,
+            multiEnabled: languageMulti,
+            autoDetectEnabled: languageAuto,
+            manualSwitchEnabled: languageManual,
+            extraLocales: languageExtra,
+          },
+        } : {}),
+      };
+    }
+
+    if (activeSection === 'policies') {
+      payload = {
         ...(adminVisibility.settings.escalation ? {
           escalation: {
             triggers: escalation.triggers,
@@ -341,17 +383,16 @@ export default function Settings() {
             restrictFileSharing: safety.restrictFileSharing,
           },
         } : {}),
-        ...(adminVisibility.settings.chatLanguages ? {
-          language: {
-            primary: languagePrimary,
-            multiEnabled: languageMulti,
-            autoDetectEnabled: languageAuto,
-            manualSwitchEnabled: languageManual,
-            extraLocales: languageExtra,
-          },
-        } : {}),
       };
+    }
 
+    if (!Object.keys(payload).length) {
+      showToast('Nothing to save for this tab.', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
       const res = await authFetch('/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

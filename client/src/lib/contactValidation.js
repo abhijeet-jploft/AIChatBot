@@ -76,9 +76,14 @@ export function validatePhone(countryCode, localNumber) {
   return { valid: true, normalized: `${code}${number}` };
 }
 
-export function normalizeUrlForSubmit(rawValue) {
+export function normalizeUrlForSubmit(rawValue, options = {}) {
+  const allowRelativePath = Boolean(options && options.allowRelativePath);
   const value = String(rawValue || '').trim();
   if (!value) return '';
+
+  if (allowRelativePath && /^\//.test(value)) {
+    return value;
+  }
 
   if (!/^(https?:\/\/|www\.)/i.test(value)) return null;
 

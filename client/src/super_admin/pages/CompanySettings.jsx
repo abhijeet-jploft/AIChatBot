@@ -161,7 +161,7 @@ export default function CompanySettings() {
         return;
       }
     }
-    const normalizedIconUrl = normalizeUrlForSubmit(iconUrl);
+    const normalizedIconUrl = normalizeUrlForSubmit(iconUrl, { allowRelativePath: true });
     if (normalizedIconUrl === null) {
       showToast('Please enter a valid Icon URL.', 'error');
       return;

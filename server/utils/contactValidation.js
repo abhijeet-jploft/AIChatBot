@@ -1,7 +1,12 @@
-function normalizeHttpUrl(rawValue) {
+function normalizeHttpUrl(rawValue, options = {}) {
+  const allowRelativePath = Boolean(options && options.allowRelativePath);
   if (rawValue === undefined) return undefined;
   const value = String(rawValue || '').trim();
   if (!value) return null;
+
+  if (allowRelativePath && /^\//.test(value)) {
+    return value;
+  }
 
   if (!/^(https?:\/\/|www\.)/i.test(value)) {
     const err = new Error('Invalid URL');

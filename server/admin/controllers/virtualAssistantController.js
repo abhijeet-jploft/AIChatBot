@@ -217,8 +217,12 @@ async function createEmbed(req, res) {
       return res.status(400).json({ error: 'No avatar selected' });
     }
 
+    const avatar = await liveAvatar.getAvatar(apiKey, avatarId).catch(() => null);
+
     // Resolve voice ID based on voice source
-    let voiceId = req.body.voiceId || company.liveavatar_voice_id;
+    let voiceId = Boolean(sandbox)
+      ? String(avatar?.default_voice?.id || avatar?.default_voice_id || avatar?.voice_id || '').trim()
+      : (req.body.voiceId || company.liveavatar_voice_id);
     if (voiceSource === 'elevenlabs' && company.voice_custom_id && company.elevenlabs_api_key) {
       try {
         const secret = await liveAvatar.createSecret(apiKey, {
@@ -235,6 +239,10 @@ async function createEmbed(req, res) {
       } catch (bindErr) {
         console.error('[virtual-assistant] ElevenLabs voice bind error:', bindErr.message);
       }
+    }
+
+    if (!voiceId) {
+      voiceId = String(avatar?.default_voice?.id || avatar?.default_voice_id || avatar?.voice_id || '').trim();
     }
 
     const embed = await liveAvatar.createEmbedV2(apiKey, {

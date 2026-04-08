@@ -14,7 +14,11 @@ const { appendChatLog, appendSystemLog } = require('../services/adminLogStore');
 const { buildVoiceApiErrorMeta, buildHttpClientErrorMeta, logVoiceApiFailure } = require('../services/voiceApiErrorLog');
 const { add: addSupportRequest, isSupportRequest } = require('../services/supportRequestsStore');
 const { normalizeVoiceGender, normalizeVoiceProfile, synthesizeTextResponse } = require('../services/elevenlabsService');
-const { parseLanguageExtraLocalesJson, resolveSpeechLanguageCode } = require('../services/supportedChatLanguages');
+const {
+  parseLanguageExtraLocalesJson,
+  resolveSpeechLanguageCode,
+  normalizeLanguagePrimaryToCode,
+} = require('../services/supportedChatLanguages');
 const { detectNaturalLanguageFromText } = require('../services/chatRules');
 const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
 const { findProjectLinks } = require('../services/trainingLoader');
@@ -1048,7 +1052,20 @@ async function createLiveAvatarSessionToken(req, res) {
       return res.status(400).json({ error: 'No LiveAvatar avatar is configured' });
     }
 
+    const avatar = await liveAvatar.getAvatar(apiKey, avatarId).catch(() => null);
+    if (!avatar) {
+      return res.status(400).json({ error: sandboxMode
+        ? `${LIVEAVATAR_SANDBOX_AVATAR_NAME} avatar is unavailable for this LiveAvatar account`
+        : 'Configured LiveAvatar avatar is unavailable' });
+    }
+
     let contextId = String(company.liveavatar_context_id || '').trim();
+    if (contextId) {
+      const existingContext = await liveAvatar.getContext(apiKey, contextId).catch(() => null);
+      if (!existingContext) {
+        contextId = '';
+      }
+    }
     if (!contextId) {
       const context = await liveAvatar.createContext(apiKey, {
         name: `${company.display_name || company.name || 'Chat'} Assistant`,
@@ -1071,7 +1088,11 @@ async function createLiveAvatarSessionToken(req, res) {
     }
 
     let voiceId = '';
-    if (String(company.va_voice_source || 'liveavatar').trim().toLowerCase() === 'elevenlabs'
+    if (sandboxMode) {
+      voiceId = String(avatar?.default_voice?.id || avatar?.default_voice_id || avatar?.voice_id || '').trim();
+    }
+
+    if (!voiceId && String(company.va_voice_source || 'liveavatar').trim().toLowerCase() === 'elevenlabs'
       && company.voice_custom_id
       && company.elevenlabs_api_key) {
       try {
@@ -1094,9 +1115,14 @@ async function createLiveAvatarSessionToken(req, res) {
     if (!voiceId) {
       voiceId = String(company.liveavatar_voice_id || '').trim();
     }
+    if (voiceId) {
+      const existingVoice = await liveAvatar.getVoice(apiKey, voiceId).catch(() => null);
+      if (!existingVoice) {
+        voiceId = '';
+      }
+    }
     if (!voiceId) {
-      const avatar = await liveAvatar.getAvatar(apiKey, avatarId).catch(() => null);
-      voiceId = String(avatar?.default_voice_id || avatar?.voice_id || '').trim();
+      voiceId = String(avatar?.default_voice?.id || avatar?.default_voice_id || avatar?.voice_id || '').trim();
     }
     if (!voiceId) {
       return res.status(400).json({ error: sandboxMode
@@ -1104,13 +1130,12 @@ async function createLiveAvatarSessionToken(req, res) {
         : 'No LiveAvatar voice is available for the selected avatar' });
     }
 
-    const rawLanguage = String(company.language_primary || 'en').trim().toLowerCase();
-    const languageCode = (rawLanguage || 'en').slice(0, 5);
+    const languageCode = normalizeLanguagePrimaryToCode(company.language_primary);
     const quality = ['low', 'medium', 'high', 'very_high'].includes(String(company.va_video_quality || '').trim().toLowerCase())
       ? String(company.va_video_quality || '').trim().toLowerCase()
       : 'high';
 
-    const session = await liveAvatar.createSessionToken(apiKey, {
+    const sessionPayload = {
       avatar_id: avatarId,
       voice_id: voiceId,
       context_id: contextId,
@@ -1119,7 +1144,9 @@ async function createLiveAvatarSessionToken(req, res) {
       video_quality: quality,
       video_encoding: 'H264',
       interactivity_type: 'CONVERSATIONAL',
-    });
+    };
+
+    const session = await liveAvatar.createSessionToken(apiKey, sessionPayload);
 
     if (!session?.session_token) {
       return res.status(502).json({ error: 'Failed to create LiveAvatar session token' });
@@ -1134,7 +1161,12 @@ async function createLiveAvatarSessionToken(req, res) {
       contextId,
     });
   } catch (err) {
-    console.error('[chat] liveavatar session-token:', err);
+    console.error('[chat] liveavatar session-token:', {
+      companyId: String(req.body?.companyId || '').trim() || null,
+      status: err?.status || null,
+      message: err?.message || null,
+      details: err?.details || null,
+    });
     return res.status(err.status || 500).json({ error: err.message || 'Failed to create LiveAvatar session token' });
   }
 }

@@ -682,7 +682,7 @@ async function updateSettings(req, res) {
 
     let normalizedIconUrl;
     try {
-      normalizedIconUrl = normalizeHttpUrl(iconUrl);
+      normalizedIconUrl = normalizeHttpUrl(iconUrl, { allowRelativePath: true });
     } catch (err) {
       if (err.code === 'INVALID_URL') {
         return res.status(400).json({ error: 'Icon URL must be a valid URL.' });

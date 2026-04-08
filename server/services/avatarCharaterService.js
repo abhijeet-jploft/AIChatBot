@@ -364,6 +364,26 @@ class AnayaService {
             this.createAvatarSession = this.startTalkFunction();
         }
     }
+
+    async callCreation(videoid){
+        try {
+            if(this.videoCall) return false;
+        } catch (error) {
+            console.log('Error:', error.response?.data || error);
+        }
+    }
+
+    async vitecallVide(syncid){
+        try {
+            if(this.videoCall) return false;
+        } catch (error) {
+            
+        }
+    }
+
+    async videoCall(ideas){
+        console.log('id:', ideas);
+    }
 }
 
 module.exports = new AnayaService();

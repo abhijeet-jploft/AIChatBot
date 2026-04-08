@@ -343,6 +343,9 @@ async function tableExists(client, tableName) {
 
 async function ensureAdminVisibilityExtraColumns(client) {
   await client.query(
+    `ALTER TABLE admin_visibility_settings ADD COLUMN IF NOT EXISTS admin_visibility_allowed_preset_voice_keys TEXT`
+  );
+  await client.query(
     `ALTER TABLE admin_visibility_settings ADD COLUMN IF NOT EXISTS admin_visibility_allowed_ai_mode_ids TEXT`
   );
   await client.query(
@@ -350,6 +353,9 @@ async function ensureAdminVisibilityExtraColumns(client) {
   );
   await client.query(
     `ALTER TABLE admin_visibility_settings ADD COLUMN IF NOT EXISTS admin_visibility_allowed_chat_language_codes TEXT`
+  );
+  await client.query(
+    `ALTER TABLE admin_visibility_settings ADD COLUMN IF NOT EXISTS admin_visibility_virtual_assistant BOOLEAN NOT NULL DEFAULT TRUE`
   );
 }
 

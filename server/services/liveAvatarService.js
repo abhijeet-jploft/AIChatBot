@@ -13,11 +13,20 @@ async function apiCall(method, path, apiKey, body) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(url, opts);
-  const json = await res.json().catch(() => null);
+  const text = await res.text();
+  let json = null;
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+  }
   if (!res.ok) {
-    const msg = json?.message || json?.error || `LiveAvatar API error ${res.status}`;
+    const msg = json?.message || json?.error || text || `LiveAvatar API error ${res.status}`;
     const err = new Error(msg);
     err.status = res.status;
+    err.details = json?.details || json?.errors || json || text || null;
     throw err;
   }
   return json;

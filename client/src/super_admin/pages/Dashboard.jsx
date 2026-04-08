@@ -198,7 +198,7 @@ export default function Dashboard() {
 
       <div className="sa-dashboard-cols">
         <div className="sa-panel">
-          <h3 className="sa-panel-title">Conversations Trend (Last 14 Days)</h3>
+          <h3 className="sa-panel-title">Conversations Trend</h3>
           {convTrendLabels.length === 0 ? (
             <div className="sa-empty-sm">No trend data yet.</div>
           ) : (

@@ -781,7 +781,7 @@
   function updateMaxButtonState() {
     if (!maxBtn) return;
 
-    if (isSmallScreen()) {
+    if (vaMode || isSmallScreen()) {
       maxBtn.style.display = 'none';
       return;
     }
@@ -804,11 +804,15 @@
     closeFab.style.display = 'none';
   }
 
+  function isPanelFullscreenActive() {
+    var vp = getViewport();
+    return vaMode || isFullscreen || vp.width <= TABLET_BREAKPOINT;
+  }
+
   function updatePanelPosition() {
     if (!panel) return;
 
-    var vp = getViewport();
-    var fullscreenActive = isFullscreen || vp.width <= TABLET_BREAKPOINT;
+    var fullscreenActive = isPanelFullscreenActive();
 
     if (fullscreenActive) {
       panel.classList.add('is-fullscreen');
@@ -824,8 +828,17 @@
       var sideProp = widgetSide === 'left' ? 'left' : 'right';
       var resetProp = sideProp === 'left' ? 'right' : 'left';
       panel.classList.remove('is-fullscreen');
-      panel.style[sideProp] = '0';
-      panel.style[resetProp] = 'auto';
+      if (forceOpen) {
+        panel.style.left = 'auto';
+        panel.style.right = 'auto';
+        panel.style.marginLeft = sideProp === 'left' ? '0' : 'auto';
+        panel.style.marginRight = sideProp === 'left' ? 'auto' : '0';
+      } else {
+        panel.style[sideProp] = '0';
+        panel.style[resetProp] = 'auto';
+        panel.style.marginLeft = '0';
+        panel.style.marginRight = '0';
+      }
       panel.style.top = '0';
       panel.style.bottom = '0';
       panel.style.width = 'min(420px,calc(100vw - 48px))';
@@ -1102,7 +1115,7 @@
 
   function toggleFullscreen(event) {
     if (event) event.preventDefault();
-    if (isSmallScreen()) return;
+    if (vaMode || isSmallScreen()) return;
 
     isFullscreen = !isFullscreen;
     updatePanelPosition();
@@ -1136,7 +1149,8 @@
       '#jploft-chat-root .jploft-close-fab{display:none;z-index:100000}',
 
       '#jploft-chat-root .jploft-panel{position:fixed;right:0;top:0;bottom:0;width:min(420px,calc(100vw - 48px));height:100dvh;max-height:100dvh;border:1px solid var(--chat-border);border-radius:0;background:var(--chat-surface);box-shadow:-8px 0 28px -10px rgba(0,0,0,.22);z-index:99999;display:flex;flex-direction:column;overflow:hidden}',
-      '#jploft-chat-root .jploft-panel.jploft-embed-page{position:relative !important;left:0 !important;right:0 !important;top:0 !important;bottom:0 !important;width:100% !important;height:100dvh !important;max-width:100% !important;max-height:100dvh !important;border:0 !important;box-shadow:none !important;border-radius:0 !important}',
+      '#jploft-chat-root .jploft-panel.jploft-embed-page-sidebar{position:relative !important;left:auto !important;right:auto !important;top:0 !important;bottom:auto !important;width:min(420px,100vw) !important;max-width:min(420px,100vw) !important;height:100dvh !important;max-height:100dvh !important;border-radius:0 !important}',
+      '#jploft-chat-root .jploft-panel.jploft-embed-page-fullscreen{position:relative !important;left:0 !important;right:0 !important;top:0 !important;bottom:0 !important;width:100% !important;height:100dvh !important;max-width:100% !important;max-height:100dvh !important;border:0 !important;box-shadow:none !important;border-radius:0 !important}',
       '#jploft-chat-root .jploft-panel.is-fullscreen{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:100% !important;height:100% !important;max-width:100% !important;max-height:100% !important;border-radius:0;border:0;box-shadow:none;z-index:2147483647 !important;overflow:hidden}',
       '#jploft-chat-root .jploft-fullscreen-inner{display:flex;flex:1;min-height:0;min-width:0;overflow:hidden}',
       '#jploft-chat-root .jploft-sidebar{display:none !important}',
@@ -2727,7 +2741,7 @@
 
     panel = document.createElement('section');
     panel.className = 'jploft-panel';
-    if (forceOpen) panel.classList.add('jploft-embed-page');
+    if (forceOpen) panel.classList.add(vaMode ? 'jploft-embed-page-fullscreen' : 'jploft-embed-page-sidebar');
     panel.setAttribute('aria-label', 'Chat widget');
     panel.style.display = 'none';
     panel.innerHTML =
@@ -3085,6 +3099,7 @@
 
   function applyCompanyRuntimeConfig(company) {
     if (!company || typeof company !== 'object') return;
+    var previousWidgetSide = widgetSide;
     if (company.companyName) companyLegalName = company.companyName;
     if (company.chatbotName) chatbotDisplayName = company.chatbotName;
     if (company.displayName) companyName = company.displayName;
@@ -3137,6 +3152,13 @@
       nextSide[companyId] = widgetSide;
       if (typeof localStorage !== 'undefined') localStorage.setItem(WIDGET_SIDE_BY_COMPANY_KEY, JSON.stringify(nextSide));
     } catch (e) {}
+    if (!explicitWidgetSide && previousWidgetSide !== widgetSide) {
+      var vp = getViewport();
+      widgetButtonPos = getDefaultWidgetButtonPosition(vp.width, vp.height);
+      applyWidgetButtonPosition();
+      if (panel) updatePanelPosition();
+      persistState();
+    }
   }
 
   /** Iframe /embed only: must get HTTP 200 + valid JSON + company row — no cache to show UI. */
