@@ -14,6 +14,22 @@ const CompanyAdmin = require('../models/CompanyAdmin');
 const liveAvatar = require('../../services/liveAvatarService');
 const pool = require('../../db/index');
 
+const LIVEAVATAR_SANDBOX_AVATAR_ID = 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
+const LIVEAVATAR_SANDBOX_AVATAR_NAME = 'Wayne';
+
+function resolveSandboxAvatarSelection(avatarId, avatarName, sandboxMode) {
+  if (!sandboxMode) {
+    return {
+      avatarId: avatarId || '',
+      avatarName: avatarName || '',
+    };
+  }
+  return {
+    avatarId: LIVEAVATAR_SANDBOX_AVATAR_ID,
+    avatarName: LIVEAVATAR_SANDBOX_AVATAR_NAME,
+  };
+}
+
 function pickVASettings(company) {
   return {
     vaEnabled: Boolean(company.va_enabled),
@@ -65,13 +81,16 @@ async function updateSettings(req, res) {
       videoQuality,
     } = req.body;
 
+    const nextSandboxMode = sandboxMode !== undefined ? Boolean(sandboxMode) : undefined;
+    const resolvedAvatar = resolveSandboxAvatarSelection(avatarId, avatarName, nextSandboxMode);
+
     const updates = {};
     if (vaEnabled !== undefined) updates.va_enabled = vaEnabled;
     if (liveAvatarApiKey !== undefined && liveAvatarApiKey !== '••••••••') {
       updates.liveavatar_api_key = liveAvatarApiKey;
     }
-    if (avatarId !== undefined) updates.liveavatar_avatar_id = avatarId;
-    if (avatarName !== undefined) updates.liveavatar_avatar_name = avatarName;
+    if (avatarId !== undefined || nextSandboxMode === true) updates.liveavatar_avatar_id = resolvedAvatar.avatarId;
+    if (avatarName !== undefined || nextSandboxMode === true) updates.liveavatar_avatar_name = resolvedAvatar.avatarName;
     if (contextId !== undefined) updates.liveavatar_context_id = contextId;
     if (contextName !== undefined) updates.liveavatar_context_name = contextName;
     if (voiceSource !== undefined) updates.va_voice_source = voiceSource;
@@ -105,11 +124,27 @@ async function resolveApiKey(companyId) {
 async function listAvatars(req, res) {
   try {
     const apiKey = await resolveApiKey(req.adminCompanyId);
+    const sandboxMode = String(req.query.sandbox || '').trim().toLowerCase() === 'true';
     const [publicAvatars, userAvatars] = await Promise.all([
       liveAvatar.listPublicAvatars(apiKey),
       liveAvatar.listUserAvatars(apiKey),
     ]);
-    return res.json({ publicAvatars, userAvatars });
+    if (!sandboxMode) {
+      return res.json({ publicAvatars, userAvatars });
+    }
+
+    const allAvatars = [...(Array.isArray(publicAvatars) ? publicAvatars : []), ...(Array.isArray(userAvatars) ? userAvatars : [])];
+    const sandboxAvatar = allAvatars.find((avatar) => (avatar.id || avatar.avatar_id) === LIVEAVATAR_SANDBOX_AVATAR_ID);
+    const fallbackSandboxAvatar = {
+      id: LIVEAVATAR_SANDBOX_AVATAR_ID,
+      name: LIVEAVATAR_SANDBOX_AVATAR_NAME,
+    };
+
+    return res.json({
+      publicAvatars: [sandboxAvatar || fallbackSandboxAvatar],
+      userAvatars: [],
+      sandboxAvatarId: LIVEAVATAR_SANDBOX_AVATAR_ID,
+    });
   } catch (err) {
     console.error('[virtual-assistant] listAvatars:', err);
     return res.status(err.status || 500).json({ error: err.message });
@@ -168,10 +203,15 @@ async function createEmbed(req, res) {
   try {
     const apiKey = await resolveApiKey(req.adminCompanyId);
     const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
-    const avatarId = req.body.avatarId || company.liveavatar_avatar_id;
     const contextId = req.body.contextId || company.liveavatar_context_id;
     const sandbox = req.body.sandbox ?? company.va_sandbox_mode;
     const voiceSource = company.va_voice_source || 'liveavatar';
+    const resolvedAvatar = resolveSandboxAvatarSelection(
+      req.body.avatarId || company.liveavatar_avatar_id,
+      req.body.avatarName || company.liveavatar_avatar_name,
+      Boolean(sandbox)
+    );
+    const avatarId = resolvedAvatar.avatarId;
 
     if (!avatarId) {
       return res.status(400).json({ error: 'No avatar selected' });

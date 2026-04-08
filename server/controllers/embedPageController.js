@@ -1,5 +1,4 @@
 const pool = require('../db/index');
-const liveAvatar = require('../services/liveAvatarService');
 
 function escapeHtml(value) {
   return String(value || '')
@@ -58,71 +57,7 @@ async function renderEmbedPage(req, res) {
     // chat-widget.js posts failures to /api/chat/client-error (source: embed-iframe-page in admin Logs → System).
     const apiUrl = '/api';
 
-    // ── Virtual Assistant embed ──────────────────────────────────────────
-    let vaEmbedUrl = '';
     const vaEnabled = Boolean(row.va_enabled) && row.liveavatar_api_key && row.liveavatar_avatar_id;
-    if (vaEnabled) {
-      try {
-        // Resolve voice ID: if voiceSource is elevenlabs, auto-bind the ElevenLabs voice
-        let voiceId = row.liveavatar_voice_id || undefined;
-        if (row.va_voice_source === 'elevenlabs' && row.voice_custom_id && row.elevenlabs_api_key) {
-          try {
-            const secret = await liveAvatar.createSecret(row.liveavatar_api_key, {
-              secret_name: `elevenlabs_${row.company_id}`,
-              secret_value: row.elevenlabs_api_key,
-              secret_type: 'ELEVENLABS_API_KEY',
-            });
-            const bound = await liveAvatar.bindThirdPartyVoice(row.liveavatar_api_key, {
-              provider_voice_id: row.voice_custom_id,
-              secret_id: secret.id,
-              name: row.voice_custom_name || 'ElevenLabs Voice',
-            });
-            if (bound?.voice_id) voiceId = bound.voice_id;
-          } catch (bindErr) {
-            console.error('[embed page] ElevenLabs voice bind error:', bindErr.message);
-          }
-        }
-
-        // Resolve context ID: auto-create a default context if not configured
-        let contextId = row.liveavatar_context_id || undefined;
-        if (!contextId) {
-          try {
-            const ctx = await liveAvatar.createContext(row.liveavatar_api_key, {
-              name: `${row.widget_title || 'Chat'} Assistant`,
-              prompt: `You are a helpful virtual assistant for ${row.widget_title || 'our company'}.`,
-              opening_text: 'Hello! How can I help you today?',
-              links: [],
-            });
-            if (ctx?.id) {
-              contextId = ctx.id;
-              // Persist so we reuse it next time
-              await pool.query(
-                `UPDATE virtual_assistant_settings SET liveavatar_context_id = $1 WHERE company_id = $2`,
-                [contextId, row.company_id]
-              );
-              console.log('[embed page] Auto-created LiveAvatar context:', contextId);
-            }
-          } catch (ctxErr) {
-            console.error('[embed page] Auto-create context error:', ctxErr.message);
-          }
-        }
-
-        const embed = await liveAvatar.createEmbedV2(row.liveavatar_api_key, {
-          avatar_id: row.liveavatar_avatar_id,
-          context_id: contextId,
-          voice_id: voiceId,
-          is_sandbox: Boolean(row.va_sandbox_mode),
-        });
-        const embedUrl = embed?.embed_url || embed?.url || '';
-        if (embedUrl) {
-          vaEmbedUrl = embedUrl;
-        } else {
-          console.warn('[embed page] VA embed returned no URL:', JSON.stringify(embed));
-        }
-      } catch (err) {
-        console.error('[embed page] LiveAvatar embed error:', err.message);
-      }
-    }
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -167,7 +102,7 @@ window.JPLoftChatConfig = {
   companyName: ${JSON.stringify(row.widget_title || 'Chat')},
   apiKey: ${JSON.stringify(token)},
   iconUrl: ${JSON.stringify(iconUrlRaw || '')},
-  forceOpen: true${vaEmbedUrl ? `,\n  vaEnabled: true,\n  vaAvatarEmbedUrl: ${JSON.stringify(vaEmbedUrl)}` : ''}
+  forceOpen: true${vaEnabled ? `,\n  vaEnabled: true` : ''}
 };
 </script>
 <script src="/chat-widget.js"></script>

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdminToast } from '../context/AdminToastContext';
 
+const LIVEAVATAR_SANDBOX_AVATAR_ID = 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
+
 const cardStyle = {
   background: 'var(--chat-surface)',
   border: '1px solid var(--chat-border)',
@@ -85,7 +87,7 @@ export default function VirtualAssistant() {
   const loadAvatars = useCallback(async () => {
     setLoadingAvatars(true);
     try {
-      const res = await authFetch('/virtual-assistant/avatars');
+      const res = await authFetch(`/virtual-assistant/avatars?sandbox=${sandboxMode ? 'true' : 'false'}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to load avatars');
@@ -99,7 +101,7 @@ export default function VirtualAssistant() {
     } finally {
       setLoadingAvatars(false);
     }
-  }, [authFetch, showToast]);
+  }, [authFetch, sandboxMode, showToast]);
 
   const loadVoices = useCallback(async () => {
     setLoadingVoices(true);
@@ -153,6 +155,18 @@ export default function VirtualAssistant() {
       loadCredits();
     }
   }, [apiKeySet, loadAvatars, loadVoices, loadContexts, loadCredits]);
+
+  useEffect(() => {
+    if (!sandboxMode) return;
+    const sandboxAvatar = avatars.find((avatar) => (avatar.id || avatar.avatar_id) === LIVEAVATAR_SANDBOX_AVATAR_ID);
+    if (avatarId === LIVEAVATAR_SANDBOX_AVATAR_ID) return;
+    setAvatarId(LIVEAVATAR_SANDBOX_AVATAR_ID);
+    setAvatarName(sandboxAvatar?.name || sandboxAvatar?.avatar_name || 'Wayne');
+  }, [sandboxMode, avatars, avatarId]);
+
+  const visibleAvatars = sandboxMode
+    ? avatars.filter((avatar) => (avatar.id || avatar.avatar_id) === LIVEAVATAR_SANDBOX_AVATAR_ID)
+    : avatars;
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -303,7 +317,7 @@ export default function VirtualAssistant() {
           <div>
             <strong>Sandbox Mode</strong>
             <div className="text-muted" style={{ fontSize: 13 }}>
-              Test with a demo avatar for free (1-minute sessions, no credit usage).
+              Test with a demo avatar for free (1-minute sessions, no credit usage). In sandbox mode, only the Wayne avatar is supported.
             </div>
           </div>
           <div className="form-check form-switch mb-0">
@@ -362,11 +376,11 @@ export default function VirtualAssistant() {
             <div className="text-muted" style={{ fontSize: 13 }}>Enter API key and save to load avatars.</div>
           ) : loadingAvatars ? (
             <div className="text-center py-3"><div className="spinner-border spinner-border-sm" /></div>
-          ) : avatars.length === 0 ? (
+          ) : visibleAvatars.length === 0 ? (
             <div className="text-muted" style={{ fontSize: 13 }}>No avatars available.</div>
           ) : (
             <div className="row g-2">
-              {avatars.map((av) => {
+              {visibleAvatars.map((av) => {
                 const id = av.id || av.avatar_id;
                 const name = av.name || av.avatar_name || id;
                 const preview = av.preview_url || av.thumbnail_url || '';
@@ -416,6 +430,11 @@ export default function VirtualAssistant() {
           {avatarId && (
             <div className="mt-2 text-muted" style={{ fontSize: 12 }}>
               Selected: <strong>{avatarName || avatarId}</strong>
+            </div>
+          )}
+          {sandboxMode && (
+            <div className="mt-2 text-muted" style={{ fontSize: 12 }}>
+              Sandbox mode is limited to the Wayne avatar by LiveAvatar.
             </div>
           )}
         </div>

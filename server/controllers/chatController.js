@@ -23,6 +23,11 @@ const pool = require('../db/index');
 const Chatbot = require('../models/Chatbot');
 const ChatSession = require('../models/ChatSession');
 const ChatMessage = require('../models/ChatMessage');
+const CompanyAdmin = require('../admin/models/CompanyAdmin');
+const liveAvatar = require('../services/liveAvatarService');
+
+const LIVEAVATAR_SANDBOX_AVATAR_ID = 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
+const LIVEAVATAR_SANDBOX_AVATAR_NAME = 'Wayne';
 
 const PROJECT_LINK_INTENT_RE = /\b(project|projects|portfolio|case\s*stud(y|ies)|have\s+you\s+done|similar\s+app|related\s+app|i\s+want\s+to\s+develop|want\s+to\s+develop|developed?)\b/i;
 const CHAT_CONTEXT_MAX_MESSAGES = Math.max(2, parseInt(process.env.CHAT_CONTEXT_MAX_MESSAGES || '18', 10));
@@ -999,4 +1004,139 @@ async function synthesizeMessageVoice(req, res) {
   }
 }
 
-module.exports = { postMessage, ping, synthesizeMessageVoice, reportClientChatFailure };
+async function createLiveAvatarSessionToken(req, res) {
+  try {
+    const companyId = String(req.body?.companyId || '').trim();
+    const embedSecret = String(req.headers['x-embed-api-key'] || '').trim();
+
+    if (!companyId) {
+      return res.status(400).json({ error: 'companyId is required' });
+    }
+    if (!embedSecret) {
+      return res.status(401).json({ error: 'Missing embed API key' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT em.company_id
+         FROM embed_settings em
+         INNER JOIN virtual_assistant_settings va ON va.company_id = em.company_id
+        WHERE em.company_id = $1
+          AND em.embed_secret = $2
+          AND va.va_enabled = TRUE
+        LIMIT 1`,
+      [companyId, embedSecret]
+    );
+    if (!rows.length) {
+      return res.status(403).json({ error: 'Invalid embed credentials for virtual assistant' });
+    }
+
+    const company = await CompanyAdmin.findByCompanyId(companyId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    if (!company.va_enabled) {
+      return res.status(409).json({ error: 'Virtual assistant is disabled' });
+    }
+    if (!company.liveavatar_api_key) {
+      return res.status(400).json({ error: 'LiveAvatar API key is not configured' });
+    }
+
+    const apiKey = company.liveavatar_api_key;
+    const sandboxMode = Boolean(company.va_sandbox_mode);
+    const avatarId = sandboxMode ? LIVEAVATAR_SANDBOX_AVATAR_ID : String(company.liveavatar_avatar_id || '').trim();
+    if (!avatarId) {
+      return res.status(400).json({ error: 'No LiveAvatar avatar is configured' });
+    }
+
+    let contextId = String(company.liveavatar_context_id || '').trim();
+    if (!contextId) {
+      const context = await liveAvatar.createContext(apiKey, {
+        name: `${company.display_name || company.name || 'Chat'} Assistant`,
+        prompt: `You are a helpful virtual assistant for ${company.display_name || company.name || 'our company'}.`,
+        opening_text: String(company.greeting_message || '').trim() || 'Hello! How can I help you today?',
+        links: [],
+      });
+      contextId = String(context?.id || '').trim();
+      if (!contextId) {
+        return res.status(502).json({ error: 'Unable to create LiveAvatar context' });
+      }
+      await pool.query(
+        `UPDATE virtual_assistant_settings
+            SET liveavatar_context_id = $1,
+                liveavatar_context_name = COALESCE($2, liveavatar_context_name),
+                updated_at = NOW()
+          WHERE company_id = $3`,
+        [contextId, String(context?.name || '').trim() || null, companyId]
+      );
+    }
+
+    let voiceId = '';
+    if (String(company.va_voice_source || 'liveavatar').trim().toLowerCase() === 'elevenlabs'
+      && company.voice_custom_id
+      && company.elevenlabs_api_key) {
+      try {
+        const secret = await liveAvatar.createSecret(apiKey, {
+          secret_name: `elevenlabs_${companyId}`,
+          secret_value: company.elevenlabs_api_key,
+          secret_type: 'ELEVENLABS_API_KEY',
+        });
+        const bound = await liveAvatar.bindThirdPartyVoice(apiKey, {
+          provider_voice_id: company.voice_custom_id,
+          secret_id: secret.id,
+          name: company.voice_custom_name || 'ElevenLabs Voice',
+        });
+        voiceId = String(bound?.voice_id || '').trim();
+      } catch (bindErr) {
+        console.error('[chat] liveavatar elevenlabs bind:', bindErr.message);
+      }
+    }
+
+    if (!voiceId) {
+      voiceId = String(company.liveavatar_voice_id || '').trim();
+    }
+    if (!voiceId) {
+      const avatar = await liveAvatar.getAvatar(apiKey, avatarId).catch(() => null);
+      voiceId = String(avatar?.default_voice_id || avatar?.voice_id || '').trim();
+    }
+    if (!voiceId) {
+      return res.status(400).json({ error: sandboxMode
+        ? `Sandbox mode requires a supported voice for ${LIVEAVATAR_SANDBOX_AVATAR_NAME}`
+        : 'No LiveAvatar voice is available for the selected avatar' });
+    }
+
+    const rawLanguage = String(company.language_primary || 'en').trim().toLowerCase();
+    const languageCode = (rawLanguage || 'en').slice(0, 5);
+    const quality = ['low', 'medium', 'high', 'very_high'].includes(String(company.va_video_quality || '').trim().toLowerCase())
+      ? String(company.va_video_quality || '').trim().toLowerCase()
+      : 'high';
+
+    const session = await liveAvatar.createSessionToken(apiKey, {
+      avatar_id: avatarId,
+      voice_id: voiceId,
+      context_id: contextId,
+      language: languageCode || 'en',
+      is_sandbox: sandboxMode,
+      video_quality: quality,
+      video_encoding: 'H264',
+      interactivity_type: 'CONVERSATIONAL',
+    });
+
+    if (!session?.session_token) {
+      return res.status(502).json({ error: 'Failed to create LiveAvatar session token' });
+    }
+
+    return res.json({
+      sessionToken: session.session_token,
+      sessionId: session.session_id || null,
+      sandboxMode,
+      avatarId,
+      voiceId,
+      contextId,
+    });
+  } catch (err) {
+    console.error('[chat] liveavatar session-token:', err);
+    return res.status(err.status || 500).json({ error: err.message || 'Failed to create LiveAvatar session token' });
+  }
+}
+
+module.exports = { postMessage, ping, synthesizeMessageVoice, reportClientChatFailure, createLiveAvatarSessionToken };

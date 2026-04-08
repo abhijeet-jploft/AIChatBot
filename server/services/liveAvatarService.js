@@ -113,6 +113,40 @@ async function createEmbedV2(apiKey, { avatar_id, context_id, voice_id, is_sandb
   return json?.data || null;
 }
 
+async function createSessionToken(apiKey, {
+  avatar_id,
+  voice_id,
+  context_id,
+  language,
+  is_sandbox,
+  video_quality,
+  video_encoding,
+  interactivity_type,
+  max_session_duration,
+}) {
+  const body = {
+    mode: 'FULL',
+    avatar_id,
+    avatar_persona: {
+      voice_id,
+    },
+  };
+
+  if (context_id) body.avatar_persona.context_id = context_id;
+  if (language) body.avatar_persona.language = language;
+  if (is_sandbox) body.is_sandbox = true;
+  if (interactivity_type) body.interactivity_type = interactivity_type;
+  if (max_session_duration) body.max_session_duration = max_session_duration;
+  if (video_quality || video_encoding) {
+    body.video_settings = {};
+    if (video_quality) body.video_settings.quality = video_quality;
+    if (video_encoding) body.video_settings.encoding = video_encoding;
+  }
+
+  const json = await apiCall('POST', '/v1/sessions/token', apiKey, body);
+  return json?.data || null;
+}
+
 // ─── Credits ────────────────────────────────────────────────────────────────
 
 async function getUserCredits(apiKey) {
@@ -141,6 +175,7 @@ module.exports = {
   createSecret,
   listSecrets,
   createEmbedV2,
+  createSessionToken,
   getUserCredits,
   getLanguages,
 };

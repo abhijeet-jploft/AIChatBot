@@ -247,13 +247,20 @@
   var leadCaptureDraft = { name: '', phone: '', phoneCode: '+1', phoneLocal: '', email: '' };
 
   // ── Virtual Assistant mode ──
-  var vaMode = Boolean(config.vaEnabled && config.vaAvatarEmbedUrl);
-  var vaAvatarEmbedUrl = config.vaAvatarEmbedUrl || '';
+  var vaMode = Boolean(config.vaEnabled);
   var vaTranscriptVisible = false;
-  var vaWelcomeSpoken = false;
   var vaAutoSendTimer = null;
   var vaPausedMicForTts = false;
   var vaMicBtnEl = null;
+  var vaVideoEl = null;
+  var vaOverlayEl = null;
+  var vaStartBtnEl = null;
+  var vaStatusEl = null;
+  var vaSession = null;
+  var vaSessionStartPromise = null;
+  var vaKeepAliveTimer = null;
+  var vaSdkModulePromise = null;
+  var vaTranscriptSender = null;
 
   var root = null;
   var launcher = null;
@@ -326,6 +333,208 @@
     var time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     if (sameDay) return time;
     return dt.toLocaleDateString() + ' ' + time;
+  }
+
+  function setVaStatus(text, isError) {
+    if (!vaStatusEl) return;
+    vaStatusEl.textContent = String(text || '');
+    vaStatusEl.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function setVaOverlayVisible(visible) {
+    if (!vaOverlayEl) return;
+    vaOverlayEl.classList.toggle('is-hidden', !visible);
+  }
+
+  function clearVaKeepAlive() {
+    if (vaKeepAliveTimer) {
+      clearInterval(vaKeepAliveTimer);
+      vaKeepAliveTimer = null;
+    }
+  }
+
+  function ensureLiveAvatarSdk() {
+    if (!vaSdkModulePromise) {
+      vaSdkModulePromise = import('https://esm.sh/@heygen/liveavatar-web-sdk@0.0.12?bundle');
+    }
+    return vaSdkModulePromise;
+  }
+
+  function createVaSessionToken() {
+    return fetch(apiUrl + '/chat/liveavatar/session-token', {
+      method: 'POST',
+      headers: mergeHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ companyId: companyId }),
+    }).then(function (response) {
+      if (!response.ok) {
+        return response.json().catch(function () { return {}; }).then(function (err) {
+          throw new Error(err.error || 'Failed to start virtual assistant');
+        });
+      }
+      return response.json();
+    });
+  }
+
+  function updateVaTranscriptChunk(role, text, append) {
+    var content = String(text || '');
+    if (!content) return;
+    if (vaTranscriptSender === role && messages.length > 0 && messages[messages.length - 1].role === role) {
+      messages[messages.length - 1].content = append
+        ? (messages[messages.length - 1].content + content)
+        : content;
+    } else {
+      vaTranscriptSender = role;
+      messages.push({ role: role, content: content, createdAt: getNowIso() });
+    }
+    renderMessages();
+    persistState();
+  }
+
+  function finalizeVaTranscript(role, text) {
+    var content = String(text || '');
+    if (!content) return;
+    if (messages.length > 0 && messages[messages.length - 1].role === role) {
+      messages[messages.length - 1].content = content;
+    } else {
+      messages.push({ role: role, content: content, createdAt: getNowIso() });
+    }
+    vaTranscriptSender = null;
+    renderMessages();
+    persistState();
+  }
+
+  function bindVaSessionEvents(session) {
+    session.on('session.stream_ready', function () {
+      if (vaVideoEl) {
+        try {
+          session.attach(vaVideoEl);
+        } catch (e) {}
+      }
+      setVaStatus('Assistant ready');
+      setVaOverlayVisible(false);
+    });
+    session.on('session.disconnected', function () {
+      clearVaKeepAlive();
+      vaSession = null;
+      vaSessionStartPromise = null;
+      setMicButtonState(false);
+      setVaOverlayVisible(true);
+      setVaStatus('Assistant stopped');
+      if (vaStartBtnEl) {
+        vaStartBtnEl.disabled = false;
+        vaStartBtnEl.textContent = 'Start Assistant';
+      }
+    });
+    session.on('user.transcription.chunk', function (event) {
+      updateVaTranscriptChunk('user', event && event.text, false);
+    });
+    session.on('avatar.transcription.chunk', function (event) {
+      updateVaTranscriptChunk('assistant', event && event.text, true);
+    });
+    session.on('user.transcription', function (event) {
+      finalizeVaTranscript('user', event && event.text);
+      setVaStatus('Assistant is thinking…');
+    });
+    session.on('avatar.transcription', function (event) {
+      finalizeVaTranscript('assistant', event && event.text);
+      setVaStatus(micRecording ? 'Listening…' : 'Assistant ready');
+    });
+    session.on('user.speak_started', function () {
+      setVaStatus('Listening…');
+    });
+    session.on('avatar.speak_started', function () {
+      setVaStatus('Assistant is speaking…');
+    });
+    session.on('avatar.speak_ended', function () {
+      setVaStatus(micRecording ? 'Listening…' : 'Assistant ready');
+    });
+  }
+
+  function stopVaSession() {
+    clearVaKeepAlive();
+    vaTranscriptSender = null;
+    if (vaSession) {
+      var currentSession = vaSession;
+      vaSession = null;
+      try {
+        currentSession.stop();
+      } catch (e) {}
+    }
+    vaSessionStartPromise = null;
+    setMicButtonState(false);
+    setVaOverlayVisible(true);
+    if (vaStartBtnEl) {
+      vaStartBtnEl.disabled = false;
+      vaStartBtnEl.textContent = 'Start Assistant';
+    }
+  }
+
+  function startVaSession() {
+    if (!vaMode) return Promise.resolve(null);
+    if (vaSession) return Promise.resolve(vaSession);
+    if (vaSessionStartPromise) return vaSessionStartPromise;
+
+    setVaStatus('Starting assistant…');
+    setVaOverlayVisible(true);
+    if (vaStartBtnEl) vaStartBtnEl.disabled = true;
+
+    vaSessionStartPromise = Promise.all([ensureLiveAvatarSdk(), createVaSessionToken()])
+      .then(function (results) {
+        var sdk = results[0] || {};
+        var sessionInfo = results[1] || {};
+        if (!sdk.LiveAvatarSession) {
+          throw new Error('LiveAvatar SDK failed to load');
+        }
+        vaSession = new sdk.LiveAvatarSession(sessionInfo.sessionToken, { voiceChat: false });
+        bindVaSessionEvents(vaSession);
+        return vaSession.start().then(function () {
+          clearVaKeepAlive();
+          vaKeepAliveTimer = setInterval(function () {
+            if (!vaSession) return;
+            try {
+              vaSession.keepAlive();
+            } catch (e) {}
+          }, 60000);
+          setVaStatus('Connecting media…');
+          if (vaStartBtnEl) vaStartBtnEl.textContent = 'Restart Assistant';
+          return vaSession;
+        });
+      })
+      .catch(function (error) {
+        vaSession = null;
+        setVaOverlayVisible(true);
+        setVaStatus(error && error.message ? error.message : 'Failed to start assistant', true);
+        throw error;
+      })
+      .finally(function () {
+        if (vaStartBtnEl) vaStartBtnEl.disabled = false;
+        vaSessionStartPromise = null;
+      });
+
+    return vaSessionStartPromise;
+  }
+
+  function sendVaTextMessage(text) {
+    var messageText = String(text || '').trim();
+    if (!messageText) return;
+    startVaSession()
+      .then(function (session) {
+        if (!session) return;
+        messages.push({ role: 'user', content: messageText, createdAt: getNowIso() });
+        renderMessages();
+        persistState();
+        vaTranscriptSender = null;
+        session.message(messageText);
+        setVaStatus('Assistant is thinking…');
+      })
+      .catch(function (error) {
+        messages.push({
+          role: 'assistant',
+          content: error && error.message ? error.message : 'Failed to start virtual assistant.',
+          createdAt: getNowIso(),
+        });
+        renderMessages();
+      });
   }
 
   (function readPersistedState() {
@@ -744,8 +953,10 @@
           sessionId = null;
           messages = [];
           openingMessageShown = false;
-          messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
-          openingMessageShown = true;
+          if (!vaMode) {
+            messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
+            openingMessageShown = true;
+          }
           renderMessages();
           persistState();
         }
@@ -795,6 +1006,7 @@
   function newChat() {
     stopMicCapture();
     pauseAssistantVoice();
+    if (vaMode) stopVaSession();
     if (typingTimer) {
       clearTimeout(typingTimer);
       typingTimer = null;
@@ -811,8 +1023,10 @@
     sendPresenceRegister(undefined);
     messages = [];
     openingMessageShown = false;
-    messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
-    openingMessageShown = true;
+    if (!vaMode) {
+      messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
+      openingMessageShown = true;
+    }
     if (inputEl) {
       inputEl.value = '';
       resizeInput();
@@ -922,6 +1136,7 @@
       '#jploft-chat-root .jploft-close-fab{display:none;z-index:100000}',
 
       '#jploft-chat-root .jploft-panel{position:fixed;right:0;top:0;bottom:0;width:min(420px,calc(100vw - 48px));height:100dvh;max-height:100dvh;border:1px solid var(--chat-border);border-radius:0;background:var(--chat-surface);box-shadow:-8px 0 28px -10px rgba(0,0,0,.22);z-index:99999;display:flex;flex-direction:column;overflow:hidden}',
+      '#jploft-chat-root .jploft-panel.jploft-embed-page{position:relative !important;left:0 !important;right:0 !important;top:0 !important;bottom:0 !important;width:100% !important;height:100dvh !important;max-width:100% !important;max-height:100dvh !important;border:0 !important;box-shadow:none !important;border-radius:0 !important}',
       '#jploft-chat-root .jploft-panel.is-fullscreen{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:100% !important;height:100% !important;max-width:100% !important;max-height:100% !important;border-radius:0;border:0;box-shadow:none;z-index:2147483647 !important;overflow:hidden}',
       '#jploft-chat-root .jploft-fullscreen-inner{display:flex;flex:1;min-height:0;min-width:0;overflow:hidden}',
       '#jploft-chat-root .jploft-sidebar{display:none !important}',
@@ -1025,7 +1240,13 @@
 
       /* ── Virtual Assistant mode ── */
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-avatar-wrap{flex:1 1 auto;min-height:180px;background:#000;position:relative;overflow:hidden}',
-      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-iframe{width:100%;height:100%;border:none;display:block}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-video{width:100%;height:100%;display:block;object-fit:cover;background:#000}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,.62));transition:opacity .18s ease}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-overlay.is-hidden{opacity:0;pointer-events:none}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-start-btn{border:0;border-radius:999px;padding:12px 20px;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 18px 38px -20px var(--chat-launcher-shadow,rgba(224,47,58,.55))}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-start-btn:disabled{opacity:.65;cursor:not-allowed}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-status{max-width:80%;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:12px;line-height:1.35;text-align:center;backdrop-filter:blur(8px)}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-status.is-error{background:rgba(185,28,28,.65)}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-controls{display:flex;flex-direction:column;align-items:center;padding:14px 16px 8px;gap:10px;background:var(--chat-surface);border-top:1px solid var(--chat-border);flex-shrink:0}',
       '#jploft-chat-root .jploft-va-mic-btn{width:60px;height:60px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;box-shadow:0 6px 18px -4px var(--chat-launcher-shadow,rgba(224,47,58,.45))}',
       '#jploft-chat-root .jploft-va-mic-btn:hover{transform:scale(1.06);box-shadow:0 8px 22px -4px var(--chat-launcher-shadow,rgba(224,47,58,.55))}',
@@ -1682,6 +1903,12 @@
 
   function stopMicCapture() {
     keepMicOpen = false;
+    if (vaMode && vaSession) {
+      try { vaSession.voiceChat.stop(); } catch (e) {}
+      try { vaSession.stopListening(); } catch (e2) {}
+      setMicButtonState(false);
+      return;
+    }
     if (speechRecognition) {
       try { speechRecognition.stop(); } catch (e) {}
     }
@@ -1757,6 +1984,31 @@
 
   function onMicButtonClick(event) {
     event.preventDefault();
+    if (vaMode) {
+      startVaSession()
+        .then(function (session) {
+          if (!session) return;
+          if (micRecording) {
+            try { session.voiceChat.stop(); } catch (eStop) {}
+            try { session.stopListening(); } catch (ePoseStop) {}
+            setMicButtonState(false);
+            setVaStatus('Assistant ready');
+            return;
+          }
+          try { session.startListening(); } catch (ePoseStart) {}
+          Promise.resolve(session.voiceChat.start())
+            .then(function () {
+              setMicButtonState(true);
+              setVaStatus('Listening…');
+            })
+            .catch(function (error) {
+              setMicButtonState(false);
+              setVaStatus(error && error.message ? error.message : 'Microphone unavailable', true);
+            });
+        })
+        .catch(function () {});
+      return;
+    }
     if ((!voiceEnabled && !vaMode) || loading) return;
 
     if (micRecording) {
@@ -2041,7 +2293,7 @@
         ? renderLeadCaptureForm(leadDraft)
         : '';
       var voiceHtml = '';
-      if (cls === 'assistant' && m.content && voiceResponseEnabled) {
+      if (cls === 'assistant' && m.content && voiceResponseEnabled && !vaMode) {
         var isPlaying = playingMessageIndex === i;
         var voiceButtonIcon = isPlaying
           ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>'
@@ -2217,7 +2469,7 @@
     activated = true;
     resetActivationWatchers();
 
-    if (messages.length === 0 && !openingMessageShown) {
+    if (!vaMode && messages.length === 0 && !openingMessageShown) {
       messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
       openingMessageShown = true;
       renderMessages();
@@ -2235,13 +2487,6 @@
       if (inputEl) inputEl.focus();
     }, 0);
 
-    // VA mode: speak welcome message
-    if (vaMode && !vaWelcomeSpoken && messages.length > 0 && messages[0].role === 'assistant') {
-      vaWelcomeSpoken = true;
-      setTimeout(function () {
-        playMessageVoice(0);
-      }, 800);
-    }
   }
 
   function closePanel() {
@@ -2258,6 +2503,7 @@
     }
     sendPresenceTyping(false);
     updateMaxButtonState();
+    if (vaMode) stopVaSession();
     panel.style.display = 'none';
     if (closeFab) closeFab.style.display = 'none';
     launcher.style.display = 'flex';
@@ -2440,6 +2686,10 @@
     inputEl.value = '';
     resizeInput();
     setSendButtonState();
+    if (vaMode) {
+      sendVaTextMessage(text);
+      return;
+    }
     sendToApi(text);
   }
 
@@ -2477,6 +2727,7 @@
 
     panel = document.createElement('section');
     panel.className = 'jploft-panel';
+    if (forceOpen) panel.classList.add('jploft-embed-page');
     panel.setAttribute('aria-label', 'Chat widget');
     panel.style.display = 'none';
     panel.innerHTML =
@@ -2564,17 +2815,32 @@
     window.addEventListener('resize', onViewportResize);
 
     // ── VA mode: inject avatar, mic, transcript toggle ──
-    if (vaMode && vaAvatarEmbedUrl) {
+    if (vaMode) {
       panel.classList.add('jploft-va-mode');
 
       var vaAvatarWrap = document.createElement('div');
       vaAvatarWrap.className = 'jploft-va-avatar-wrap';
-      var vaFrame = document.createElement('iframe');
-      vaFrame.className = 'jploft-va-iframe';
-      vaFrame.src = vaAvatarEmbedUrl;
-      vaFrame.allow = 'camera;microphone;autoplay';
-      vaFrame.allowFullscreen = true;
-      vaAvatarWrap.appendChild(vaFrame);
+      vaVideoEl = document.createElement('video');
+      vaVideoEl.className = 'jploft-va-video';
+      vaVideoEl.autoplay = true;
+      vaVideoEl.playsInline = true;
+      vaAvatarWrap.appendChild(vaVideoEl);
+
+      vaOverlayEl = document.createElement('div');
+      vaOverlayEl.className = 'jploft-va-overlay';
+      vaStartBtnEl = document.createElement('button');
+      vaStartBtnEl.type = 'button';
+      vaStartBtnEl.className = 'jploft-va-start-btn';
+      vaStartBtnEl.textContent = 'Start Assistant';
+      vaStartBtnEl.addEventListener('click', function () {
+        startVaSession().catch(function () {});
+      });
+      vaStatusEl = document.createElement('div');
+      vaStatusEl.className = 'jploft-va-status';
+      vaStatusEl.textContent = 'Click start to launch the assistant';
+      vaOverlayEl.appendChild(vaStartBtnEl);
+      vaOverlayEl.appendChild(vaStatusEl);
+      vaAvatarWrap.appendChild(vaOverlayEl);
 
       var vaControlsArea = document.createElement('div');
       vaControlsArea.className = 'jploft-va-controls';
@@ -2621,7 +2887,7 @@
       if (launcher) launcher.style.display = 'none';
       if (panel) {
         panel.style.display = 'flex';
-        if (messages.length === 0 && !openingMessageShown) {
+        if (!vaMode && messages.length === 0 && !openingMessageShown) {
           messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
           openingMessageShown = true;
         }
@@ -2630,13 +2896,6 @@
       }
       startInitialSessionLoadIfNeeded();
       persistState();
-      // VA mode: speak welcome message (persistedWidgetOpen path)
-      if (vaMode && !vaWelcomeSpoken && messages.length > 0 && messages[0].role === 'assistant') {
-        vaWelcomeSpoken = true;
-        setTimeout(function () {
-          playMessageVoice(0);
-        }, 800);
-      }
     }
 
     connectPresenceWs();
