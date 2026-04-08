@@ -29,6 +29,7 @@ const {
 } = require('../../services/trainingDataService');
 const { extractFromBuffer, isDatabaseKnowledgeFile } = require('../../services/documentExtractor');
 const { transcribeMediaFiles } = require('../../services/mediaTranscriptionService');
+const { normalizeGeminiModel } = require('../../services/geminiModelService');
 const Chatbot = require('../../models/Chatbot');
 const pool = require('../../db/index');
 const path = require('path');
@@ -244,10 +245,7 @@ async function transcribeMedia(req, res) {
       return res.status(400).json({ error: 'Gemini API key is required for auto media transcription' });
     }
 
-    let modelName = chatbot?.ai_model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    if (String(modelName).toLowerCase().includes('claude')) {
-      modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    }
+    const modelName = normalizeGeminiModel(chatbot?.ai_model, process.env.GEMINI_MODEL);
 
     const entries = await transcribeMediaFiles(files, {
       apiKey,

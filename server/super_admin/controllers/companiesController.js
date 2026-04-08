@@ -130,6 +130,9 @@ async function createCompany(req, res) {
     if (!companyId || !name) {
       return res.status(400).json({ error: 'Company ID and Company Name are required' });
     }
+    if (String(name).trim().length > 25) {
+      return res.status(400).json({ error: 'Company Name must be 25 characters or fewer' });
+    }
 
     const email = normalizeAdminEmail(adminEmail);
     if (!email || !isValidAdminEmail(email)) {
@@ -270,7 +273,12 @@ async function updateCompany(req, res) {
     const updates = [];
     const params = [];
 
-    if (name !== undefined) { updates.push(`name = $${params.length + 1}`); params.push(String(name).trim()); }
+    if (name !== undefined) {
+      if (String(name).trim().length > 25) {
+        return res.status(400).json({ error: 'Company Name must be 25 characters or fewer' });
+      }
+      updates.push(`name = $${params.length + 1}`); params.push(String(name).trim());
+    }
     if (description !== undefined) { updates.push(`description = $${params.length + 1}`); params.push(description?.trim() || null); }
 
     if (adminEmail !== undefined) {

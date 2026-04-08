@@ -7,6 +7,11 @@
   text-transform: capitalize;
 }
 
+/* ─── Table scrollbar (Chrome / WebKit) ─── */
+.admin-content .table-responsive::-webkit-scrollbar { width: 8px; height: 8px; }
+.admin-content .table-responsive::-webkit-scrollbar-track { background: var(--chat-surface, #fff); }
+.admin-content .table-responsive::-webkit-scrollbar-thumb { background: var(--chat-accent, #4f46e5); border-radius: 4px; }
+
 .admin-shell {
   min-height: 100vh;
   background:

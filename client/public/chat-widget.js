@@ -226,6 +226,8 @@
   };
 
   var requestGeneration = 0;
+  var pendingOperatorRetry = null;
+  var operatorRetryInFlight = false;
 
   var presenceWs = null;
   var wsReconnectTimer = null;
@@ -2610,11 +2612,13 @@
 
         // Operator is handling this session — keep loading visible, skip empty AI message
         if (data.operatorActive) {
+          pendingOperatorRetry = payload;
           renderMessages();
           persistState();
           if (callback) callback();
           return;
         }
+        pendingOperatorRetry = null;
 
         var assistantText = normalizeAssistantNameInText(String(data.content || ''), chatbotDisplayName);
         var voiceUrl = data && data.voice && data.voice.audioDataUrl ? String(data.voice.audioDataUrl) : '';
@@ -3043,9 +3047,53 @@
             loadSessions();
           }
           if (msg.type === 'operator_released') {
-            loading = false;
-            setSendButtonState();
-            renderMessages();
+            var pending = pendingOperatorRetry;
+            if (pending) {
+              pendingOperatorRetry = null;
+              operatorRetryInFlight = true;
+              loading = true;
+              setSendButtonState();
+              renderMessages();
+              fetch(apiUrl + '/chat/message', {
+                method: 'POST',
+                headers: mergeHeaders({ 'Content-Type': 'application/json', 'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '' }),
+                body: JSON.stringify(pending),
+              })
+                .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('retry failed')); })
+                .then(function (retryData) {
+                  operatorRetryInFlight = false;
+                  if (retryData && retryData.operatorActive) return; // still blocked
+                  var raw = (retryData && retryData.content) ? String(retryData.content) : '';
+                  var content = raw ? normalizeAssistantNameInText(raw, chatbotDisplayName) : 'We are facing some technical issue. Please try again.';
+                  messages.push({
+                    role: 'assistant',
+                    content: content,
+                    createdAt: String((retryData && retryData.createdAt) || '') || getNowIso(),
+                    voiceUrl: retryData && retryData.voice && retryData.voice.audioDataUrl ? String(retryData.voice.audioDataUrl) : undefined,
+                  });
+                  loading = false;
+                  setSendButtonState();
+                  renderMessages();
+                  persistState();
+                  loadSessions();
+                })
+                .catch(function () {
+                  operatorRetryInFlight = false;
+                  messages.push({
+                    role: 'assistant',
+                    content: 'We are facing some technical issue. Please try again.',
+                    createdAt: getNowIso(),
+                  });
+                  loading = false;
+                  setSendButtonState();
+                  renderMessages();
+                  persistState();
+                });
+            } else if (!operatorRetryInFlight) {
+              loading = false;
+              setSendButtonState();
+              renderMessages();
+            }
           }
         } catch (e) {}
       };

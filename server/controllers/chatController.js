@@ -22,6 +22,7 @@ const {
 const { detectNaturalLanguageFromText } = require('../services/chatRules');
 const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
 const { findProjectLinks } = require('../services/trainingLoader');
+const { normalizeGeminiModel } = require('../services/geminiModelService');
 const { extractClientIp, lookupIpGeo } = require('../utils/ipGeo');
 const pool = require('../db/index');
 const Chatbot = require('../models/Chatbot');
@@ -193,7 +194,7 @@ function resolveEffectiveModel(provider, configuredModel) {
   const explicitModel = String(configuredModel || '').trim();
   if (explicitModel) return explicitModel;
   if (normalizedProvider === 'gemini') {
-    return String(process.env.GEMINI_MODEL || 'gemini-1.5-flash').trim();
+    return normalizeGeminiModel(configuredModel, process.env.GEMINI_MODEL);
   }
   if (normalizedProvider === 'anthropic') {
     return String(process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514').trim();
@@ -408,7 +409,10 @@ async function postMessage(req, res) {
           sid = id;
         }
 
-        await ChatMessage.create(sid, 'user', userMsg.content);
+        // Skip duplicate save when retrying after operator hand-back
+        if (!req.body?.operatorRetry) {
+          await ChatMessage.create(sid, 'user', userMsg.content);
+        }
         if (clientIdempotencyKey) {
           _savedMessageKeys.set(clientIdempotencyKey, { time: Date.now(), sid });
           pruneIdempotencyCache();
@@ -527,9 +531,13 @@ async function postMessage(req, res) {
       const aiStartedAt = Date.now();
       const primaryProvider = aiConfig.provider === 'gemini' ? 'gemini' : 'anthropic';
       const fallbackProvider = primaryProvider === 'gemini' ? 'anthropic' : 'gemini';
-      const providersToTry = hasProviderApiKey(fallbackProvider, aiConfig)
-        ? [primaryProvider, fallbackProvider]
-        : [primaryProvider];
+      const primaryHasKey = hasProviderApiKey(primaryProvider, aiConfig);
+      const fallbackHasKey = hasProviderApiKey(fallbackProvider, aiConfig);
+      const providersToTry = primaryHasKey
+        ? [primaryProvider]
+        : fallbackHasKey
+          ? [fallbackProvider]
+          : [primaryProvider];
 
       let lastProviderError = null;
       for (let providerIndex = 0; providerIndex < providersToTry.length; providerIndex += 1) {
@@ -608,7 +616,7 @@ async function postMessage(req, res) {
 
           const hasAnotherProvider = providerIndex < providersToTry.length - 1;
           if (hasAnotherProvider) {
-            appendSystemLog('warn', 'Primary AI provider failed, retrying with fallback provider', {
+            appendSystemLog('warn', 'Primary AI provider unavailable, using fallback provider with configured key', {
               companyId,
               sessionId: sid || undefined,
               requestId,

@@ -1,5 +1,9 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const GEMINI_MODEL_FALLBACKS = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const {
+  buildGeminiModelCandidates,
+  normalizeGeminiModel,
+  DEFAULT_GEMINI_MODEL,
+} = require('./geminiModelService');
 
 function isModelNotFoundError(err) {
   const msg = String(err?.message || '').toLowerCase();
@@ -12,7 +16,7 @@ function isQuotaExceededError(err) {
 }
 
 function buildQuotaExceededMessage(err, options = {}) {
-  const requestedModel = String(options.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash');
+  const requestedModel = normalizeGeminiModel(options.model, process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
   const keySource = String(options.keySource || 'server configuration');
   const retryMatch = String(err?.message || '').match(/Please retry in\s+([^\.\s]+s?)/i);
   const retryHint = retryMatch?.[1] ? ` Retry after ${retryMatch[1]}.` : '';
@@ -43,8 +47,8 @@ async function transcribeMediaFiles(files, options = {}) {
   if (!key) throw new Error('Gemini API key not configured for media transcription');
 
   const genAI = new GoogleGenerativeAI(key);
-  const requestedModel = options.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const modelCandidates = [requestedModel, ...GEMINI_MODEL_FALLBACKS].filter((v, i, arr) => v && arr.indexOf(v) === i);
+  const requestedModel = normalizeGeminiModel(options.model, process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
+  const modelCandidates = buildGeminiModelCandidates(requestedModel, process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
 
   const entries = [];
   for (const file of files || []) {

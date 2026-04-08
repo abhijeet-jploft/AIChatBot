@@ -297,7 +297,7 @@ export default function CompanyDetail() {
           <form onSubmit={handleEdit}>
             <div className="sa-field">
               <label>Name <span style={{ color: '#ef4444' }}>*</span></label>
-              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required disabled={!canEditCompanyInfo} />
+              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={25} required disabled={!canEditCompanyInfo} />
             </div>
             <div className="sa-field">
               <label>Description</label>

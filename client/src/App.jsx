@@ -710,6 +710,8 @@ export default function App() {
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
   const requestGenerationRef = useRef(0);
+  const pendingOperatorRetryRef = useRef(null);
+  const operatorRetryInFlightRef = useRef(false);
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
 
   const stripEmoji = useCallback((text) => {
@@ -1212,7 +1214,43 @@ export default function App() {
               setLoading(false);
             }
             if (msg.type === 'operator_released') {
-              setLoading(false);
+              const pending = pendingOperatorRetryRef.current;
+              if (pending) {
+                pendingOperatorRetryRef.current = null;
+                operatorRetryInFlightRef.current = true;
+                setLoading(true);
+                // Replay the blocked request now that AI is back in control
+                fetch(`${API_BASE}/chat/message`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '' },
+                  body: JSON.stringify(pending),
+                })
+                  .then((r) => r.ok ? r.json() : Promise.reject(new Error('retry failed')))
+                  .then((retryData) => {
+                    operatorRetryInFlightRef.current = false;
+                    if (retryData?.operatorActive) return; // still blocked, keep loading
+                    const raw = retryData?.content ? String(retryData.content) : '';
+                    const content = raw ? normalizeAssistantNameInText(raw, chatbotNameForOpening) : 'We are facing some technical issue. Please try again.';
+                    setMessages((prev) => [...prev, normalizeMessageShape({
+                      role: 'assistant',
+                      content,
+                      voiceUrl: retryData?.voice?.audioDataUrl || undefined,
+                      createdAt: retryData?.createdAt || getNowIso(),
+                    })]);
+                    setLoading(false);
+                  })
+                  .catch(() => {
+                    operatorRetryInFlightRef.current = false;
+                    setMessages((prev) => [...prev, normalizeMessageShape({
+                      role: 'assistant',
+                      content: 'We are facing some technical issue. Please try again.',
+                      createdAt: getNowIso(),
+                    })]);
+                    setLoading(false);
+                  });
+              } else if (!operatorRetryInFlightRef.current) {
+                setLoading(false);
+              }
             }
           } catch (_) {}
         };
@@ -1427,9 +1465,16 @@ export default function App() {
         if (data.sessionId && data.sessionId !== sessionId) {
           setSessionId(data.sessionId);
         }
+        // Store retry info so we can replay when operator releases
+        pendingOperatorRetryRef.current = {
+          ...requestPayload,
+          sessionId: data.sessionId || requestPayload.sessionId,
+          operatorRetry: true,
+        };
         keepLoading = true;
         return;
       }
+      pendingOperatorRetryRef.current = null;
 
       const normalizedAssistantContent = normalizeAssistantNameInText(String(data?.content || ''), chatbotNameForOpening);
       const responseAudioDataUrl = data?.voice?.audioDataUrl;

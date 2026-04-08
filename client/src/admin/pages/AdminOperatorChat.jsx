@@ -29,6 +29,7 @@ export default function AdminOperatorChat() {
   const speechUtteranceRef = useRef(null);
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
   const [pendingOutbox, setPendingOutbox] = useState([]);
+  const [handedBack, setHandedBack] = useState(false);
 
   const stripEmoji = useCallback((text) => {
     try {
@@ -167,8 +168,13 @@ export default function AdminOperatorChat() {
   }, [authFetch]);
 
   // Mark session as admin-operated on mount; release on unmount; keep-alive ping
+  // When handedBack is true, release operator control so AI resumes.
   useEffect(() => {
     if (!sessionId) return undefined;
+    if (handedBack) {
+      authFetch(`/conversations/${sessionId}/release`, { method: 'POST' }).catch(() => {});
+      return undefined;
+    }
     const mark = () => authFetch(`/conversations/${sessionId}/operate`, { method: 'POST' }).catch(() => {});
     mark();
     const keepAlive = setInterval(mark, OPERATE_KEEPALIVE_MS);
@@ -176,7 +182,7 @@ export default function AdminOperatorChat() {
       clearInterval(keepAlive);
       authFetch(`/conversations/${sessionId}/release`, { method: 'POST' }).catch(() => {});
     };
-  }, [authFetch, sessionId]);
+  }, [authFetch, sessionId, handedBack]);
 
   const toOperatorPerspectiveRole = useCallback((role) => {
     // DB perspective: user=visitor, assistant=AI/admin.
@@ -302,8 +308,15 @@ export default function AdminOperatorChat() {
         </div>
         <div className="d-flex align-items-center gap-2">
           <span className="small d-none d-md-inline" style={{ color: 'var(--chat-muted)' }}>
-            Visitor messages are on left · your operator replies are on right
+            {handedBack ? 'AI is handling this conversation · view only' : 'Visitor messages are on left · your operator replies are on right'}
           </span>
+          <button
+            type="button"
+            className={`btn btn-sm ${handedBack ? 'btn-success' : 'btn-warning'}`}
+            onClick={() => setHandedBack((prev) => !prev)}
+          >
+            {handedBack ? 'Take Back Conversation' : 'Hand back to AI'}
+          </button>
           <button
             type="button"
             className={`btn btn-sm ${theme === 'dark' ? 'btn-outline-light' : 'btn-outline-dark'}`}
@@ -324,17 +337,18 @@ export default function AdminOperatorChat() {
         <ChatMain
           messages={messages}
           loading={sending}
-          onSend={sendOperatorMessage}
+          onSend={handedBack ? undefined : sendOperatorMessage}
           companyName={chatbotTitle}
           companyIconUrl={companyIconUrl}
           greetingMessage={greetingMessage}
-          showMic={voiceEnabled}
+          showMic={handedBack ? false : voiceEnabled}
           onPlayVoice={playAssistantVoice}
           onPauseVoice={pauseAssistantVoice}
           playingMessageIndex={playingMessageIndex}
           voiceEnabled={voiceEnabled}
           voiceResponseEnabled={voiceResponseEnabled}
           onPlayBrowserVoice={handlePlayBrowserVoice}
+          inputDisabled={handedBack}
         />
       </div>
     </div>

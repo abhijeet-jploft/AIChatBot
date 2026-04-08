@@ -6,7 +6,7 @@ import {
   clampToNotBeforeFrom,
   nextToAfterFromChange,
 } from '../../utils/dateRangeFields';
-import { formatDateTimeFull } from '../../utils/dateFormat';
+import { formatDateOnly } from '../../utils/dateFormat';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   CategoryScale,
@@ -142,7 +142,7 @@ export default function Reports() {
         callbacks: {
           title: (items) => {
             const idx = items?.[0]?.dataIndex ?? 0;
-            return `Date: ${formatDateTimeFull(convDayRaw[idx])}`;
+            return `Date: ${formatDateOnly(convDayRaw[idx])}`;
           },
           label: (item) => `Conversations: ${item.parsed?.y ?? item.raw ?? 0}`,
         },

@@ -320,8 +320,6 @@ async function listByCompany(companyId, filters = {}) {
     return {
       ...row,
       display_name,
-      phone: maskPhone(row.phone),
-      email: maskEmail(row.email),
     };
   });
 

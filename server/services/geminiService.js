@@ -14,6 +14,7 @@ const {
   buildModeDebugLine,
   normalizeConversationModeId,
 } = require('./conversationModes');
+const { buildGeminiModelCandidates, normalizeGeminiModel } = require('./geminiModelService');
 
 const BASE_SYSTEM_PROMPT_PREFIX =
   'You are a helpful AI sales assistant. You represent the company professionally, ' +
@@ -46,8 +47,6 @@ function buildBaseSystemPrompt(
     configuredBusinessInfoPrompt,
   ].filter(Boolean).join('\n');
 }
-
-const GEMINI_MODEL_FALLBACKS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-latest'];
 
 function isModelNotFoundError(err) {
   const msg = String(err?.message || '').toLowerCase();
@@ -122,10 +121,7 @@ async function sendMessage(companyId, messages, options = {}) {
   const key = apiKey || process.env.GEMINI_API_KEY || '';
   if (!key) throw new Error('Gemini API key not configured');
   const genAI = new GoogleGenerativeAI(key);
-  let modelName = model || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-  if (modelName.toLowerCase().includes('claude')) {
-    modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-  }
+  const modelName = normalizeGeminiModel(model, process.env.GEMINI_MODEL);
   const prompt = buildPrompt(
     companyId,
     messages,
@@ -136,8 +132,9 @@ async function sendMessage(companyId, messages, options = {}) {
     configuredBusinessInfo,
     temporalContext
   );
-  const candidates = [modelName, ...GEMINI_MODEL_FALLBACKS].filter((v, i, arr) => v && arr.indexOf(v) === i);
+  const candidates = buildGeminiModelCandidates(modelName, process.env.GEMINI_MODEL);
   try {
+    let lastModelNotFoundError = null;
     for (let i = 0; i < candidates.length; i += 1) {
       const candidate = candidates[i];
       try {
@@ -157,11 +154,22 @@ async function sendMessage(companyId, messages, options = {}) {
           context: companyContext,
         });
       } catch (err) {
-        if (isModelNotFoundError(err) && i < candidates.length - 1) continue;
+        if (isModelNotFoundError(err)) {
+          lastModelNotFoundError = err;
+          if (i < candidates.length - 1) continue;
+          const wrapped = new Error(`No supported Gemini model available for generateContent. Tried: ${candidates.join(', ')}. Last error: ${err.message}`);
+          wrapped.cause = err;
+          throw wrapped;
+        }
         throw err;
       }
     }
-    throw new Error('No supported Gemini model available');
+    if (lastModelNotFoundError) {
+      const wrapped = new Error(`No supported Gemini model available for generateContent. Tried: ${candidates.join(', ')}. Last error: ${lastModelNotFoundError.message}`);
+      wrapped.cause = lastModelNotFoundError;
+      throw wrapped;
+    }
+    throw new Error(`No supported Gemini model available for generateContent. Tried: ${candidates.join(', ')}`);
   } catch (err) {
     console.error('GEMINI ERROR:', err);
     throw err;

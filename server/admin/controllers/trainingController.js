@@ -24,6 +24,7 @@ const {
 } = require('../../services/trainingDataService');
 const { extractFromBuffer, isDatabaseKnowledgeFile } = require('../../services/documentExtractor');
 const { transcribeMediaFiles } = require('../../services/mediaTranscriptionService');
+const { normalizeGeminiModel } = require('../../services/geminiModelService');
 const CompanyAdmin = require('../models/CompanyAdmin');
 const {
   buildAdminVisibilityPayload,
@@ -396,10 +397,7 @@ async function transcribeMedia(req, res) {
       return res.status(400).json({ error: 'Gemini API key is required for auto media transcription' });
     }
 
-    let modelName = company?.ai_model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    if (String(modelName).toLowerCase().includes('claude')) {
-      modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    }
+    const modelName = normalizeGeminiModel(company?.ai_model, process.env.GEMINI_MODEL);
 
     const entries = await transcribeMediaFiles(files, {
       apiKey,

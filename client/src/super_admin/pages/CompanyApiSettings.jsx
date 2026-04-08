@@ -22,6 +22,8 @@ export default function CompanyApiSettings() {
   const [fallbackAnthropicEnv, setFallbackAnthropicEnv] = useState(false);
   const [fallbackGeminiEnv, setFallbackGeminiEnv] = useState(false);
   const [fallbackElevenlabsEnv, setFallbackElevenlabsEnv] = useState(false);
+  const [fallbackAnthropicModel, setFallbackAnthropicModel] = useState('');
+  const [fallbackGeminiModel, setFallbackGeminiModel] = useState('');
 
   useEffect(() => {
     saFetch(`/companies/${companyId}/settings`)
@@ -36,6 +38,8 @@ export default function CompanyApiSettings() {
         setFallbackAnthropicEnv(Boolean(d.ai?.fallbackAnthropicEnv));
         setFallbackGeminiEnv(Boolean(d.ai?.fallbackGeminiEnv));
         setFallbackElevenlabsEnv(Boolean(d.ai?.fallbackElevenlabsEnv));
+        setFallbackAnthropicModel(String(d.ai?.fallbackAnthropicModel || ''));
+        setFallbackGeminiModel(String(d.ai?.fallbackGeminiModel || ''));
       })
       .catch((err) => showToast(err.message || 'Failed to load API settings', 'error'))
       .finally(() => setLoading(false));
@@ -66,6 +70,8 @@ export default function CompanyApiSettings() {
       setFallbackAnthropicEnv(Boolean(updated.ai?.fallbackAnthropicEnv));
       setFallbackGeminiEnv(Boolean(updated.ai?.fallbackGeminiEnv));
       setFallbackElevenlabsEnv(Boolean(updated.ai?.fallbackElevenlabsEnv));
+      setFallbackAnthropicModel(String(updated.ai?.fallbackAnthropicModel || ''));
+      setFallbackGeminiModel(String(updated.ai?.fallbackGeminiModel || ''));
       setAnthropicApiKey('');
       setGeminiApiKey('');
       setElevenlabsApiKey('');
@@ -101,8 +107,15 @@ export default function CompanyApiSettings() {
             type="text"
             value={aiModel}
             onChange={(e) => setAiModel(e.target.value)}
-            placeholder={aiProvider === 'gemini' ? 'gemini-2.5-flash' : 'claude-sonnet-4-20250514'}
+            placeholder={aiProvider === 'gemini'
+              ? (fallbackGeminiModel || 'gemini-2.5-flash')
+              : (fallbackAnthropicModel || 'claude-sonnet-4-20250514')}
           />
+          <div className="sa-text-muted">
+            {aiProvider === 'gemini'
+              ? `Leave blank to use server fallback: ${fallbackGeminiModel || 'gemini-2.5-flash'}`
+              : `Leave blank to use server fallback: ${fallbackAnthropicModel || 'claude-sonnet-4-20250514'}`}
+          </div>
         </div>
         <div className="sa-field">
           <label>Anthropic API key (company override)</label>

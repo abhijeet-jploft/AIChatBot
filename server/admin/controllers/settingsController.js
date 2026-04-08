@@ -18,6 +18,7 @@ const {
   serializeLanguageExtraLocales,
   resolveSpeechLanguageCode,
 } = require('../../services/supportedChatLanguages');
+const { DEFAULT_GEMINI_MODEL, normalizeGeminiModel } = require('../../services/geminiModelService');
 const {
   createCustomVoiceFromSamples,
   debugVoiceSelection,
@@ -381,7 +382,10 @@ function buildEmbedPayload(company) {
 
 function buildAiPayload(company) {
   const provider = String(company?.ai_provider || 'anthropic').toLowerCase() === 'gemini' ? 'gemini' : 'anthropic';
-  const model = String(company?.ai_model || '').trim() || null;
+  const rawModel = String(company?.ai_model || '').trim();
+  const invalidGeminiModel = provider === 'gemini'
+    && (!rawModel || rawModel.toLowerCase().includes('claude') || rawModel.toLowerCase() === 'gemini-1.5-flash-latest');
+  const model = invalidGeminiModel ? null : (rawModel || null);
   const hasAnthropicKey = Boolean(String(company?.anthropic_api_key || '').trim());
   const hasGeminiKey = Boolean(String(company?.gemini_api_key || '').trim());
   return {
@@ -394,7 +398,7 @@ function buildAiPayload(company) {
     fallbackGeminiEnv: Boolean(process.env.GEMINI_API_KEY),
     fallbackElevenlabsEnv: Boolean(process.env.ELEVENLABS_API_KEY),
     fallbackAnthropicModel: process.env.ANTHROPIC_MODEL || null,
-    fallbackGeminiModel: process.env.GEMINI_MODEL || null,
+    fallbackGeminiModel: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
   };
 }
 
@@ -568,6 +572,14 @@ async function updateSettings(req, res) {
           ? String(displayName || '').trim() || null
           : undefined;
     const normalizedAiProvider = normalizeAiProvider(ai?.provider);
+    const rawAiModel = ai?.model !== undefined ? String(ai.model || '').trim() : undefined;
+    const normalizedAiModel = rawAiModel === undefined
+      ? undefined
+      : rawAiModel === ''
+        ? null
+        : normalizedAiProvider === 'gemini'
+          ? normalizeGeminiModel(rawAiModel, process.env.GEMINI_MODEL)
+          : rawAiModel;
     if (ai?.provider !== undefined && !normalizedAiProvider) {
       return res.status(400).json({ error: 'Invalid ai provider. Allowed values: anthropic, gemini' });
     }
@@ -717,7 +729,7 @@ async function updateSettings(req, res) {
       auto_trigger_selected_pages: normalizedAutoTriggerPages,
       ai_mode: aiMode !== undefined ? normalizeConversationModeId(aiMode) : undefined,
       ai_provider: normalizedAiProvider !== undefined ? normalizedAiProvider : undefined,
-      ai_model: ai?.model !== undefined ? String(ai.model || '').trim() || null : undefined,
+      ai_model: normalizedAiModel,
       anthropic_api_key: ai?.anthropicApiKey !== undefined ? String(ai.anthropicApiKey || '').trim() || null : undefined,
       gemini_api_key: ai?.geminiApiKey !== undefined ? String(ai.geminiApiKey || '').trim() || null : undefined,
       elevenlabs_api_key: normalizeElevenLabsApiKeyInput(ai?.elevenlabsApiKey),

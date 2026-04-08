@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSuperAuth } from '../context/AuthContext';
 import PasswordInput from '../../components/PasswordInput';
@@ -41,6 +41,8 @@ export default function Companies() {
   const [suspendTarget, setSuspendTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [searchInput, setSearchInput] = useState('');
+  const searchTimerRef = useRef(null);
 
   const load = async ({ nextPage = page, nextPageSize = pageSize, nextFilters = filters } = {}) => {
     setLoading(true);
@@ -215,6 +217,7 @@ export default function Companies() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Acme Corp"
+                  maxLength={25}
                   required
                 />
               </div>
@@ -309,10 +312,15 @@ export default function Companies() {
                 <label>Search companies</label>
                 <input
                   type="text"
-                  value={filters.search}
+                  value={searchInput}
                   onChange={(e) => {
-                    setFilters((current) => ({ ...current, search: e.target.value }));
-                    setPage(1);
+                    const val = e.target.value;
+                    setSearchInput(val);
+                    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+                    searchTimerRef.current = setTimeout(() => {
+                      setFilters((current) => ({ ...current, search: val }));
+                      setPage(1);
+                    }, 500);
                   }}
                   placeholder="Search by name, company ID, email, slug, or description"
                 />
