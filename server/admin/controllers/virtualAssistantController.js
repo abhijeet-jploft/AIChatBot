@@ -69,7 +69,6 @@ async function updateSettings(req, res) {
   try {
     const {
       vaEnabled,
-      liveAvatarApiKey,
       avatarId,
       avatarName,
       contextId,
@@ -86,9 +85,6 @@ async function updateSettings(req, res) {
 
     const updates = {};
     if (vaEnabled !== undefined) updates.va_enabled = vaEnabled;
-    if (liveAvatarApiKey !== undefined && liveAvatarApiKey !== '••••••••') {
-      updates.liveavatar_api_key = liveAvatarApiKey;
-    }
     if (avatarId !== undefined || nextSandboxMode === true) updates.liveavatar_avatar_id = resolvedAvatar.avatarId;
     if (avatarName !== undefined || nextSandboxMode === true) updates.liveavatar_avatar_name = resolvedAvatar.avatarName;
     if (contextId !== undefined) updates.liveavatar_context_id = contextId;

@@ -9,6 +9,7 @@ const systemController = require('../controllers/systemController');
 const supportTicketsController = require('../controllers/supportTicketsController');
 const apiTrackingController = require('../controllers/apiTrackingController');
 const staffController = require('../controllers/staffController');
+const virtualAssistantController = require('../../admin/controllers/virtualAssistantController');
 const { buildAiModePermissionChecks } = require('../permissions');
 const {
 	requireSuperAuth,
@@ -195,5 +196,20 @@ router.patch('/staff/users/:staffId', requireSuperAuth, requirePermission('user_
 router.post('/staff/users/:staffId/reset-password', requireSuperAuth, requirePermission('user_management', 'edit'), staffController.resetStaffPassword);
 router.delete('/staff/users/:staffId', requireSuperAuth, requirePermission('user_management', 'full'), staffController.deleteStaffUser);
 router.get('/staff/audit-logs', requireSuperAuth, requirePermission('user_management', 'view'), staffController.getAuditLogs);
+
+// Virtual Assistant (proxy to admin VA controller)
+function saVaProxy(handler) {
+	return (req, res, next) => {
+		req.adminCompanyId = req.params.companyId;
+		return handler(req, res, next);
+	};
+}
+router.get('/companies/:companyId/virtual-assistant', requireSuperAuth, requirePermission('api_management', 'view'), saVaProxy(virtualAssistantController.getSettings));
+router.put('/companies/:companyId/virtual-assistant', requireSuperAuth, requirePermission('api_management', 'edit'), saVaProxy(virtualAssistantController.updateSettings));
+router.get('/companies/:companyId/virtual-assistant/avatars', requireSuperAuth, requirePermission('api_management', 'view'), saVaProxy(virtualAssistantController.listAvatars));
+router.get('/companies/:companyId/virtual-assistant/voices', requireSuperAuth, requirePermission('api_management', 'view'), saVaProxy(virtualAssistantController.listVoices));
+router.get('/companies/:companyId/virtual-assistant/contexts', requireSuperAuth, requirePermission('api_management', 'view'), saVaProxy(virtualAssistantController.listContexts));
+router.post('/companies/:companyId/virtual-assistant/contexts', requireSuperAuth, requirePermission('api_management', 'edit'), saVaProxy(virtualAssistantController.createContext));
+router.get('/companies/:companyId/virtual-assistant/credits', requireSuperAuth, requirePermission('api_management', 'view'), saVaProxy(virtualAssistantController.getCredits));
 
 module.exports = router;

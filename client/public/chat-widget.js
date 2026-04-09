@@ -263,6 +263,11 @@
   var vaKeepAliveTimer = null;
   var vaSdkModulePromise = null;
   var vaTranscriptSender = null;
+  var vaGreetingSpokenForSession = false;
+  var vaGreetingSpeakInFlight = false;
+  var vaOpeningTextFromServer = '';
+  var vaGreetingFallbackTimer = null;
+  var vaAwaitingGreetingAudio = false;
 
   var root = null;
   var launcher = null;
@@ -348,6 +353,63 @@
     vaOverlayEl.classList.toggle('is-hidden', !visible);
   }
 
+  function clearVaGreetingFallbackTimer() {
+    if (vaGreetingFallbackTimer) {
+      clearTimeout(vaGreetingFallbackTimer);
+      vaGreetingFallbackTimer = null;
+    }
+  }
+
+  function maybeSpeakVaGreeting(session) {
+    if (!vaMode || vaGreetingSpokenForSession || vaGreetingSpeakInFlight) return;
+
+    var greetingText = String(getOpeningMessage() || '').trim() || String(vaOpeningTextFromServer || '').trim();
+    if (!greetingText) return;
+
+    if (Array.isArray(messages) && messages.length > 0 && messages[0] && messages[0].role === 'assistant') {
+      if (String(messages[0].content || '').trim() !== greetingText) {
+        messages[0] = { role: 'assistant', content: greetingText, createdAt: messages[0].createdAt || getNowIso() };
+        renderMessages();
+        persistState();
+      }
+      openingMessageShown = true;
+    } else {
+      messages.unshift({ role: 'assistant', content: greetingText, createdAt: getNowIso() });
+      openingMessageShown = true;
+      renderMessages();
+      persistState();
+    }
+
+    function finalizeGreetingAttempt() {
+      vaGreetingSpokenForSession = true;
+      vaGreetingSpeakInFlight = false;
+      vaAwaitingGreetingAudio = false;
+      clearVaGreetingFallbackTimer();
+    }
+
+    vaGreetingSpeakInFlight = true;
+    vaAwaitingGreetingAudio = true;
+    clearVaGreetingFallbackTimer();
+    vaGreetingFallbackTimer = setTimeout(function () {
+      if (!vaAwaitingGreetingAudio) return;
+      finalizeGreetingAttempt();
+      speakWithBrowserVoice(greetingText, voiceGender, voiceIgnoreEmoji);
+    }, 2200);
+
+    // Use the SDK's repeat() method which sends the avatar.speak_text command via LiveKit.
+    // Falls back to browser TTS via the fallback timer if the avatar doesn't start speaking.
+    try {
+      if (session && typeof session.repeat === 'function') {
+        session.repeat(greetingText);
+        // Wait for avatar.speak_started (handled in bindVaSessionEvents) or fallback timer
+        return;
+      }
+    } catch (err) {}
+
+    finalizeGreetingAttempt();
+    speakWithBrowserVoice(greetingText, voiceGender, voiceIgnoreEmoji);
+  }
+
   function clearVaKeepAlive() {
     if (vaKeepAliveTimer) {
       clearInterval(vaKeepAliveTimer);
@@ -414,9 +476,15 @@
       }
       setVaStatus('Assistant ready');
       setVaOverlayVisible(false);
+      maybeSpeakVaGreeting(session);
+      setTimeout(function () {
+        maybeSpeakVaGreeting(session);
+      }, 600);
     });
     session.on('session.disconnected', function () {
       clearVaKeepAlive();
+      clearVaGreetingFallbackTimer();
+      vaAwaitingGreetingAudio = false;
       vaSession = null;
       vaSessionStartPromise = null;
       setMicButtonState(false);
@@ -427,24 +495,29 @@
         vaStartBtnEl.textContent = 'Start Assistant';
       }
     });
-    session.on('user.transcription.chunk', function (event) {
-      updateVaTranscriptChunk('user', event && event.text, false);
-    });
-    session.on('avatar.transcription.chunk', function (event) {
-      updateVaTranscriptChunk('assistant', event && event.text, true);
-    });
     session.on('user.transcription', function (event) {
-      finalizeVaTranscript('user', event && event.text);
+      var spokenText = String(event && event.text || '').trim();
+      if (!spokenText || loading) return;
+      // Interrupt any context auto-response so our AI pipeline is the sole responder
+      try { if (vaSession) vaSession.interrupt(); } catch (eVaInt) {}
+      sendToApi(spokenText);
       setVaStatus('Assistant is thinking…');
-    });
-    session.on('avatar.transcription', function (event) {
-      finalizeVaTranscript('assistant', event && event.text);
-      setVaStatus(micRecording ? 'Listening…' : 'Assistant ready');
     });
     session.on('user.speak_started', function () {
       setVaStatus('Listening…');
     });
     session.on('avatar.speak_started', function () {
+      // Mark greeting as done on the first avatar speech in this session
+      // (covers both manual session.repeat() and any context auto-speak)
+      if (!vaGreetingSpokenForSession) {
+        vaGreetingSpokenForSession = true;
+        vaGreetingSpeakInFlight = false;
+        vaAwaitingGreetingAudio = false;
+        clearVaGreetingFallbackTimer();
+      } else if (vaAwaitingGreetingAudio) {
+        vaAwaitingGreetingAudio = false;
+        clearVaGreetingFallbackTimer();
+      }
       setVaStatus('Assistant is speaking…');
     });
     session.on('avatar.speak_ended', function () {
@@ -454,7 +527,11 @@
 
   function stopVaSession() {
     clearVaKeepAlive();
+    clearVaGreetingFallbackTimer();
     vaTranscriptSender = null;
+    vaGreetingSpokenForSession = false;
+    vaGreetingSpeakInFlight = false;
+    vaAwaitingGreetingAudio = false;
     if (vaSession) {
       var currentSession = vaSession;
       vaSession = null;
@@ -484,12 +561,19 @@
       .then(function (results) {
         var sdk = results[0] || {};
         var sessionInfo = results[1] || {};
+        vaOpeningTextFromServer = String(sessionInfo.openingText || '').trim();
         if (!sdk.LiveAvatarSession) {
           throw new Error('LiveAvatar SDK failed to load');
         }
         vaSession = new sdk.LiveAvatarSession(sessionInfo.sessionToken, { voiceChat: false });
+        vaGreetingSpokenForSession = false;
+        vaGreetingSpeakInFlight = false;
         bindVaSessionEvents(vaSession);
         return vaSession.start().then(function () {
+          maybeSpeakVaGreeting(vaSession);
+          setTimeout(function () {
+            maybeSpeakVaGreeting(vaSession);
+          }, 900);
           clearVaKeepAlive();
           vaKeepAliveTimer = setInterval(function () {
             if (!vaSession) return;
@@ -497,6 +581,9 @@
               vaSession.keepAlive();
             } catch (e) {}
           }, 60000);
+          vaTranscriptSender = null;
+          renderMessages();
+          persistState();
           setVaStatus('Connecting media…');
           if (vaStartBtnEl) vaStartBtnEl.textContent = 'Restart Assistant';
           return vaSession;
@@ -522,11 +609,7 @@
     startVaSession()
       .then(function (session) {
         if (!session) return;
-        messages.push({ role: 'user', content: messageText, createdAt: getNowIso() });
-        renderMessages();
-        persistState();
-        vaTranscriptSender = null;
-        session.message(messageText);
+        sendToApi(messageText);
         setVaStatus('Assistant is thinking…');
       })
       .catch(function (error) {
@@ -536,6 +619,7 @@
           createdAt: getNowIso(),
         });
         renderMessages();
+        persistState();
       });
   }
 
@@ -548,6 +632,9 @@
         if (Array.isArray(s.messages)) messages = normalizeMessageList(s.messages);
         if (s.sessionId != null) sessionId = s.sessionId;
         if (s.openingMessageShown != null) openingMessageShown = s.openingMessageShown;
+        if (!Array.isArray(messages) || messages.length === 0) {
+          openingMessageShown = false;
+        }
         if (s.widgetButtonPos && typeof s.widgetButtonPos.x === 'number' && typeof s.widgetButtonPos.y === 'number') {
           widgetButtonPos = clampWidgetButtonPosition(s.widgetButtonPos, viewport.width, viewport.height);
         }
@@ -968,10 +1055,8 @@
           sessionId = null;
           messages = [];
           openingMessageShown = false;
-          if (!vaMode) {
-            messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
-            openingMessageShown = true;
-          }
+          messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
+          openingMessageShown = true;
           renderMessages();
           persistState();
         }
@@ -1038,10 +1123,8 @@
     sendPresenceRegister(undefined);
     messages = [];
     openingMessageShown = false;
-    if (!vaMode) {
-      messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
-      openingMessageShown = true;
-    }
+    messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
+    openingMessageShown = true;
     if (inputEl) {
       inputEl.value = '';
       resizeInput();
@@ -2485,7 +2568,7 @@
     activated = true;
     resetActivationWatchers();
 
-    if (!vaMode && messages.length === 0 && !openingMessageShown) {
+    if (messages.length === 0 && !openingMessageShown) {
       messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
       openingMessageShown = true;
       renderMessages();
@@ -2502,6 +2585,10 @@
     setTimeout(function () {
       if (inputEl) inputEl.focus();
     }, 0);
+
+    if (vaMode) {
+      startVaSession().catch(function () {});
+    }
 
   }
 
@@ -2634,7 +2721,13 @@
         applyVoiceFeatureState();
         renderMessages();
         var assistantIndex = messages.length - 1;
-        if (voiceResponseEnabled) {
+        if (vaMode) {
+          // VA mode: make the avatar speak the response; skip browser/ElevenLabs TTS
+          setVaStatus(micRecording ? 'Listening…' : 'Assistant ready');
+          if (vaSession) {
+            try { vaSession.repeat(assistantText); } catch (eVaSpeak) {}
+          }
+        } else if (voiceResponseEnabled) {
           if (voiceUrl) {
             playAssistantVoice(voiceUrl, assistantIndex);
           } else if (assistantText) {
@@ -2683,6 +2776,9 @@
         setSendButtonState();
         applyVoiceFeatureState();
         renderMessages();
+        if (vaMode) {
+          setVaStatus('Assistant ready');
+        }
         if (callback) callback();
       });
   }
@@ -2905,12 +3001,15 @@
       if (launcher) launcher.style.display = 'none';
       if (panel) {
         panel.style.display = 'flex';
-        if (!vaMode && messages.length === 0 && !openingMessageShown) {
+        if (messages.length === 0 && !openingMessageShown) {
           messages.push({ role: 'assistant', content: getOpeningMessage(), createdAt: getNowIso() });
           openingMessageShown = true;
         }
         renderMessages();
         updatePanelPosition();
+        if (vaMode) {
+          startVaSession().catch(function () {});
+        }
       }
       startInitialSessionLoadIfNeeded();
       persistState();

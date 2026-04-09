@@ -37,6 +37,12 @@ const CONFIG_MODULES = [
     description: 'Conversation behavior and mode strategy for the assistant.',
     path: 'mode-settings',
   },
+  {
+    id: 'virtual-assistant',
+    title: 'Virtual Assistant',
+    description: 'LiveAvatar virtual assistant settings, avatar, context, voice source, and sandbox mode.',
+    path: 'virtual-assistant',
+  },
 ];
 
 export default function CompanyConfigurations() {

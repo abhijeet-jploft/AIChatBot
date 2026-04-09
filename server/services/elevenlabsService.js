@@ -889,6 +889,12 @@ async function synthesizeTextResponse(text, options = {}) {
     const apiMessage = extractElevenLabsErrorMessage(lastErr?.response?.data, lastErr?.message || 'Failed to synthesize speech with ElevenLabs.');
 
     if (status === 401 || status === 403) {
+      const quotaLike = /\b(quota|credits?|payment required|exceeds your quota|insufficient credits?)\b/i.test(String(apiMessage || ''));
+      if (quotaLike) {
+        const e = new Error(apiMessage || 'ElevenLabs quota exceeded or insufficient credits.');
+        e.status = 402;
+        throw e;
+      }
       const sourceHint = attemptedSources.length
         ? `attempted key source(s): ${Array.from(new Set(attemptedSources)).join(', ')}`
         : 'no API key source available';

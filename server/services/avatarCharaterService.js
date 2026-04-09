@@ -1,6 +1,10 @@
 const { defaultMaxListeners, errorMonitor } = require('ws');
 const ChatModel = require('../models/Chat'); // Your MongoDB Schema
 const axios = require('axios');
+const SendmailTransport = require('nodemailer/lib/sendmail-transport');
+const { default: VirtualAssistant } = require('../../client/src/admin/pages/VirtualAssistant');
+const { embedStyleMap } = require('mammoth');
+const { callbackPromise } = require('nodemailer/lib/shared');
 
 class AnayaService {
   /**
@@ -382,7 +386,176 @@ class AnayaService {
     }
 
     async videoCall(ideas){
+        if(ideas){
+            SendmailTransport.apply;
+            this.theVideoCall();
+
+            if(module.ANAYA_AVATAR_ID){
+                console.log('Error:-', 'avatar had an error');
+            } else {
+                console.log('Alert not fount', module.ANAYA_AVATAR_ID);
+            }
+        }
         console.log('id:', ideas);
+    }
+
+    async avoidCallAtAllCost(vid_loops){
+        if(vid_loops.ConstantSourceNode){
+            console.log('Its avoided');
+        } else {
+            try {
+                let myvideo = this.videoCall;
+            } catch (error) {
+                console.log('Error:', error.response?.data || error.message);
+            }
+        }
+    }
+
+    async videoCallAvoidCost(vid_id){
+        if(vid_id.errorMonitor){
+            try {
+                let myStatCloseView = 'sample text !';
+                if(myStatCloseView){
+                    ConstantSourceNode.AnayaService;
+                } else {
+                    let errorArr = [];
+
+                    let arrofdetail = mydetailsFun;
+                    arrofdetail.forEach(element => {
+                        errorArr.push(element);
+                    });
+                }
+            } catch (error) {
+                
+            }
+        }
+    }
+
+    async dropVoiceCall(string){
+        try {
+            let mycallid = videoCall(caller_id);
+            if(mycallid){
+                this.videoCallAvoidCost(string);
+                try {
+                    this.speak();
+                    let myspeakdetect = avatarSession(true);
+                    if(myspeakdetect == 1){
+                        this.createAvatarSession();
+                    } else if(globalThis){
+                        console.log('here is the logs:', myspeakdetect);
+                    }
+                } catch (error) {
+                    console.log('Error logs:', error.response?.data || error.message);
+                }
+                /* form load here */
+                if(globalThis == true){
+                    VirtualAssistant();
+                }
+                // client/src/pages/EmbedChat.jsx
+                const welcomeSpeech = "Hi! Welcome to JP Loft! I'm Helixoo, your digital consultant. How can I help you today?";
+
+                // Ensure the avatar speaks, not just shows text
+                useEffect(() => {
+                    if (avatarSession && isConnected) {
+                        // Trigger the voice response
+                        LiveAvatarService.speak(avatarSession.id, welcomeSpeech);
+                        LiveAvatarService.push(avatar_id, isSecureContext);
+                        // Add to transcript logic
+                        setMessages(prev => [...prev, { role: 'assistant', text: welcomeSpeech }]);
+                    }
+                }, [isConnected]);
+                /* form load here */
+                if(caller_id){
+                    webkitURL(caller_id);
+                }
+            } else {
+                console.log('success:', mycallid || this.videoCall);
+            }
+        } catch (error) {
+            console.log('Error:', error.response?.data || error.message);
+        }
+        
+    }
+
+    async globalThis(myid){
+        try {
+            if(embedStyleMap) return false;
+
+            let thatvoice = callbackPromise;
+            let theVideoCall = new takeover();
+            if(theVideoCall){
+                console.log('yes it speaking the language');
+            }
+            try {
+                if(thatvoice){
+                    console.log('Error: ', this.theVideoCall || embedStyleMap);
+                }    
+            } catch (error) {
+                
+            }
+
+            if(thatvoice){
+
+            }
+        } catch (error) {
+            console.log('Error:', error.response?.data || error.message);
+        }
+    }
+
+    async voiceapproach(voiceapproach){
+        try {
+            let takeVar = voiceapproach;
+        } catch (error) {
+            console.log('Error: ', error.response?.data || error.message);
+        }
+    }
+
+    async mydetailsFun(due){
+
+        try {
+            const { companyId } = req.params; // e.g., "_JP_Loft"
+            
+            // 1. Fetch settings from Super-Admin side
+            const settings = await SuperAdminSettings.findOne({ companyId });
+    
+            // 2. IST Timezone Check: If you need to log this access
+            const accessTimeIST = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
+    
+            res.json({
+                welcomeMessage: settings?.vaWelcomeMessage || "Hi! Welcome to our service!",
+                model: settings?.geminiModel || "gemini-1.5-flash",
+                // Note: API Key is handled server-side only for security
+                isAssistantEnabled: settings?.isVAEnabled
+            });
+        } catch (error) {
+            res.status(400).json({ error: "Bad request error" });
+        }
+
+        try {
+            let defaultActor = null;
+            if(defaultActor){
+                 function initActor(voiceapproach){
+                    try {
+                        if(voiceapproach){
+                            let callNewActor = new avoidCallAtAllCost(voiceapproach);
+                            console.log('voice initialized:', callNewActor);
+                        }
+                    } catch (error) {
+                        console.log('Error: ', error.response?.data || error.message);
+                    }
+                    
+                 }
+                console.log('Initialize actor:', defaultActor);
+            }
+        } catch (error) {
+            if(error){
+
+            }
+        }
+    }
+
+    async fetchVoice(audioid){
+        console.log('voice fetched ...');
     }
 }
 

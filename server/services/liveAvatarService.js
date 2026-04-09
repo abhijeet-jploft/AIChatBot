@@ -92,6 +92,16 @@ async function getContext(apiKey, contextId) {
   return json?.data || null;
 }
 
+async function updateContext(apiKey, contextId, { name, prompt, opening_text, links }) {
+  const body = {};
+  if (name !== undefined) body.name = name;
+  if (prompt !== undefined) body.prompt = prompt;
+  if (opening_text !== undefined) body.opening_text = opening_text;
+  if (links !== undefined) body.links = links;
+  const json = await apiCall('PATCH', `/v1/contexts/${encodeURIComponent(contextId)}`, apiKey, body);
+  return json?.data || null;
+}
+
 // ─── Secrets ────────────────────────────────────────────────────────────────
 
 async function createSecret(apiKey, { secret_name, secret_value, secret_type }) {
@@ -181,6 +191,7 @@ module.exports = {
   listContexts,
   createContext,
   getContext,
+  updateContext,
   createSecret,
   listSecrets,
   createEmbedV2,

@@ -18,7 +18,6 @@ export default function VirtualAssistant() {
 
   // Settings state
   const [vaEnabled, setVaEnabled] = useState(false);
-  const [apiKey, setApiKey] = useState('');
   const [apiKeySet, setApiKeySet] = useState(false);
   const [avatarId, setAvatarId] = useState('');
   const [avatarName, setAvatarName] = useState('');
@@ -41,7 +40,6 @@ export default function VirtualAssistant() {
   const [avatars, setAvatars] = useState([]);
   const [voices, setVoices] = useState([]);
   const [contexts, setContexts] = useState([]);
-  const [credits, setCredits] = useState(null);
   const [loadingAvatars, setLoadingAvatars] = useState(false);
   const [loadingVoices, setLoadingVoices] = useState(false);
   const [loadingContexts, setLoadingContexts] = useState(false);
@@ -60,7 +58,6 @@ export default function VirtualAssistant() {
       const data = await res.json();
       setVaEnabled(data.vaEnabled);
       setApiKeySet(data.liveAvatarApiKeySet);
-      setApiKey(data.liveAvatarApiKey || '');
       setAvatarId(data.avatarId || '');
       setAvatarName(data.avatarName || '');
       setContextId(data.contextId || '');
@@ -137,24 +134,14 @@ export default function VirtualAssistant() {
     }
   }, [authFetch, showToast]);
 
-  const loadCredits = useCallback(async () => {
-    try {
-      const res = await authFetch('/virtual-assistant/credits');
-      if (!res.ok) return;
-      const data = await res.json();
-      setCredits(data.credits);
-    } catch { /* ignore */ }
-  }, [authFetch]);
-
-  // Load LiveAvatar data when API key is set
+  // Load Live Avatar data when API key is set
   useEffect(() => {
     if (apiKeySet) {
       loadAvatars();
       loadVoices();
       loadContexts();
-      loadCredits();
     }
-  }, [apiKeySet, loadAvatars, loadVoices, loadContexts, loadCredits]);
+  }, [apiKeySet, loadAvatars, loadVoices, loadContexts]);
 
   useEffect(() => {
     if (!sandboxMode) return;
@@ -183,10 +170,6 @@ export default function VirtualAssistant() {
         sandboxMode,
         videoQuality,
       };
-      // Only send API key if user typed a new one (not the masked placeholder)
-      if (apiKey && apiKey !== '••••••••') {
-        body.liveAvatarApiKey = apiKey;
-      }
       const res = await authFetch('/virtual-assistant', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -198,21 +181,19 @@ export default function VirtualAssistant() {
       }
       const data = await res.json();
       setApiKeySet(data.liveAvatarApiKeySet);
-      setApiKey(data.liveAvatarApiKey || '');
       showToast('Virtual assistant settings saved', 'success');
       // Reload data if key was just set
       if (data.liveAvatarApiKeySet && !apiKeySet) {
         loadAvatars();
         loadVoices();
         loadContexts();
-        loadCredits();
       }
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
       setSaving(false);
     }
-  }, [authFetch, showToast, vaEnabled, apiKey, apiKeySet, avatarId, avatarName, contextId, contextName, voiceSource, voiceId, voiceName, sandboxMode, videoQuality, loadAvatars, loadVoices, loadContexts, loadCredits]);
+  }, [authFetch, showToast, vaEnabled, apiKeySet, avatarId, avatarName, contextId, contextName, voiceSource, voiceId, voiceName, sandboxMode, videoQuality, loadAvatars, loadVoices, loadContexts]);
 
   const handleCreateContext = useCallback(async () => {
     if (!newContextName.trim() || !newContextPrompt.trim()) {
@@ -291,26 +272,6 @@ export default function VirtualAssistant() {
         </div>
       </div>
 
-      {/* API Key */}
-      <div className="card mb-3" style={cardStyle}>
-        <div className="card-body">
-          <label className="form-label fw-semibold">LiveAvatar API Key</label>
-          <input
-            type="password"
-            className="form-control form-control-sm"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter your LiveAvatar API key"
-            autoComplete="off"
-          />
-          <div className="text-muted mt-1" style={{ fontSize: 12 }}>
-            Get your API key from{' '}
-            <a href="https://liveavatar.com" target="_blank" rel="noopener noreferrer">liveavatar.com</a>.
-            {apiKeySet && <span className="text-success ms-2">Key is configured</span>}
-          </div>
-        </div>
-      </div>
-
       {/* Sandbox mode */}
       <div className="card mb-3" style={cardStyle}>
         <div className="card-body d-flex align-items-center justify-content-between">
@@ -351,16 +312,6 @@ export default function VirtualAssistant() {
         </div>
       </div>
 
-      {/* Credits display */}
-      {credits && (
-        <div className="card mb-3" style={cardStyle}>
-          <div className="card-body d-flex align-items-center justify-content-between">
-            <span className="fw-semibold">LiveAvatar Credits</span>
-            <span className="badge bg-primary" style={{ fontSize: 14 }}>{credits.credits_left ?? '—'}</span>
-          </div>
-        </div>
-      )}
-
       {/* Avatar selection */}
       <div className="card mb-3" style={cardStyle}>
         <div className="card-body">
@@ -373,7 +324,7 @@ export default function VirtualAssistant() {
             )}
           </div>
           {!apiKeySet ? (
-            <div className="text-muted" style={{ fontSize: 13 }}>Enter API key and save to load avatars.</div>
+            <div className="text-muted" style={{ fontSize: 13 }}>API key not configured — contact your super admin.</div>
           ) : loadingAvatars ? (
             <div className="text-center py-3"><div className="spinner-border spinner-border-sm" /></div>
           ) : visibleAvatars.length === 0 ? (
@@ -434,7 +385,7 @@ export default function VirtualAssistant() {
           )}
           {sandboxMode && (
             <div className="mt-2 text-muted" style={{ fontSize: 12 }}>
-              Sandbox mode is limited to the Wayne avatar by LiveAvatar.
+              Sandbox mode is limited to the Wayne avatar by Live Avatar.
             </div>
           )}
         </div>
@@ -455,7 +406,7 @@ export default function VirtualAssistant() {
                 checked={voiceSource === 'liveavatar'}
                 onChange={() => setVoiceSource('liveavatar')}
               />
-              <label className="form-check-label" htmlFor="vs-liveavatar">LiveAvatar Default</label>
+              <label className="form-check-label" htmlFor="vs-liveavatar">Live Avatar Default</label>
             </div>
             <div className="form-check">
               <input
@@ -474,7 +425,7 @@ export default function VirtualAssistant() {
           {voiceSource === 'liveavatar' && (
             <>
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <label className="form-label mb-0" style={{ fontSize: 13 }}>Select LiveAvatar Voice</label>
+                <label className="form-label mb-0" style={{ fontSize: 13 }}>Select Live Avatar Voice</label>
                 {apiKeySet && (
                   <button className="btn btn-outline-secondary btn-sm" onClick={loadVoices} disabled={loadingVoices} style={{ fontSize: 12 }}>
                     {loadingVoices ? 'Loading…' : 'Refresh'}
@@ -482,7 +433,7 @@ export default function VirtualAssistant() {
                 )}
               </div>
               {!apiKeySet ? (
-                <div className="text-muted" style={{ fontSize: 13 }}>Enter API key and save to load voices.</div>
+                <div className="text-muted" style={{ fontSize: 13 }}>API key not configured — contact your super admin.</div>
               ) : loadingVoices ? (
                 <div className="text-center py-2"><div className="spinner-border spinner-border-sm" /></div>
               ) : (
@@ -524,7 +475,7 @@ export default function VirtualAssistant() {
                     </div>
                   )}
                   <div className="mt-1 text-success" style={{ fontSize: 12 }}>
-                    ✓ ElevenLabs API key configured. Voice will be auto-bound to LiveAvatar.
+                    ✓ ElevenLabs API key configured. Voice will be auto-bound to Live Avatar.
                   </div>
                 </>
               ) : (
@@ -557,7 +508,7 @@ export default function VirtualAssistant() {
           </div>
 
           {!apiKeySet ? (
-            <div className="text-muted" style={{ fontSize: 13 }}>Enter API key and save to load contexts.</div>
+            <div className="text-muted" style={{ fontSize: 13 }}>API key not configured — contact your super admin.</div>
           ) : loadingContexts ? (
             <div className="text-center py-2"><div className="spinner-border spinner-border-sm" /></div>
           ) : (
@@ -631,7 +582,7 @@ export default function VirtualAssistant() {
 
       {/* Info footer */}
       <div className="text-muted text-center" style={{ fontSize: 12, padding: '12px 0 24px' }}>
-        Powered by <a href="https://liveavatar.com" target="_blank" rel="noopener noreferrer">LiveAvatar</a>.
+        Powered by <a href="https://liveavatar.com" target="_blank" rel="noopener noreferrer">Live Avatar</a>.
         Avatar sessions use 2 credits per minute in FULL mode. Sandbox mode is free.
       </div>
     </div>

@@ -16,9 +16,11 @@ export default function CompanyApiSettings() {
   const [anthropicApiKey, setAnthropicApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [elevenlabsApiKey, setElevenlabsApiKey] = useState('');
+  const [liveAvatarApiKey, setLiveAvatarApiKey] = useState('');
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasGeminiKey, setHasGeminiKey] = useState(false);
   const [hasElevenlabsKey, setHasElevenlabsKey] = useState(false);
+  const [hasLiveAvatarKey, setHasLiveAvatarKey] = useState(false);
   const [fallbackAnthropicEnv, setFallbackAnthropicEnv] = useState(false);
   const [fallbackGeminiEnv, setFallbackGeminiEnv] = useState(false);
   const [fallbackElevenlabsEnv, setFallbackElevenlabsEnv] = useState(false);
@@ -35,6 +37,7 @@ export default function CompanyApiSettings() {
         setHasAnthropicKey(Boolean(d.ai?.hasAnthropicKey));
         setHasGeminiKey(Boolean(d.ai?.hasGeminiKey));
         setHasElevenlabsKey(Boolean(d.ai?.hasElevenlabsKey));
+        setHasLiveAvatarKey(Boolean(d.ai?.hasLiveAvatarKey));
         setFallbackAnthropicEnv(Boolean(d.ai?.fallbackAnthropicEnv));
         setFallbackGeminiEnv(Boolean(d.ai?.fallbackGeminiEnv));
         setFallbackElevenlabsEnv(Boolean(d.ai?.fallbackElevenlabsEnv));
@@ -59,6 +62,7 @@ export default function CompanyApiSettings() {
             anthropicApiKey: anthropicApiKey.trim() ? anthropicApiKey.trim() : undefined,
             geminiApiKey: geminiApiKey.trim() ? geminiApiKey.trim() : undefined,
             elevenlabsApiKey: elevenlabsApiKey.trim() ? elevenlabsApiKey.trim() : undefined,
+            liveAvatarApiKey: liveAvatarApiKey.trim() ? liveAvatarApiKey.trim() : undefined,
           },
         }),
       });
@@ -67,6 +71,7 @@ export default function CompanyApiSettings() {
       setHasAnthropicKey(Boolean(updated.ai?.hasAnthropicKey));
       setHasGeminiKey(Boolean(updated.ai?.hasGeminiKey));
       setHasElevenlabsKey(Boolean(updated.ai?.hasElevenlabsKey));
+      setHasLiveAvatarKey(Boolean(updated.ai?.hasLiveAvatarKey));
       setFallbackAnthropicEnv(Boolean(updated.ai?.fallbackAnthropicEnv));
       setFallbackGeminiEnv(Boolean(updated.ai?.fallbackGeminiEnv));
       setFallbackElevenlabsEnv(Boolean(updated.ai?.fallbackElevenlabsEnv));
@@ -75,6 +80,7 @@ export default function CompanyApiSettings() {
       setAnthropicApiKey('');
       setGeminiApiKey('');
       setElevenlabsApiKey('');
+      setLiveAvatarApiKey('');
       showToast('API settings saved', 'success');
     } catch (err) {
       showToast(err.message || 'Failed to save API settings', 'error');
@@ -143,6 +149,15 @@ export default function CompanyApiSettings() {
             placeholder={hasElevenlabsKey ? 'Stored in DB (enter new key to replace)' : 'Enter company ElevenLabs key'}
           />
           <div className="sa-text-muted">{hasElevenlabsKey ? 'Company DB key exists.' : 'No company DB key.'} {fallbackElevenlabsEnv ? 'Fallback .env key is available.' : 'No .env fallback key.'}</div>
+        </div>
+        <div className="sa-field">
+          <label>LiveAvatar API key (Virtual Assistant)</label>
+          <PasswordInput
+            value={liveAvatarApiKey}
+            onChange={(e) => setLiveAvatarApiKey(e.target.value)}
+            placeholder={hasLiveAvatarKey ? 'Stored in DB (enter new key to replace)' : 'Enter company LiveAvatar key'}
+          />
+          <div className="sa-text-muted">{hasLiveAvatarKey ? 'Company DB key exists.' : 'No company DB key.'} Get your key from <a href="https://liveavatar.com" target="_blank" rel="noopener noreferrer">liveavatar.com</a>.</div>
         </div>
         <div className="sa-field-actions">
           <button type="submit" className="sa-btn sa-btn-primary" disabled={saving}>

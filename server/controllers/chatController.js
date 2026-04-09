@@ -19,9 +19,13 @@ const {
   resolveSpeechLanguageCode,
   normalizeLanguagePrimaryToCode,
 } = require('../services/supportedChatLanguages');
-const { detectNaturalLanguageFromText } = require('../services/chatRules');
+const {
+  detectNaturalLanguageFromText,
+  inferCompanyProfile,
+  inferTrainingContentLanguageHint,
+} = require('../services/chatRules');
 const { buildAdminVisibilityPayload } = require('../services/adminSettingsAccess');
-const { findProjectLinks } = require('../services/trainingLoader');
+const { findProjectLinks, loadCompanyContext } = require('../services/trainingLoader');
 const { normalizeGeminiModel } = require('../services/geminiModelService');
 const { extractClientIp, lookupIpGeo } = require('../utils/ipGeo');
 const pool = require('../db/index');
@@ -1016,6 +1020,164 @@ async function synthesizeMessageVoice(req, res) {
   }
 }
 
+/**
+ * Build the opening text the VA avatar should speak when a session starts.
+ * Mirrors the greeting logic in chat-widget.js / App.jsx so the avatar says
+ * the same company-specific welcome the text chat would show.
+ */
+function normalizeOpeningLanguage(language) {
+  const value = String(language || '').trim().toLowerCase();
+  if (!value) return 'english';
+
+  const isoToOpening = {
+    en: 'english',
+    ru: 'russian',
+    uk: 'ukrainian',
+    ar: 'arabic',
+    hi: 'hindi',
+    ja: 'japanese',
+    zh: 'chinese',
+    ko: 'korean',
+  };
+
+  if (Object.prototype.hasOwnProperty.call(isoToOpening, value)) return isoToOpening[value];
+  if (['ru-ru', 'russian', 'русский', 'русский язык'].includes(value)) return 'russian';
+  if (['uk-ua', 'ukrainian', 'українська', 'украинский'].includes(value)) return 'ukrainian';
+  if (['arabic', 'العربية'].includes(value)) return 'arabic';
+  if (['hindi', 'हिन्दी', 'हिंदी'].includes(value)) return 'hindi';
+  if (['ja-jp', 'japanese', '日本語'].includes(value)) return 'japanese';
+  if (['zh-cn', 'zh-tw', 'chinese', '中文'].includes(value)) return 'chinese';
+  if (['ko-kr', 'korean', '한국어'].includes(value)) return 'korean';
+
+  return 'english';
+}
+
+function getEffectiveOpeningLanguage(primaryLanguage, contentLocaleHint, businessProfileId = 'generic_business') {
+  const primary = normalizeOpeningLanguage(primaryLanguage);
+  const hint = contentLocaleHint ? normalizeOpeningLanguage(contentLocaleHint) : null;
+  if (primary !== 'english') return primary;
+  if (String(businessProfileId) === 'ecommerce_marketplace' && hint && hint !== 'english') return hint;
+  return primary;
+}
+
+function isLegacyGenericGreeting(text, primaryLanguage, businessProfileId = 'generic_business') {
+  const value = String(text || '').trim();
+  if (!value) return false;
+
+  const normalizedLanguage = normalizeOpeningLanguage(primaryLanguage);
+  const englishLegacy = /(hi!\s*welcome to|your digital consultant|are you looking to build something|exploring ideas|hello!?\s*how can i help you today\??)/i.test(value);
+  const genericBusinessPitch = /(цифровой консультант|решени(е|я) для своего бизнеса|наших услуг|изучаете возможности|what do you want to build|our services|business solution)/i.test(value);
+  const storeTerms = /(товар|товары|категори|акци|доставк|возврат|пункт(ы)? выдачи|магазин|маркетплейс|product|products|category|categories|promotion|delivery|return|pickup|store|marketplace)/i.test(value);
+
+  if (normalizedLanguage !== 'english' && englishLegacy) return true;
+  if (String(businessProfileId) === 'ecommerce_marketplace' && genericBusinessPitch && !storeTerms) return true;
+  return false;
+}
+
+function buildOpeningCopy(language, companyName, chatbotName, businessProfileId = 'generic_business') {
+  const introName = String(chatbotName || '').trim();
+  const safeCompanyName = String(companyName || 'our company').trim() || 'our company';
+
+  if (businessProfileId === 'ecommerce_marketplace') {
+    const marketplaceCopyByLanguage = {
+      russian: {
+        welcome: `Здравствуйте! Добро пожаловать в ${safeCompanyName}!`,
+        intro: introName ? `Я ${introName}.` : 'Я помогу вам с сайтом магазина.',
+        question: 'Подскажу по товарам, категориям, акциям, доставке, возврату и пунктам выдачи. Что вас интересует?',
+      },
+      english: {
+        welcome: `Hi! Welcome to ${safeCompanyName}!`,
+        intro: introName ? `I\'m ${introName}.` : 'I can help you with the store website.',
+        question: 'I can help with products, categories, promotions, delivery, returns, and pickup points. What are you looking for?',
+      },
+    };
+
+    return marketplaceCopyByLanguage[language] || marketplaceCopyByLanguage.english;
+  }
+
+  const copyByLanguage = {
+    russian: {
+      welcome: `Здравствуйте! Добро пожаловать в ${safeCompanyName}!`,
+      intro: introName ? `Я ${introName}, ваш цифровой консультант.` : 'Я ваш цифровой консультант.',
+      question: 'Чем могу помочь вам сегодня?',
+    },
+    ukrainian: {
+      welcome: `Вітаю! Ласкаво просимо до ${safeCompanyName}!`,
+      intro: introName ? `Я ${introName}, ваш цифровий консультант.` : 'Я ваш цифровий консультант.',
+      question: 'Чим можу допомогти вам сьогодні?',
+    },
+    arabic: {
+      welcome: `مرحباً! أهلاً بك في ${safeCompanyName}!`,
+      intro: introName ? `أنا ${introName}، مستشارك الرقمي.` : 'أنا مستشارك الرقمي.',
+      question: 'كيف يمكنني مساعدتك اليوم؟',
+    },
+    hindi: {
+      welcome: `नमस्ते! ${safeCompanyName} में आपका स्वागत है!`,
+      intro: introName ? `मैं ${introName} हूं, आपका डिजिटल कंसल्टेंट।` : 'मैं आपका डिजिटल कंसल्टेंट हूं।',
+      question: 'मैं आज आपकी किस प्रकार सहायता कर सकता हूँ?',
+    },
+    japanese: {
+      welcome: `こんにちは。${safeCompanyName}へようこそ。`,
+      intro: introName ? `私は${introName}です。デジタルコンサルタントとしてご案内します。` : 'デジタルコンサルタントとしてご案内します。',
+      question: '本日はどのようなご用件でしょうか。',
+    },
+    chinese: {
+      welcome: `您好，欢迎来到${safeCompanyName}！`,
+      intro: introName ? `我是${introName}，您的数字顾问。` : '我是您的数字顾问。',
+      question: '今天我可以为您提供什么帮助？',
+    },
+    korean: {
+      welcome: `안녕하세요. ${safeCompanyName}에 오신 것을 환영합니다.`,
+      intro: introName ? `저는 ${introName}이며 디지털 컨설턴트입니다.` : '저는 디지털 컨설턴트입니다.',
+      question: '오늘 무엇을 도와드릴까요?',
+    },
+    english: {
+      welcome: `Hi! Welcome to ${safeCompanyName}!`,
+      intro: introName ? `I'm ${introName}, your digital consultant.` : "I'm your digital consultant.",
+      question: 'How can I help you today?',
+    },
+  };
+
+  return copyByLanguage[language] || copyByLanguage.english;
+}
+
+function buildVaOpeningText(company) {
+  const companyId = String(company?.company_id || '').trim();
+  let businessProfileId = 'generic_business';
+  let contentLocaleHint = '';
+  if (companyId) {
+    try {
+      const context = loadCompanyContext(companyId) || '';
+      const businessProfile = inferCompanyProfile({ context });
+      businessProfileId = String(businessProfile?.id || 'generic_business');
+      contentLocaleHint = String(inferTrainingContentLanguageHint(context) || '').trim();
+    } catch {
+      businessProfileId = 'generic_business';
+      contentLocaleHint = '';
+    }
+  }
+
+  const effectiveOpeningLanguage = getEffectiveOpeningLanguage(
+    company?.language_primary,
+    contentLocaleHint,
+    businessProfileId
+  );
+
+  const explicit = String(company.greeting_message || '').trim();
+  if (explicit && !isLegacyGenericGreeting(explicit, effectiveOpeningLanguage, businessProfileId)) {
+    return explicit;
+  }
+
+  const copy = buildOpeningCopy(
+    effectiveOpeningLanguage,
+    String(company.name || '').trim() || 'our company',
+    String(company.display_name || '').trim(),
+    businessProfileId
+  );
+
+  return `${copy.welcome}\n${copy.intro}\n${copy.question}`;
+}
+
 async function createLiveAvatarSessionToken(req, res) {
   try {
     const companyId = String(req.body?.companyId || '').trim();
@@ -1068,31 +1230,51 @@ async function createLiveAvatarSessionToken(req, res) {
     }
 
     let contextId = String(company.liveavatar_context_id || '').trim();
-    if (contextId) {
-      const existingContext = await liveAvatar.getContext(apiKey, contextId).catch(() => null);
-      if (!existingContext) {
-        contextId = '';
+    const desiredOpening = buildVaOpeningText(company);
+    try {
+      if (contextId) {
+        const existingContext = await liveAvatar.getContext(apiKey, contextId).catch(() => null);
+        if (!existingContext) {
+          contextId = '';
+        } else if (String(existingContext.opening_text || '').trim() !== desiredOpening) {
+          const updatedContext = await liveAvatar.updateContext(apiKey, contextId, { opening_text: desiredOpening }).catch(() => null);
+          const updatedOpening = String(updatedContext?.opening_text || '').trim();
+          if (updatedOpening !== desiredOpening) {
+            const verifiedContext = await liveAvatar.getContext(apiKey, contextId).catch(() => null);
+            const verifiedOpening = String(verifiedContext?.opening_text || '').trim();
+            if (verifiedOpening !== desiredOpening) {
+              contextId = '';
+            }
+          }
+        }
       }
-    }
-    if (!contextId) {
-      const context = await liveAvatar.createContext(apiKey, {
-        name: `${company.display_name || company.name || 'Chat'} Assistant`,
-        prompt: `You are a helpful virtual assistant for ${company.display_name || company.name || 'our company'}.`,
-        opening_text: String(company.greeting_message || '').trim() || 'Hello! How can I help you today?',
-        links: [],
-      });
-      contextId = String(context?.id || '').trim();
+
       if (!contextId) {
-        return res.status(502).json({ error: 'Unable to create LiveAvatar context' });
+        const context = await liveAvatar.createContext(apiKey, {
+          name: `${company.display_name || company.name || 'Chat'} Assistant`,
+          prompt: `You are a helpful virtual assistant for ${company.display_name || company.name || 'our company'}.`,
+          opening_text: desiredOpening,
+          links: [],
+        });
+        const createdContextId = String(context?.id || '').trim();
+        if (createdContextId) {
+          contextId = createdContextId;
+          await pool.query(
+            `UPDATE virtual_assistant_settings
+                SET liveavatar_context_id = $1,
+                    liveavatar_context_name = COALESCE($2, liveavatar_context_name),
+                    updated_at = NOW()
+              WHERE company_id = $3`,
+            [contextId, String(context?.name || '').trim() || null, companyId]
+          );
+        }
       }
-      await pool.query(
-        `UPDATE virtual_assistant_settings
-            SET liveavatar_context_id = $1,
-                liveavatar_context_name = COALESCE($2, liveavatar_context_name),
-                updated_at = NOW()
-          WHERE company_id = $3`,
-        [contextId, String(context?.name || '').trim() || null, companyId]
-      );
+    } catch (contextErr) {
+      // Context sync failures should not block session startup.
+      console.error('[chat] liveavatar context sync failed:', {
+        companyId,
+        message: contextErr?.message || String(contextErr),
+      });
     }
 
     let voiceId = '';
@@ -1146,7 +1328,9 @@ async function createLiveAvatarSessionToken(req, res) {
     const sessionPayload = {
       avatar_id: avatarId,
       voice_id: voiceId,
-      context_id: contextId,
+      // context_id intentionally omitted: session runs in restricted mode so the avatar's
+      // built-in LLM does not auto-respond. All responses are driven by our AI pipeline
+      // via session.repeat() (avatar.speak_text), matching the normal text-chat flow.
       language: languageCode || 'en',
       is_sandbox: sandboxMode,
       video_quality: quality,
@@ -1167,6 +1351,7 @@ async function createLiveAvatarSessionToken(req, res) {
       avatarId,
       voiceId,
       contextId,
+      openingText: desiredOpening,
     });
   } catch (err) {
     console.error('[chat] liveavatar session-token:', {

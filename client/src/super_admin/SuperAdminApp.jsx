@@ -20,6 +20,7 @@ import CompanyVoiceSettings from './pages/CompanyVoiceSettings';
 import CompanyThemeSettings from './pages/CompanyThemeSettings';
 import CompanyModeSettings from './pages/CompanyModeSettings';
 import CompanyAdminSettingsAccess from './pages/CompanyAdminSettingsAccess';
+import CompanyVirtualAssistant from './pages/CompanyVirtualAssistant';
 import SuperAdminProfile from './pages/SuperAdminProfile';
 import StaffWorkspace from './pages/StaffWorkspace';
 import StaffManagement from './pages/StaffManagement';
@@ -375,6 +376,7 @@ export default function SuperAdminApp() {
                     ['api_management', 'view'],
                     ['user_management', 'view'],
                   ]}><CompanyConfigurations /></RequireAnyPermission>} />
+                  <Route path="companies/:companyId/virtual-assistant" element={<RequirePermission moduleKey="api_management"><CompanyVirtualAssistant /></RequirePermission>} />
                   <Route path="companies/:companyId/admin-settings-access" element={<RequirePermission moduleKey="user_management"><CompanyAdminSettingsAccess /></RequirePermission>} />
                   <Route path="companies/:companyId/voice-settings" element={<RequirePermission moduleKey="voice_management"><CompanyVoiceSettings /></RequirePermission>} />
                   <Route path="companies/:companyId/theme-settings" element={<RequirePermission moduleKey="system_settings"><CompanyThemeSettings /></RequirePermission>} />
