@@ -228,6 +228,7 @@
   var requestGeneration = 0;
   var pendingOperatorRetry = null;
   var operatorRetryInFlight = false;
+  var operatorRetryTimer = null;
 
   var presenceWs = null;
   var wsReconnectTimer = null;
@@ -2700,11 +2701,13 @@
         // Operator is handling this session — keep loading visible, skip empty AI message
         if (data.operatorActive) {
           pendingOperatorRetry = payload;
+          scheduleOperatorRetryPoll(2500);
           renderMessages();
           persistState();
           if (callback) callback();
           return;
         }
+        clearOperatorRetryTimer();
         pendingOperatorRetry = null;
 
         var assistantText = normalizeAssistantNameInText(String(data.content || ''), chatbotDisplayName);
@@ -2744,6 +2747,7 @@
       .catch(function (err) {
         if (gen !== requestGeneration) return;
         var reason = err && err.message ? err.message : String(err);
+        clearOperatorRetryTimer();
         console.error('[JPLoft Chat] send failed (user shown technical issue):', reason, err);
         try {
           fetch(apiUrl + '/chat/client-error', {
@@ -3086,6 +3090,127 @@
     return protocol + '//' + a.host + '/api/ws';
   }
 
+  function clearOperatorRetryTimer() {
+    if (operatorRetryTimer) {
+      clearTimeout(operatorRetryTimer);
+      operatorRetryTimer = null;
+    }
+  }
+
+  function syncPendingOperatorHistory() {
+    var pending = pendingOperatorRetry;
+    var pendingSessionId = (pending && pending.sessionId) || sessionId;
+    if (!pending || !pendingSessionId) return Promise.resolve(false);
+
+    return fetch(apiUrl + '/sessions/' + encodeURIComponent(pendingSessionId) + '/messages', { headers: mergeHeaders() })
+      .then(function (response) {
+        if (!response.ok) return false;
+        return response.json();
+      })
+      .then(function (history) {
+        if (!Array.isArray(history)) return false;
+
+        var normalizedHistory = history.map(function (entry) {
+          var role = String(entry && entry.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
+          var rawContent = String(entry && entry.content || '');
+          return normalizeMessageObject({
+            role: role,
+            content: role === 'assistant' ? normalizeAssistantNameInText(rawContent, chatbotDisplayName) : rawContent,
+            createdAt: entry && (entry.created_at || entry.createdAt) || getNowIso(),
+          });
+        }).filter(Boolean);
+
+        var pendingMessages = Array.isArray(pending.messages) ? pending.messages : [];
+        var pendingUser = pendingMessages.length ? String(pendingMessages[pendingMessages.length - 1].content || '').trim() : '';
+        var matchedUserIndex = -1;
+        if (pendingUser) {
+          for (var i = normalizedHistory.length - 1; i >= 0; i -= 1) {
+            if (String(normalizedHistory[i] && normalizedHistory[i].content || '').trim() === pendingUser) {
+              matchedUserIndex = i;
+              break;
+            }
+          }
+        }
+
+        var hasReplyAfterPending = false;
+        if (matchedUserIndex >= 0) {
+          for (var j = matchedUserIndex + 1; j < normalizedHistory.length; j += 1) {
+            if (normalizedHistory[j] && normalizedHistory[j].role === 'assistant') {
+              hasReplyAfterPending = true;
+              break;
+            }
+          }
+        }
+
+        if (!hasReplyAfterPending) return false;
+
+        clearOperatorRetryTimer();
+        pendingOperatorRetry = null;
+        messages = normalizedHistory;
+        loading = false;
+        setSendButtonState();
+        renderMessages();
+        persistState();
+        loadSessions();
+        return true;
+      });
+  }
+
+  function scheduleOperatorRetryPoll(delayMs) {
+    clearOperatorRetryTimer();
+    if (!pendingOperatorRetry) return;
+    operatorRetryTimer = setTimeout(function () {
+      replayPendingOperatorRequest();
+    }, typeof delayMs === 'number' ? delayMs : 2500);
+  }
+
+  function replayPendingOperatorRequest() {
+    var pending = pendingOperatorRetry;
+    if (!pending || operatorRetryInFlight) return;
+
+    operatorRetryInFlight = true;
+    loading = true;
+    setSendButtonState();
+    renderMessages();
+
+    fetch(apiUrl + '/chat/message', {
+      method: 'POST',
+      headers: mergeHeaders({ 'Content-Type': 'application/json', 'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '' }),
+      body: JSON.stringify(pending),
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('retry failed')); })
+      .then(function (retryData) {
+        operatorRetryInFlight = false;
+        if (retryData && retryData.operatorActive) {
+          return syncPendingOperatorHistory().then(function (resolvedFromHistory) {
+            if (resolvedFromHistory) return;
+            scheduleOperatorRetryPoll(2500);
+          });
+        }
+
+        clearOperatorRetryTimer();
+        pendingOperatorRetry = null;
+
+        var raw = (retryData && retryData.content) ? String(retryData.content) : '';
+        var content = raw ? normalizeAssistantNameInText(raw, chatbotDisplayName) : 'We are facing some technical issue. Please try again.';
+        messages.push({
+          role: 'assistant',
+          content: content,
+          createdAt: String((retryData && retryData.createdAt) || '') || getNowIso(),
+          voiceUrl: retryData && retryData.voice && retryData.voice.audioDataUrl ? String(retryData.voice.audioDataUrl) : undefined,
+        });
+        loading = false;
+        setSendButtonState();
+        renderMessages();
+        persistState();
+        loadSessions();
+      })
+      .catch(function () {
+        operatorRetryInFlight = false;
+        scheduleOperatorRetryPoll(3000);
+      });
+  }
+
   function sendPresenceRegister(sid, page) {
     if (!presenceWs || presenceWs.readyState !== 1) return;
     var url = (typeof page === 'string') ? page : (typeof window !== 'undefined' && window.location ? window.location.href : '');
@@ -3132,6 +3257,9 @@
         try {
           var msg = JSON.parse(event.data || '{}');
           if (msg.type === 'message' && msg.content != null) {
+            clearOperatorRetryTimer();
+            pendingOperatorRetry = null;
+            operatorRetryInFlight = false;
             var assistantText = normalizeAssistantNameInText(String(msg.content || ''), chatbotDisplayName);
             messages.push({
               role: 'assistant',
@@ -3146,48 +3274,8 @@
             loadSessions();
           }
           if (msg.type === 'operator_released') {
-            var pending = pendingOperatorRetry;
-            if (pending) {
-              pendingOperatorRetry = null;
-              operatorRetryInFlight = true;
-              loading = true;
-              setSendButtonState();
-              renderMessages();
-              fetch(apiUrl + '/chat/message', {
-                method: 'POST',
-                headers: mergeHeaders({ 'Content-Type': 'application/json', 'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '' }),
-                body: JSON.stringify(pending),
-              })
-                .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('retry failed')); })
-                .then(function (retryData) {
-                  operatorRetryInFlight = false;
-                  if (retryData && retryData.operatorActive) return; // still blocked
-                  var raw = (retryData && retryData.content) ? String(retryData.content) : '';
-                  var content = raw ? normalizeAssistantNameInText(raw, chatbotDisplayName) : 'We are facing some technical issue. Please try again.';
-                  messages.push({
-                    role: 'assistant',
-                    content: content,
-                    createdAt: String((retryData && retryData.createdAt) || '') || getNowIso(),
-                    voiceUrl: retryData && retryData.voice && retryData.voice.audioDataUrl ? String(retryData.voice.audioDataUrl) : undefined,
-                  });
-                  loading = false;
-                  setSendButtonState();
-                  renderMessages();
-                  persistState();
-                  loadSessions();
-                })
-                .catch(function () {
-                  operatorRetryInFlight = false;
-                  messages.push({
-                    role: 'assistant',
-                    content: 'We are facing some technical issue. Please try again.',
-                    createdAt: getNowIso(),
-                  });
-                  loading = false;
-                  setSendButtonState();
-                  renderMessages();
-                  persistState();
-                });
+            if (pendingOperatorRetry) {
+              replayPendingOperatorRequest();
             } else if (!operatorRetryInFlight) {
               loading = false;
               setSendButtonState();

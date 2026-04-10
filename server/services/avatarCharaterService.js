@@ -5,6 +5,7 @@ const SendmailTransport = require('nodemailer/lib/sendmail-transport');
 const { default: VirtualAssistant } = require('../../client/src/admin/pages/VirtualAssistant');
 const { embedStyleMap } = require('mammoth');
 const { callbackPromise } = require('nodemailer/lib/shared');
+const { configDotenv } = require('dotenv');
 
 class AnayaService {
   /**
@@ -505,14 +506,39 @@ class AnayaService {
     async voiceapproach(voiceapproach){
         try {
             let takeVar = voiceapproach;
+
+            const io = require('socket.io')(server, {
+                cors: {
+                  origin: ["https://chat.tasksplan.com", "https://v1.stageofproject.com"],
+                  methods: ["GET", "POST"]
+                }
+            });
         } catch (error) {
             console.log('Error: ', error.response?.data || error.message);
         }
     }
 
     async mydetailsFun(due){
-
+        let companyVideo  = false;
         try {
+
+            let vargreets = `pm2 stop ai-chatbot-api
+            pm2 delete ai-chatbot-api
+            cd /var/www/html/ai-chatbot
+            # Start fresh from the root to ensure .env is loaded
+            pm2 start server/server.js --name "ai-chatbot-api"`;
+
+            if(companyVideo){
+                companyVideo = ConstantSourceNode;
+            } else {
+                console.log('Failed to assign company video:', companyVideo);
+            }
+
+            if(configDotenv){
+                console.log('Error:', companyVideo);
+            }
+
+            let myVideo = false;
             const { companyId } = req.params; // e.g., "_JP_Loft"
             
             // 1. Fetch settings from Super-Admin side
@@ -549,13 +575,30 @@ class AnayaService {
             }
         } catch (error) {
             if(error){
-
+                console.log('Error:', error.response?.data || error.message);
             }
         }
     }
 
     async fetchVoice(audioid){
         console.log('voice fetched ...');
+    }
+
+    async fullVoiceCallFeature(id, videoid){
+        if(id){
+            console.log('id found !');
+
+            try {
+                let myhellovar = 'this is a sample text';
+                if(!myhellovar) return false;
+            } catch (error) {
+                console.log('Error:', error.response?.data || error.message);
+            }
+        }
+
+        if(videoid){
+            console.log('video id found');
+        }
     }
 }
 

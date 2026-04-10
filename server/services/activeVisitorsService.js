@@ -8,7 +8,7 @@ const ACTIVE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 min
 const OPEN = 1;
 const TYPING_TTL_MS = 4500;
-const OPERATOR_TTL_MS = 5 * 60 * 1000; // 5 min auto-expire for operator flag
+const pool = require('../db');
 
 const store = new Map();
 /** companyId:sessionId -> { active: true, since: timestamp } */
@@ -349,27 +349,64 @@ function getActiveForCompany(companyId) {
 /**
  * Mark a session as admin-operated (pauses AI responses for this session).
  */
-function setOperatorActive(companyId, sessionId, active = true) {
+async function setOperatorActive(companyId, sessionId, active = true) {
+  if (!companyId || !sessionId) return;
   const key = `${companyId}:${sessionId}`;
   if (active) {
-    operatedSessions.set(key, { active: true, since: Date.now() });
+    operatedSessions.set(key, { active: true });
+    try {
+      await pool.query(
+        `INSERT INTO operator_sessions (company_id, session_id, is_active, updated_at)
+         VALUES ($1, $2, TRUE, NOW())
+         ON CONFLICT (company_id, session_id)
+         DO UPDATE SET is_active = EXCLUDED.is_active, updated_at = NOW()`,
+        [companyId, sessionId]
+      );
+    } catch (err) {
+      // Fallback to in-memory state if DB is temporarily unavailable.
+      console.error('[activeVisitors] setOperatorActive(true) DB sync failed:', err.message);
+    }
   } else {
     operatedSessions.delete(key);
+    try {
+      await pool.query(
+        'DELETE FROM operator_sessions WHERE company_id = $1 AND session_id = $2',
+        [companyId, sessionId]
+      );
+    } catch (err) {
+      // Fallback to in-memory clear if DB is temporarily unavailable.
+      console.error('[activeVisitors] setOperatorActive(false) DB sync failed:', err.message);
+    }
   }
 }
 
 /**
  * Check if a session is currently admin-operated (AI should be paused).
  */
-function isOperatorActive(companyId, sessionId) {
+async function isOperatorActive(companyId, sessionId) {
+  if (!companyId || !sessionId) return false;
   const key = `${companyId}:${sessionId}`;
-  const entry = operatedSessions.get(key);
-  if (!entry) return false;
-  if (Date.now() - entry.since > OPERATOR_TTL_MS) {
-    operatedSessions.delete(key);
+  try {
+    const result = await pool.query(
+      `SELECT is_active
+       FROM operator_sessions
+       WHERE company_id = $1 AND session_id = $2
+       LIMIT 1`,
+      [companyId, sessionId]
+    );
+    const isActive = Boolean(result.rows[0]?.is_active);
+    if (isActive) {
+      operatedSessions.set(key, { active: true });
+    } else {
+      operatedSessions.delete(key);
+    }
+    return isActive;
+  } catch (err) {
+    console.error('[activeVisitors] isOperatorActive DB read failed:', err.message);
+    const entry = operatedSessions.get(key);
+    if (entry) return true;
     return false;
   }
-  return true;
 }
 
 module.exports = {

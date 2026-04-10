@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+-- Cross-instance operator takeover state (single source of truth for AI pause/release)
+CREATE TABLE IF NOT EXISTS operator_sessions (
+  company_id  VARCHAR(255) NOT NULL REFERENCES chatbots(company_id) ON DELETE CASCADE,
+  session_id  UUID         NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
+  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (company_id, session_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_company   ON chat_sessions(company_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_session   ON chat_messages(session_id, created_at ASC);
 

@@ -646,7 +646,7 @@ async function sendMessage(req, res) {
     await ChatMessage.create(sessionId, 'assistant', content);
     await ChatSession.touch(sessionId);
     recordLiveMessage(companyId, sessionId, 'assistant', content);
-    setOperatorActive(companyId, sessionId, true);
+    await setOperatorActive(companyId, sessionId, true);
 
     const pushed = pushMessageToSession(companyId, sessionId, content, { createdAt });
 
@@ -666,7 +666,7 @@ async function operateSession(req, res) {
     const companyId = req.adminCompanyId;
     const sessionId = req.params.sessionId;
     if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-    setOperatorActive(companyId, sessionId, true);
+    await setOperatorActive(companyId, sessionId, true);
     res.json({ operating: true });
   } catch (err) {
     console.error('[admin conversations] operate:', err);
@@ -683,7 +683,7 @@ async function releaseSession(req, res) {
     const companyId = req.adminCompanyId;
     const sessionId = req.params.sessionId;
     if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-    setOperatorActive(companyId, sessionId, false);
+    await setOperatorActive(companyId, sessionId, false);
 
     // Notify visitor chatbot to clear loading and resume AI
     const socket = getSocketForSession(companyId, sessionId);

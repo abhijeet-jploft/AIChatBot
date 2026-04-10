@@ -464,7 +464,7 @@ async function postMessage(req, res) {
       }
 
       // Per-session: if admin is operating this chat, suppress AI response
-      if (sid && isOperatorActive(companyId, sid)) {
+      if (sid && await isOperatorActive(companyId, sid)) {
         stage = 'operator_active';
         // Save user message to live view but do NOT generate AI response
         recordLiveMessage(
@@ -642,7 +642,7 @@ async function postMessage(req, res) {
     }
 
     // Mid-response check: if operator joined while AI was generating, discard AI response
-    if (sid && isOperatorActive(companyId, sid)) {
+    if (sid && await isOperatorActive(companyId, sid)) {
       return res.json({
         content: '',
         sessionId: sid,

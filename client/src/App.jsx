@@ -712,6 +712,7 @@ export default function App() {
   const requestGenerationRef = useRef(0);
   const pendingOperatorRetryRef = useRef(null);
   const operatorRetryInFlightRef = useRef(false);
+  const operatorRetryTimerRef = useRef(null);
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
 
   const stripEmoji = useCallback((text) => {
@@ -806,6 +807,112 @@ export default function App() {
       if (typeof onEnd === 'function') onEnd();
     }
   }, [getPreferredBrowserVoice, sanitizeSpeechText]);
+
+  const clearOperatorRetryTimer = useCallback(() => {
+    if (operatorRetryTimerRef.current) {
+      clearTimeout(operatorRetryTimerRef.current);
+      operatorRetryTimerRef.current = null;
+    }
+  }, []);
+
+  const syncPendingOperatorHistory = useCallback(async () => {
+    const pending = pendingOperatorRetryRef.current;
+    const pendingSessionId = pending?.sessionId || sessionIdRef.current;
+    if (!pending || !pendingSessionId) return false;
+
+    const response = await fetch(`${API_BASE}/sessions/${pendingSessionId}/messages`);
+    if (!response.ok) return false;
+
+    const history = await response.json();
+    const normalizedHistory = Array.isArray(history)
+      ? history.map((entry) => {
+        const role = String(entry?.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
+        const rawContent = String(entry?.content || '');
+        return normalizeMessageShape({
+          role,
+          content: role === 'assistant' ? normalizeAssistantNameInText(rawContent, chatbotNameForOpening) : rawContent,
+          createdAt: entry?.created_at || entry?.createdAt || getNowIso(),
+        });
+      })
+      : [];
+
+    const pendingUserText = String(pending?.messages?.[pending.messages.length - 1]?.content || '').trim();
+    const matchedUserIndex = pendingUserText
+      ? normalizedHistory.map((message) => String(message?.content || '').trim()).lastIndexOf(pendingUserText)
+      : -1;
+    const hasReplyAfterPending = matchedUserIndex >= 0
+      && normalizedHistory.slice(matchedUserIndex + 1).some((message) => message?.role === 'assistant');
+
+    if (!hasReplyAfterPending) return false;
+
+    clearOperatorRetryTimer();
+    pendingOperatorRetryRef.current = null;
+    setMessages(normalizedHistory);
+    setLoading(false);
+    loadSessions();
+    return true;
+  }, [chatbotNameForOpening, clearOperatorRetryTimer, loadSessions]);
+
+  const replayPendingOperatorRequest = useCallback(() => {
+    const pending = pendingOperatorRetryRef.current;
+    if (!pending || operatorRetryInFlightRef.current) return;
+
+    operatorRetryInFlightRef.current = true;
+    setLoading(true);
+
+    fetch(`${API_BASE}/chat/message`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '',
+      },
+      body: JSON.stringify(pending),
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('retry failed')))
+      .then(async (retryData) => {
+        operatorRetryInFlightRef.current = false;
+        if (retryData?.operatorActive) {
+          const resolvedFromHistory = await syncPendingOperatorHistory().catch(() => false);
+          if (resolvedFromHistory) return;
+          operatorRetryTimerRef.current = setTimeout(() => {
+            replayPendingOperatorRequest();
+          }, 2500);
+          return;
+        }
+
+        clearOperatorRetryTimer();
+        pendingOperatorRetryRef.current = null;
+
+        const raw = retryData?.content ? String(retryData.content) : '';
+        const content = raw ? normalizeAssistantNameInText(raw, chatbotNameForOpening) : 'We are facing some technical issue. Please try again.';
+        setMessages((prev) => [...prev, normalizeMessageShape({
+          role: 'assistant',
+          content,
+          voiceUrl: retryData?.voice?.audioDataUrl || undefined,
+          createdAt: retryData?.createdAt || getNowIso(),
+        })]);
+        setLoading(false);
+      })
+      .catch(() => {
+        operatorRetryInFlightRef.current = false;
+        clearOperatorRetryTimer();
+        operatorRetryTimerRef.current = setTimeout(() => {
+          replayPendingOperatorRequest();
+        }, 3000);
+      });
+  }, [chatbotNameForOpening, clearOperatorRetryTimer, loadSessions, syncPendingOperatorHistory]);
+
+  const scheduleOperatorRetryPoll = useCallback((delayMs = 2500) => {
+    clearOperatorRetryTimer();
+    if (!pendingOperatorRetryRef.current) return;
+    operatorRetryTimerRef.current = setTimeout(() => {
+      replayPendingOperatorRequest();
+    }, delayMs);
+  }, [clearOperatorRetryTimer, replayPendingOperatorRequest]);
+
+  useEffect(() => () => {
+    clearOperatorRetryTimer();
+  }, [clearOperatorRetryTimer]);
 
   const browserVoiceLocaleOpts = useMemo(
     () => ({
@@ -1203,6 +1310,9 @@ export default function App() {
           try {
             const msg = JSON.parse(ev.data);
             if (msg.type === 'message' && msg.content != null) {
+              clearOperatorRetryTimer();
+              pendingOperatorRetryRef.current = null;
+              operatorRetryInFlightRef.current = false;
               const content = normalizeAssistantNameInText(String(msg.content), chatbotNameForOpening);
               const voiceUrl = msg.voice?.audioDataUrl ? String(msg.voice.audioDataUrl) : undefined;
               setMessages((prev) => [...prev, normalizeMessageShape({
@@ -1214,40 +1324,8 @@ export default function App() {
               setLoading(false);
             }
             if (msg.type === 'operator_released') {
-              const pending = pendingOperatorRetryRef.current;
-              if (pending) {
-                pendingOperatorRetryRef.current = null;
-                operatorRetryInFlightRef.current = true;
-                setLoading(true);
-                // Replay the blocked request now that AI is back in control
-                fetch(`${API_BASE}/chat/message`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '' },
-                  body: JSON.stringify(pending),
-                })
-                  .then((r) => r.ok ? r.json() : Promise.reject(new Error('retry failed')))
-                  .then((retryData) => {
-                    operatorRetryInFlightRef.current = false;
-                    if (retryData?.operatorActive) return; // still blocked, keep loading
-                    const raw = retryData?.content ? String(retryData.content) : '';
-                    const content = raw ? normalizeAssistantNameInText(raw, chatbotNameForOpening) : 'We are facing some technical issue. Please try again.';
-                    setMessages((prev) => [...prev, normalizeMessageShape({
-                      role: 'assistant',
-                      content,
-                      voiceUrl: retryData?.voice?.audioDataUrl || undefined,
-                      createdAt: retryData?.createdAt || getNowIso(),
-                    })]);
-                    setLoading(false);
-                  })
-                  .catch(() => {
-                    operatorRetryInFlightRef.current = false;
-                    setMessages((prev) => [...prev, normalizeMessageShape({
-                      role: 'assistant',
-                      content: 'We are facing some technical issue. Please try again.',
-                      createdAt: getNowIso(),
-                    })]);
-                    setLoading(false);
-                  });
+              if (pendingOperatorRetryRef.current) {
+                replayPendingOperatorRequest();
               } else if (!operatorRetryInFlightRef.current) {
                 setLoading(false);
               }
@@ -1471,9 +1549,11 @@ export default function App() {
           sessionId: data.sessionId || requestPayload.sessionId,
           operatorRetry: true,
         };
+        scheduleOperatorRetryPoll(2500);
         keepLoading = true;
         return;
       }
+      clearOperatorRetryTimer();
       pendingOperatorRetryRef.current = null;
 
       const normalizedAssistantContent = normalizeAssistantNameInText(String(data?.content || ''), chatbotNameForOpening);
@@ -1509,6 +1589,7 @@ export default function App() {
       loadSessions(); // refresh history list
     } catch (err) {
       if (requestGeneration !== requestGenerationRef.current) return;
+      clearOperatorRetryTimer();
       const reason = err?.message || String(err);
       console.error('[chat] sendMessage failed (user shown technical issue):', reason, err);
       try {
