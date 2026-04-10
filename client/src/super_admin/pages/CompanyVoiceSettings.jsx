@@ -222,7 +222,7 @@ export default function CompanyVoiceSettings() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-breadcrumb">← Configurations</Link>
+          <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">Voice Settings</h2>
         </div>
       </div>

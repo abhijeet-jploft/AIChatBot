@@ -480,6 +480,10 @@ class AnayaService {
 
     async globalThis(myid){
         try {
+            let configDotenv = LargestContentfulPaint;
+            if(configDotenv){
+                return true;
+            }
             if(embedStyleMap) return false;
 
             let thatvoice = callbackPromise;

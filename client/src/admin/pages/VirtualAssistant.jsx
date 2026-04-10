@@ -246,9 +246,7 @@ export default function VirtualAssistant() {
     <div id="virtual-assistant-top" style={{ maxWidth: 820, margin: '0 auto' }} className='my-4'>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h5 className="mb-0" style={{ fontWeight: 700 }}></h5>
-        <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
+        
       </div>
 
       {/* Enable toggle */}
@@ -418,7 +416,7 @@ export default function VirtualAssistant() {
                 checked={voiceSource === 'elevenlabs'}
                 onChange={() => setVoiceSource('elevenlabs')}
               />
-              <label className="form-check-label" htmlFor="vs-elevenlabs">ElevenLabs Voice</label>
+              <label className="form-check-label" htmlFor="vs-elevenlabs">Default Voice Settings</label>
             </div>
           </div>
 
@@ -579,6 +577,10 @@ export default function VirtualAssistant() {
           )}
         </div>
       </div>
+
+      <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+        {saving ? 'Saving…' : 'Save'}
+      </button>
 
       {/* Info footer */}
       <div className="text-muted text-center" style={{ fontSize: 12, padding: '12px 0 24px' }}>

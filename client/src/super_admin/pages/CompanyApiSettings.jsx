@@ -95,7 +95,7 @@ export default function CompanyApiSettings() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to={`/super-admin/companies/${companyId}/settings`} className="sa-breadcrumb">← Company Settings</Link>
+          <Link to={`/super-admin/companies/${companyId}/settings`} className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">Company API Settings</h2>
         </div>
       </div>

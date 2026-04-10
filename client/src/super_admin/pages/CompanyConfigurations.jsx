@@ -52,7 +52,7 @@ export default function CompanyConfigurations() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to={`/super-admin/companies/${companyId}`} className="sa-breadcrumb">← Company</Link>
+          <Link to={`/super-admin/companies/${companyId}`} className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">All Admin Configurations</h2>
           <p className="sa-text-muted sa-mb">
             Super admin can manage every configuration module by auto-login handoff into the exact admin page.

@@ -213,7 +213,7 @@ export default function CompanyAdminSettingsAccess() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-breadcrumb">← Configurations</Link>
+          <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">Admin Settings Access</h2>
           <p className="sa-text-muted sa-mb">
             Choose which configuration areas the company admin can see and edit. Basic company settings and full theme settings stay available by default.

@@ -694,7 +694,7 @@ export default function Settings() {
                 className="form-select"
                 value={widgetPosition}
                 onChange={(e) => setWidgetPosition(e.target.value === 'left' ? 'left' : 'right')}
-                style={{ background: 'var(--chat-bg)', color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
+                style={{ color: 'var(--chat-text)', borderColor: 'var(--chat-border)' }}
               >
                 <option value="right">Right side</option>
                 <option value="left">Left side</option>

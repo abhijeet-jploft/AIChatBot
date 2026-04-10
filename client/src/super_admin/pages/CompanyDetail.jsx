@@ -224,7 +224,7 @@ export default function CompanyDetail() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to="/super-admin/companies" className="sa-breadcrumb">← Companies</Link>
+          <Link to="/super-admin/companies" className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">{company.display_name || company.name}</h2>
           <code className="sa-code-muted">{company.company_id}</code>
         </div>

@@ -114,7 +114,7 @@ export default function CompanyApiTracking() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to={`/super-admin/companies/${encodeURIComponent(companyId)}`} className="sa-breadcrumb">← Company</Link>
+          <Link to={`/super-admin/companies/${encodeURIComponent(companyId)}`} className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">API Tracking</h2>
           <div className="sa-text-muted">Third-party API usage and chat context API mapping.</div>
         </div>

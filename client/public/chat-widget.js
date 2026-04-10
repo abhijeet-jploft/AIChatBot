@@ -278,6 +278,7 @@
   var vaOpeningTextFromServer = '';
   var vaGreetingFallbackTimer = null;
   var vaAwaitingGreetingAudio = false;
+  var vaProcessingEl = null;
 
   var root = null;
   var launcher = null;
@@ -361,6 +362,25 @@
   function setVaOverlayVisible(visible) {
     if (!vaOverlayEl) return;
     vaOverlayEl.classList.toggle('is-hidden', !visible);
+  }
+
+  function setVaProcessingVisible(visible) {
+    if (!vaProcessingEl) return;
+    vaProcessingEl.classList.toggle('is-hidden', !visible);
+  }
+
+  function tryResumeVaVideoPlayback() {
+    if (!vaVideoEl) return;
+    try {
+      vaVideoEl.muted = false;
+      vaVideoEl.volume = 1;
+    } catch (eMute) {}
+    try {
+      var playAttempt = vaVideoEl.play();
+      if (playAttempt && typeof playAttempt.catch === 'function') {
+        playAttempt.catch(function () {});
+      }
+    } catch (ePlay) {}
   }
 
   function clearVaGreetingFallbackTimer() {
@@ -483,6 +503,7 @@
         try {
           session.attach(vaVideoEl);
         } catch (e) {}
+        tryResumeVaVideoPlayback();
       }
       setVaStatus('Assistant ready');
       setVaOverlayVisible(false);
@@ -528,6 +549,7 @@
         vaAwaitingGreetingAudio = false;
         clearVaGreetingFallbackTimer();
       }
+      tryResumeVaVideoPlayback();
       setVaStatus('Assistant is speaking…');
     });
     session.on('avatar.speak_ended', function () {
@@ -1345,6 +1367,7 @@
 
       '@keyframes jploft-mic-bars{0%,100%{transform:scaleY(.6);opacity:.6}50%{transform:scaleY(1.2);opacity:1}}',
       '@keyframes jploft-blink{0%,60%,100%{opacity:.3}30%{opacity:1}}',
+      '@keyframes jploft-va-spin{to{transform:rotate(360deg)}}',
       '@media(max-width:1024px){#jploft-chat-root .jploft-panel{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}#jploft-chat-root .jploft-lead-grid{grid-template-columns:minmax(0,1fr)}#jploft-chat-root .jploft-close-fab{display:none !important}#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{right:14px;bottom:14px}}',
 
       /* ── Virtual Assistant mode ── */
@@ -1352,6 +1375,9 @@
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-video{width:100%;height:100%;display:block;object-fit:cover;background:#000}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,.62));transition:opacity .18s ease}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-overlay.is-hidden{opacity:0;pointer-events:none}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-processing{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2;transition:opacity .18s ease}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-processing.is-hidden{opacity:0}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-processing-spinner{width:56px;height:56px;border-radius:50%;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;animation:jploft-va-spin .9s linear infinite;box-shadow:0 8px 20px rgba(0,0,0,.35)}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-start-btn{border:0;border-radius:999px;padding:12px 20px;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 18px 38px -20px var(--chat-launcher-shadow,rgba(224,47,58,.55))}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-start-btn:disabled{opacity:.65;cursor:not-allowed}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-status{max-width:80%;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:12px;line-height:1.35;text-align:center;backdrop-filter:blur(8px)}',
@@ -2530,6 +2556,7 @@
       };
     });
     messagesEl.scrollTop = messagesEl.scrollHeight;
+    setVaProcessingVisible(vaMode && loading);
   }
 
   function getOpeningMessage() {
@@ -2958,7 +2985,14 @@
       vaVideoEl.className = 'jploft-va-video';
       vaVideoEl.autoplay = true;
       vaVideoEl.playsInline = true;
+      vaVideoEl.setAttribute('playsinline', '');
+      vaVideoEl.setAttribute('webkit-playsinline', '');
       vaAvatarWrap.appendChild(vaVideoEl);
+
+      vaProcessingEl = document.createElement('div');
+      vaProcessingEl.className = 'jploft-va-processing is-hidden';
+      vaProcessingEl.innerHTML = '<span class="jploft-va-processing-spinner" aria-hidden="true"></span>';
+      vaAvatarWrap.appendChild(vaProcessingEl);
 
       vaOverlayEl = document.createElement('div');
       vaOverlayEl.className = 'jploft-va-overlay';
@@ -2967,6 +3001,7 @@
       vaStartBtnEl.className = 'jploft-va-start-btn';
       vaStartBtnEl.textContent = 'Start Assistant';
       vaStartBtnEl.addEventListener('click', function () {
+        tryResumeVaVideoPlayback();
         startVaSession().catch(function () {});
       });
       vaStatusEl = document.createElement('div');
@@ -2985,6 +3020,7 @@
       vaMicBtnEl.setAttribute('aria-label', 'Start voice input');
       vaMicBtnEl.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
       vaMicBtnEl.addEventListener('click', onMicButtonClick);
+      vaMicBtnEl.addEventListener('click', tryResumeVaVideoPlayback);
       vaControlsArea.appendChild(vaMicBtnEl);
 
       var vaTranscriptToggle = document.createElement('button');

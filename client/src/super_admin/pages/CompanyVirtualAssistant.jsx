@@ -172,7 +172,7 @@ export default function CompanyVirtualAssistant() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-breadcrumb">← Configurations</Link>
+          <Link to={`/super-admin/companies/${companyId}/configurations`} className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">Virtual Assistant</h2>
         </div>
         <button className="sa-btn sa-btn-primary sa-btn-sm" onClick={handleSave} disabled={saving}>

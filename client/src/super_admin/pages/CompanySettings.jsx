@@ -227,7 +227,7 @@ export default function CompanySettings() {
     <div className="sa-page">
       <div className="sa-page-header">
         <div>
-          <Link to={`/super-admin/companies/${companyId}`} className="sa-breadcrumb">← Company</Link>
+          <Link to={`/super-admin/companies/${companyId}`} className="sa-breadcrumb">← Back</Link>
           <h2 className="sa-page-title">Company Settings</h2>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
