@@ -50,6 +50,11 @@ Integration lab: open **`/embed-integration-demo.html`** (served from `client/pu
 2. Serve **`client` build** + API from the same host (or put `chat-widget.js` on a CDN and set `data-api-url` / `JPLoftChatConfig.apiUrl` to your API origin).
 3. Use **HTTPS** in production.
 4. Tighten **CORS** if you no longer want `*` (optional `cors({ origin: … })` in `server.js`).
+5. **Cache busting** (optional): The server sends `Cache-Control: no-cache` headers for HTML and `chat-widget.js`, but if customers have cached versions, add a query string to force refresh:
+   ```html
+   <script src="https://YOUR_APP_ORIGIN/chat-widget.js?v=20250410" async></script>
+   ```
+   Update the query string value each time you deploy (e.g., timestamp, version number). This ensures customers' browsers fetch the latest widget code immediately.
 
 ## Widget behaviour (admin)
 

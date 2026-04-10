@@ -86,6 +86,26 @@ fs.mkdirSync(companyIconUploadDir, { recursive: true });
 app.use('/uploads/company-icons', express.static(companyIconUploadDir));
 
 const clientDist = path.join(__dirname, '../client/dist');
+
+/**
+ * Cache control middleware for client assets:
+ * - HTML files and chat-widget.js: no-cache (always revalidate)
+ * - Hashed JS/CSS from Vite: long-lived cache (immutable)
+ * - Other assets: short cache with revalidation
+ */
+app.use((req, res, next) => {
+  const pathname = req.path;
+  if (pathname.endsWith('.html') || pathname.endsWith('/chat-widget.js')) {
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate, max-age=0');
+  } else if (pathname.match(/\.[a-f0-9]{8}\.(js|css)$/)) {
+    // Hashed assets from Vite can be cached permanently
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+  }
+  next();
+});
+
 app.use(express.static(clientDist));
 
 app.get('/api/health', (_req, res) => {

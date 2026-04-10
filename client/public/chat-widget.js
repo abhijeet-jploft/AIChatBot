@@ -3,12 +3,17 @@
  * Usage: <script src="https://your-domain.com/chat-widget.js" data-api-url="https://your-api.com/api" data-company-id="_JP_Loft"></script>
  * Or set window.JPLoftChatConfig = { apiUrl: '...', companyId: '...', companyName: 'JP Loft', apiKey: 'optional-embed-key' } before loading.
  * Optional apiKey is sent as header X-Embed-Api-Key on API requests (per-company key from your dashboard).
+ * 
+ * CACHE BUSTING: If you need to force refresh on customer sites, add a query string: src="...chat-widget.js?v=TIMESTAMP"
+ * Server automatically sends no-cache headers, but query strings provide additional customer-side refresh control.
  *
  * Activation is configurable from admin auto-trigger settings.
  * Opening message uses company settings (greeting message if configured, otherwise company + chatbot names).
  */
 (function () {
   'use strict';
+
+  var WIDGET_VERSION = '2.1.0'; // Update this on major changes
 
   var script = document.currentScript;
   var config = window.JPLoftChatConfig || {};
@@ -229,6 +234,10 @@
   var pendingOperatorRetry = null;
   var operatorRetryInFlight = false;
   var operatorRetryTimer = null;
+  var operatorRetryCount = 0;
+  var operatorRetryStartTime = null;
+  var MAX_OPERATOR_RETRIES = 10; // Max retry attempts
+  var MAX_OPERATOR_RETRY_DURATION = 30000; // 30 seconds max
 
   var presenceWs = null;
   var wsReconnectTimer = null;
@@ -2700,14 +2709,21 @@
 
         // Operator is handling this session — keep loading visible, skip empty AI message
         if (data.operatorActive) {
-          pendingOperatorRetry = payload;
-          scheduleOperatorRetryPoll(2500);
+          pendingOperatorRetry = Object.assign({}, payload, {
+            sessionId: (data && data.sessionId) || payload.sessionId,
+            operatorRetry: true,
+          });
+          operatorRetryCount = 0;
+          operatorRetryStartTime = Date.now();
+          if (!presenceWs || presenceWs.readyState !== 1) {
+            scheduleOperatorRetryPoll(8000);
+          }
           renderMessages();
           persistState();
           if (callback) callback();
           return;
         }
-        clearOperatorRetryTimer();
+        resetOperatorRetryState();
         pendingOperatorRetry = null;
 
         var assistantText = normalizeAssistantNameInText(String(data.content || ''), chatbotDisplayName);
@@ -2747,7 +2763,7 @@
       .catch(function (err) {
         if (gen !== requestGeneration) return;
         var reason = err && err.message ? err.message : String(err);
-        clearOperatorRetryTimer();
+        resetOperatorRetryState();
         console.error('[JPLoft Chat] send failed (user shown technical issue):', reason, err);
         try {
           fetch(apiUrl + '/chat/client-error', {
@@ -3097,6 +3113,12 @@
     }
   }
 
+  function resetOperatorRetryState() {
+    clearOperatorRetryTimer();
+    operatorRetryCount = 0;
+    operatorRetryStartTime = null;
+  }
+
   function syncPendingOperatorHistory() {
     var pending = pendingOperatorRetry;
     var pendingSessionId = (pending && pending.sessionId) || sessionId;
@@ -3144,7 +3166,7 @@
 
         if (!hasReplyAfterPending) return false;
 
-        clearOperatorRetryTimer();
+        resetOperatorRetryState();
         pendingOperatorRetry = null;
         messages = normalizedHistory;
         loading = false;
@@ -3157,11 +3179,29 @@
   }
 
   function scheduleOperatorRetryPoll(delayMs) {
-    clearOperatorRetryTimer();
     if (!pendingOperatorRetry) return;
+    if (!operatorRetryStartTime) operatorRetryStartTime = Date.now();
+    var elapsedMs = Date.now() - operatorRetryStartTime;
+    if (operatorRetryCount >= MAX_OPERATOR_RETRIES || elapsedMs >= MAX_OPERATOR_RETRY_DURATION) {
+      resetOperatorRetryState();
+      pendingOperatorRetry = null;
+      loading = false;
+      setSendButtonState();
+      messages.push({
+        role: 'assistant',
+        content: 'Operator connection timed out. Please refresh and try again.',
+        createdAt: getNowIso(),
+      });
+      renderMessages();
+      persistState();
+      return;
+    }
+    operatorRetryCount += 1;
+    clearOperatorRetryTimer();
+    var exponentialDelayMs = Math.min(2500 * Math.pow(1.5, operatorRetryCount - 1), 15000);
     operatorRetryTimer = setTimeout(function () {
       replayPendingOperatorRequest();
-    }, typeof delayMs === 'number' ? delayMs : 2500);
+    }, typeof delayMs === 'number' ? delayMs : exponentialDelayMs);
   }
 
   function replayPendingOperatorRequest() {
@@ -3176,7 +3216,7 @@
     fetch(apiUrl + '/chat/message', {
       method: 'POST',
       headers: mergeHeaders({ 'Content-Type': 'application/json', 'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '' }),
-      body: JSON.stringify(pending),
+      body: JSON.stringify(Object.assign({}, pending, { operatorRetry: true })),
     })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('retry failed')); })
       .then(function (retryData) {
@@ -3184,11 +3224,17 @@
         if (retryData && retryData.operatorActive) {
           return syncPendingOperatorHistory().then(function (resolvedFromHistory) {
             if (resolvedFromHistory) return;
-            scheduleOperatorRetryPoll(2500);
+            if (!presenceWs || presenceWs.readyState !== 1) {
+              scheduleOperatorRetryPoll(8000);
+            } else {
+              loading = false;
+              setSendButtonState();
+              renderMessages();
+            }
           });
         }
 
-        clearOperatorRetryTimer();
+        resetOperatorRetryState();
         pendingOperatorRetry = null;
 
         var raw = (retryData && retryData.content) ? String(retryData.content) : '';
@@ -3207,7 +3253,13 @@
       })
       .catch(function () {
         operatorRetryInFlight = false;
-        scheduleOperatorRetryPoll(3000);
+        if (!presenceWs || presenceWs.readyState !== 1) {
+          scheduleOperatorRetryPoll(8000);
+        } else {
+          loading = false;
+          setSendButtonState();
+          renderMessages();
+        }
       });
   }
 
@@ -3257,7 +3309,7 @@
         try {
           var msg = JSON.parse(event.data || '{}');
           if (msg.type === 'message' && msg.content != null) {
-            clearOperatorRetryTimer();
+            resetOperatorRetryState();
             pendingOperatorRetry = null;
             operatorRetryInFlight = false;
             var assistantText = normalizeAssistantNameInText(String(msg.content || ''), chatbotDisplayName);

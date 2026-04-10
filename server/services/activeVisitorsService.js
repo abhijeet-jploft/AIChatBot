@@ -8,6 +8,10 @@ const ACTIVE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 min
 const OPEN = 1;
 const TYPING_TTL_MS = 4500;
+const OPERATOR_ACTIVE_TTL_MS = Math.max(
+  30 * 1000,
+  parseInt(process.env.OPERATOR_ACTIVE_TTL_MS || '180000', 10)
+);
 const pool = require('../db');
 
 const store = new Map();
@@ -388,13 +392,30 @@ async function isOperatorActive(companyId, sessionId) {
   const key = `${companyId}:${sessionId}`;
   try {
     const result = await pool.query(
-      `SELECT is_active
+      `SELECT is_active, updated_at
        FROM operator_sessions
        WHERE company_id = $1 AND session_id = $2
        LIMIT 1`,
       [companyId, sessionId]
     );
-    const isActive = Boolean(result.rows[0]?.is_active);
+    const row = result.rows[0] || null;
+    const isActive = Boolean(row?.is_active);
+    const updatedAt = row?.updated_at ? new Date(row.updated_at).getTime() : 0;
+    const isStale = isActive && (!updatedAt || (Date.now() - updatedAt > OPERATOR_ACTIVE_TTL_MS));
+
+    if (isStale) {
+      operatedSessions.delete(key);
+      try {
+        await pool.query(
+          'DELETE FROM operator_sessions WHERE company_id = $1 AND session_id = $2',
+          [companyId, sessionId]
+        );
+      } catch (cleanupErr) {
+        console.error('[activeVisitors] stale operator session cleanup failed:', cleanupErr.message);
+      }
+      return false;
+    }
+
     if (isActive) {
       operatedSessions.set(key, { active: true });
     } else {

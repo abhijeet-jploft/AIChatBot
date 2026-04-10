@@ -174,6 +174,15 @@ function getNowIso() {
   return new Date().toISOString();
 }
 
+function buildChatIdempotencyKey() {
+  const now = Date.now();
+  if (typeof globalThis !== 'undefined' && globalThis.crypto?.randomUUID) {
+    return `chat-${now}-${globalThis.crypto.randomUUID()}`;
+  }
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `chat-${now}-${rand}`;
+}
+
 function normalizeMessageShape(message, fallbackCreatedAt = null) {
   if (!message || typeof message !== 'object') return null;
   const role = String(message.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
@@ -713,6 +722,10 @@ export default function App() {
   const pendingOperatorRetryRef = useRef(null);
   const operatorRetryInFlightRef = useRef(false);
   const operatorRetryTimerRef = useRef(null);
+  const operatorRetryCountRef = useRef(0);
+  const operatorRetryStartTimeRef = useRef(null);
+  const MAX_OPERATOR_RETRIES = 10; // Max retry attempts
+  const MAX_OPERATOR_RETRY_DURATION = 30000; // 30 seconds max
   const [playingMessageIndex, setPlayingMessageIndex] = useState(null);
 
   const stripEmoji = useCallback((text) => {
@@ -815,6 +828,12 @@ export default function App() {
     }
   }, []);
 
+  const resetOperatorRetryState = useCallback(() => {
+    clearOperatorRetryTimer();
+    operatorRetryCountRef.current = 0;
+    operatorRetryStartTimeRef.current = null;
+  }, [clearOperatorRetryTimer]);
+
   const syncPendingOperatorHistory = useCallback(async () => {
     const pending = pendingOperatorRetryRef.current;
     const pendingSessionId = pending?.sessionId || sessionIdRef.current;
@@ -845,13 +864,13 @@ export default function App() {
 
     if (!hasReplyAfterPending) return false;
 
-    clearOperatorRetryTimer();
+    resetOperatorRetryState();
     pendingOperatorRetryRef.current = null;
     setMessages(normalizedHistory);
     setLoading(false);
     loadSessions();
     return true;
-  }, [chatbotNameForOpening, clearOperatorRetryTimer, loadSessions]);
+  }, [chatbotNameForOpening, loadSessions, resetOperatorRetryState]);
 
   const replayPendingOperatorRequest = useCallback(() => {
     const pending = pendingOperatorRetryRef.current;
@@ -874,13 +893,16 @@ export default function App() {
         if (retryData?.operatorActive) {
           const resolvedFromHistory = await syncPendingOperatorHistory().catch(() => false);
           if (resolvedFromHistory) return;
-          operatorRetryTimerRef.current = setTimeout(() => {
-            replayPendingOperatorRequest();
-          }, 2500);
+          const wsOpen = presenceWsRef.current?.readyState === WebSocket.OPEN;
+          if (!wsOpen) {
+            scheduleOperatorRetryPoll(8000);
+          } else {
+            setLoading(false);
+          }
           return;
         }
 
-        clearOperatorRetryTimer();
+        resetOperatorRetryState();
         pendingOperatorRetryRef.current = null;
 
         const raw = retryData?.content ? String(retryData.content) : '';
@@ -895,24 +917,41 @@ export default function App() {
       })
       .catch(() => {
         operatorRetryInFlightRef.current = false;
-        clearOperatorRetryTimer();
-        operatorRetryTimerRef.current = setTimeout(() => {
-          replayPendingOperatorRequest();
-        }, 3000);
+        const wsOpen = presenceWsRef.current?.readyState === WebSocket.OPEN;
+        if (!wsOpen) {
+          scheduleOperatorRetryPoll(8000);
+        } else {
+          setLoading(false);
+        }
       });
-  }, [chatbotNameForOpening, clearOperatorRetryTimer, loadSessions, syncPendingOperatorHistory]);
+  }, [chatbotNameForOpening, loadSessions, resetOperatorRetryState, syncPendingOperatorHistory]);
 
   const scheduleOperatorRetryPoll = useCallback((delayMs = 2500) => {
-    clearOperatorRetryTimer();
     if (!pendingOperatorRetryRef.current) return;
+    if (!operatorRetryStartTimeRef.current) operatorRetryStartTimeRef.current = Date.now();
+    const elapsedMs = Date.now() - operatorRetryStartTimeRef.current;
+    if (operatorRetryCountRef.current >= MAX_OPERATOR_RETRIES || elapsedMs >= MAX_OPERATOR_RETRY_DURATION) {
+      resetOperatorRetryState();
+      pendingOperatorRetryRef.current = null;
+      setMessages((prev) => [...prev, normalizeMessageShape({
+        role: 'assistant',
+        content: 'Operator connection timed out. Please refresh and try again.',
+        createdAt: getNowIso(),
+      })]);
+      setLoading(false);
+      return;
+    }
+    operatorRetryCountRef.current += 1;
+    clearOperatorRetryTimer();
+    const exponentialDelayMs = Math.min(2500 * Math.pow(1.5, operatorRetryCountRef.current - 1), 15000);
     operatorRetryTimerRef.current = setTimeout(() => {
       replayPendingOperatorRequest();
-    }, delayMs);
-  }, [clearOperatorRetryTimer, replayPendingOperatorRequest]);
+    }, typeof delayMs === 'number' ? delayMs : exponentialDelayMs);
+  }, [clearOperatorRetryTimer, resetOperatorRetryState]);
 
   useEffect(() => () => {
-    clearOperatorRetryTimer();
-  }, [clearOperatorRetryTimer]);
+    resetOperatorRetryState();
+  }, [resetOperatorRetryState]);
 
   const browserVoiceLocaleOpts = useMemo(
     () => ({
@@ -1310,7 +1349,7 @@ export default function App() {
           try {
             const msg = JSON.parse(ev.data);
             if (msg.type === 'message' && msg.content != null) {
-              clearOperatorRetryTimer();
+              resetOperatorRetryState();
               pendingOperatorRetryRef.current = null;
               operatorRetryInFlightRef.current = false;
               const content = normalizeAssistantNameInText(String(msg.content), chatbotNameForOpening);
@@ -1490,6 +1529,7 @@ export default function App() {
         messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
         clientTime: getNowIso(),
         clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+        idempotencyKey: buildChatIdempotencyKey(),
       };
       const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
 
@@ -1549,11 +1589,16 @@ export default function App() {
           sessionId: data.sessionId || requestPayload.sessionId,
           operatorRetry: true,
         };
-        scheduleOperatorRetryPoll(2500);
+        operatorRetryCountRef.current = 0;
+        operatorRetryStartTimeRef.current = Date.now();
+        const wsOpen = presenceWsRef.current?.readyState === WebSocket.OPEN;
+        if (!wsOpen) {
+          scheduleOperatorRetryPoll(8000);
+        }
         keepLoading = true;
         return;
       }
-      clearOperatorRetryTimer();
+      resetOperatorRetryState();
       pendingOperatorRetryRef.current = null;
 
       const normalizedAssistantContent = normalizeAssistantNameInText(String(data?.content || ''), chatbotNameForOpening);
@@ -1589,7 +1634,7 @@ export default function App() {
       loadSessions(); // refresh history list
     } catch (err) {
       if (requestGeneration !== requestGenerationRef.current) return;
-      clearOperatorRetryTimer();
+      resetOperatorRetryState();
       const reason = err?.message || String(err);
       console.error('[chat] sendMessage failed (user shown technical issue):', reason, err);
       try {
