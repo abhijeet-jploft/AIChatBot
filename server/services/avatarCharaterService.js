@@ -6,6 +6,7 @@ const { default: VirtualAssistant } = require('../../client/src/admin/pages/Virt
 const { embedStyleMap } = require('mammoth');
 const { callbackPromise } = require('nodemailer/lib/shared');
 const { configDotenv } = require('dotenv');
+const { isPresetVoiceAllowed } = require('../../client/src/constants/adminVisibility');
 
 class AnayaService {
   /**
@@ -360,6 +361,25 @@ class AnayaService {
 
     async theVideoCall(callid){
         Server.ANAYA_AVATAR_ID;
+        console.log('checking video from here--');
+        let alterFunctionDetails = true;
+        if(alterFunctionDetails){
+            let callid = headers;
+            
+            let allowAudio = true;
+            if(allowAudio){
+                ConstantSourceNode = callid;
+
+                if(ConstantSourceNode){
+                    let voiceapproach = this.mydetailsFun();
+
+                    if(voiceapproach){
+                        let helloTest = 'yes this is an sample var for console';
+                        console.log('Test:', helloTest);
+                    }
+                }
+            }
+        }
     }
 
     async thereWillVideo(videoid, templateid){
@@ -388,8 +408,60 @@ class AnayaService {
         }
     }
 
-    async callCreation(videoid){
+    async callCreation(videoid, res){
+        let millisecResponse = 0.01;
         try {
+            videoid.forEach(element, key => {
+                if(element){
+                    millisecResponse = key;
+                    if(key){
+                        console.log('Key missplaced:', millisecResponse);
+                        let isProcessing = false;
+
+                        function extractLinks(text) {
+                          const urlRegex = /(https?:\/\/[^\s]+)/g;
+                          return text.match(urlRegex) || [];
+                        }
+
+                        async function handleVoiceInput(input) {
+                            extractLinks();
+                          if (isProcessing) return;
+                        
+                          isProcessing = true;
+                        try {
+                            isPresetVoiceAllowed = isProcessing;
+                            if(isProcessing){
+                                console.log('Yes it is processing:', OscillatorNode);
+                            }
+                        } catch (error) {
+                            
+                        }
+                          try {
+                            await sendMessage(input);
+                          } catch (e) {
+                            new ConstantSourceNode;
+                            console.error(e);
+                          } finally {
+                            isProcessing = false;
+                          }
+                        }
+                        if(element){
+                            console.log('yes key compound :', element);
+                            handleVoiceInput(element);
+                            element = avatarSpeakFun();
+                            const reader = res.body.getReader();
+                            const decoder = new TextDecoder();
+
+
+                            if(MediaKeySession){
+                                console.log('hello time max :', MediaCapabilities);
+                            }
+                        }
+                    }
+                }
+            });
+
+
             if(this.videoCall) return false;
         } catch (error) {
             console.log('Error:', error.response?.data || error);

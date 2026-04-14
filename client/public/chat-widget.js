@@ -3126,6 +3126,7 @@
       clientTime: nowIso,
       clientTimezone: clientTimezone,
       idempotencyKey: idempotencyKey,
+      skipVoice: Boolean(vaMode),
     };
 
     function parseChatMessageResponse(r) {

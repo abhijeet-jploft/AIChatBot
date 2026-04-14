@@ -295,13 +295,18 @@ async function postMessage(req, res) {
   let aiConversation = [];
   let userMsg = null;
   const requestStartedAt = Date.now();
+  let ipGeoPromise = null;
   try {
+    const clientIp = extractClientIp(req);
+    ipGeoPromise = lookupIpGeo(clientIp).catch(() => ({ country: '', cityState: '' }));
+
     const {
       messages,
       companyId: requestCompanyId = '_default',
       sessionId,
       clientTime,
       clientTimezone,
+      skipVoice,
     } = req.body || {};
     companyId = requestCompanyId;
     stage = 'validate_request';
@@ -361,8 +366,11 @@ async function postMessage(req, res) {
     // Persist pre-response data (non-fatal if DB is unavailable)
     try {
       stage = 'db_prewrite';
-      await Chatbot.findOrCreate(companyId);
       chatbot = await Chatbot.findByCompanyId(companyId);
+      if (!chatbot) {
+        await Chatbot.findOrCreate(companyId);
+        chatbot = await Chatbot.findByCompanyId(companyId);
+      }
       selectedModeId = chatbot?.ai_mode || null;
       aiConfig = {
         provider: String(chatbot?.ai_provider || 'anthropic').toLowerCase(),
@@ -439,7 +447,7 @@ async function postMessage(req, res) {
         await ChatMessage.create(sid, 'assistant', pausedMessage);
 
         let pausedVoice = null;
-        if (voiceConfig.responseEnabled) {
+        if (voiceConfig.responseEnabled && !skipVoice) {
           try {
             pausedVoice = await synthesizeCompanyVoice({
               chatbot,
@@ -494,15 +502,11 @@ async function postMessage(req, res) {
 
       if (isSupportRequest(userMsg.content)) {
         addSupportRequest(companyId, { sessionId: sid, message: userMsg.content });
-        try {
-          await broadcastAlert(companyId, {
-            kind: 'support_request',
-            message: 'Support requested',
-            link: '/admin/support-requests',
-          });
-        } catch (alertErr) {
-          /* ignore */
-        }
+        broadcastAlert(companyId, {
+          kind: 'support_request',
+          message: 'Support requested',
+          link: '/admin/support-requests',
+        }).catch(() => {});
       }
     } catch (dbErr) {
       console.error('[chat] DB pre-write (non-fatal):', dbErr.message);
@@ -655,7 +659,7 @@ async function postMessage(req, res) {
 
     let voice = null;
 
-    if (voiceConfig.responseEnabled) {
+    if (voiceConfig.responseEnabled && !skipVoice) {
       try {
         stage = 'voice_synthesis';
         const voiceStartedAt = Date.now();
@@ -711,8 +715,7 @@ async function postMessage(req, res) {
       let leadCaptureResult = null;
       try {
         stage = 'lead_capture';
-        const clientIp = extractClientIp(req);
-        const geo = await lookupIpGeo(clientIp);
+        const geo = await ipGeoPromise;
         leadCaptureResult = await captureLeadFromConversation({
           companyId,
           sessionId: sid,
@@ -729,20 +732,21 @@ async function postMessage(req, res) {
         });
 
         if (leadCaptureResult?.captured && leadCaptureResult?.inserted && leadCaptureResult?.lead) {
-          try {
-            await sendNewLeadNotification({ companyId, lead: leadCaptureResult.lead });
-          } catch (notifyErr) {
+          // BACKGROUND NOTIFICATION (do not await SMTP)
+          sendNewLeadNotification({ companyId, lead: leadCaptureResult.lead }).catch((notifyErr) => {
             console.error('[lead-notify] non-fatal:', notifyErr.message);
-          }
+          });
+          
           try {
             const lead = leadCaptureResult.lead;
             const meetingRequested = (lead?.ai_detected_intent || '') === 'meeting_booking';
-            await broadcastAlert(companyId, {
+            // BACKGROUND BROADCAST
+            broadcastAlert(companyId, {
               kind: 'lead_captured',
               meetingRequested,
               message: meetingRequested ? 'Meeting requested — new lead captured' : 'New lead captured',
               link: '/admin/leads',
-            });
+            }).catch(() => {});
           } catch (alertErr) {
             /* ignore */
           }
@@ -767,11 +771,7 @@ async function postMessage(req, res) {
 
         if (escalation?.shouldEscalate && Array.isArray(escalation.alerts)) {
           for (const alert of escalation.alerts) {
-            try {
-              await broadcastAlert(companyId, alert);
-            } catch {
-              /* ignore */
-            }
+            broadcastAlert(companyId, alert).catch(() => {});
           }
         }
       } catch (escErr) {
@@ -943,8 +943,11 @@ async function synthesizeMessageVoice(req, res) {
       return res.status(400).json({ error: 'companyId is required' });
     }
 
-    await Chatbot.findOrCreate(companyId);
-    const chatbot = await Chatbot.findByCompanyId(companyId);
+    let chatbot = await Chatbot.findByCompanyId(companyId);
+    if (!chatbot) {
+      await Chatbot.findOrCreate(companyId);
+      chatbot = await Chatbot.findByCompanyId(companyId);
+    }
     if (!chatbot) {
       return res.status(404).json({ error: 'Chatbot not found' });
     }
@@ -1354,13 +1357,18 @@ async function createLiveAvatarSessionToken(req, res) {
       openingText: desiredOpening,
     });
   } catch (err) {
+    let errMsg = err?.message || 'Failed to create LiveAvatar session token';
+    if (errMsg.toLowerCase().includes('concurrency limit')) {
+      errMsg = 'All virtual assistants are currently busy. Please try again in a moment or continue with text chat.';
+    }
+    
     console.error('[chat] liveavatar session-token:', {
       companyId: String(req.body?.companyId || '').trim() || null,
       status: err?.status || null,
       message: err?.message || null,
       details: err?.details || null,
     });
-    return res.status(err.status || 500).json({ error: err.message || 'Failed to create LiveAvatar session token' });
+    return res.status(err.status || 500).json({ error: errMsg });
   }
 }
 
