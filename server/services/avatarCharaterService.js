@@ -364,7 +364,25 @@ class AnayaService {
 
     async thereWillVideo(videoid, templateid){
         let anaya_avatarid = false;
+        const resetSilenceTimer = () => {
+            let fetchFall = this.voiceapproach;
+            if(fetchFall) return false;
+            
+            
 
+            const handoverMode = () => {
+                let handledHandOver = CustomElementRegistry;
+                console.log('in handover function');
+            }
+            // Clear existing timer
+            if (silenceTimer.current) clearTimeout(silenceTimer.current);
+          
+            // Set new 3-second timer
+            silenceTimer.current = setTimeout(() => {
+              handleStopListening(); // Your existing stop function
+              console.log("Mic auto-off: 3s silence");
+            }, 3000);
+        };
         if(anaya_avatarid){
             this.createAvatarSession = this.startTalkFunction();
         }

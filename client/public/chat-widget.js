@@ -236,8 +236,8 @@
   var operatorRetryTimer = null;
   var operatorRetryCount = 0;
   var operatorRetryStartTime = null;
-  var MAX_OPERATOR_RETRIES = 10; // Max retry attempts
-  var MAX_OPERATOR_RETRY_DURATION = 30000; // 30 seconds max
+  var MAX_OPERATOR_RETRIES = 500; // Max retry attempts (operator can take many minutes)
+  var MAX_OPERATOR_RETRY_DURATION = 1800000; // 30 minutes max — loading must persist until operator or AI responds
 
   var presenceWs = null;
   var wsReconnectTimer = null;
@@ -270,6 +270,7 @@
   var vaStatusEl = null;
   var vaSession = null;
   var vaSessionStartPromise = null;
+  var vaSessionReady = false;
   var vaKeepAliveTimer = null;
   var vaSdkModulePromise = null;
   var vaTranscriptSender = null;
@@ -277,8 +278,21 @@
   var vaGreetingSpeakInFlight = false;
   var vaOpeningTextFromServer = '';
   var vaGreetingFallbackTimer = null;
+  var vaAssistantSpeakFallbackTimer = null;
+  var vaAssistantSpeakWatchdogTimer = null;
   var vaAwaitingGreetingAudio = false;
   var vaProcessingEl = null;
+  var vaSilenceTimer = null;
+  var vaAssistantSpeaking = false;
+  var vaShouldResumeMicAfterReply = false;
+  var vaAutoListenEnabled = false;
+  var vaResumeMicRetryTimer = null;
+  var vaResumeMicRetryCount = 0;
+  var vaListeningRefreshTimer = null;
+  var vaVideoHealthTimer = null;
+  var vaVideoLastFrameAt = 0;
+  var vaVideoReady = false;
+  var vaLastSpeakStartedAt = 0;
 
   var root = null;
   var launcher = null;
@@ -369,11 +383,22 @@
     vaProcessingEl.classList.toggle('is-hidden', !visible);
   }
 
-  function tryResumeVaVideoPlayback() {
+  function isAssistantSpeaking() {
+    if (vaMode) return Boolean(vaAssistantSpeaking);
+    if (responseAudio && !responseAudio.paused && !responseAudio.ended) return true;
+    return Boolean(speechUtterance);
+  }
+
+  function tryResumeVaVideoPlayback(options) {
+    options = options || {};
+    var allowAudio = options.allowAudio === true;
     if (!vaVideoEl) return;
     try {
-      vaVideoEl.muted = false;
-      vaVideoEl.volume = 1;
+      vaVideoEl.muted = !allowAudio;
+      vaVideoEl.defaultMuted = !allowAudio;
+      if (allowAudio) {
+        vaVideoEl.volume = 1;
+      }
     } catch (eMute) {}
     try {
       var playAttempt = vaVideoEl.play();
@@ -390,11 +415,297 @@
     }
   }
 
+  function clearVaAssistantSpeakFallbackTimer() {
+    if (vaAssistantSpeakFallbackTimer) {
+      clearTimeout(vaAssistantSpeakFallbackTimer);
+      vaAssistantSpeakFallbackTimer = null;
+    }
+  }
+
+  function clearVaAssistantSpeakWatchdogTimer() {
+    if (vaAssistantSpeakWatchdogTimer) {
+      clearTimeout(vaAssistantSpeakWatchdogTimer);
+      vaAssistantSpeakWatchdogTimer = null;
+    }
+  }
+
+  function clearVaListeningRefreshTimer() {
+    if (vaListeningRefreshTimer) {
+      clearTimeout(vaListeningRefreshTimer);
+      vaListeningRefreshTimer = null;
+    }
+  }
+
+  function scheduleVaListeningRefresh(session) {
+    clearVaListeningRefreshTimer();
+    vaListeningRefreshTimer = setTimeout(function () {
+      vaListeningRefreshTimer = null;
+      var activeSession = session || vaSession;
+      if (!vaMode || !activeSession) return;
+
+      if (vaAutoListenEnabled && micRecording && !loading && !vaAssistantSpeaking) {
+        try {
+          activeSession.startListening();
+        } catch (eStart) {}
+        try {
+          if (activeSession.voiceChat && typeof activeSession.voiceChat.start === 'function') {
+            activeSession.voiceChat.start();
+          }
+        } catch (eVoice) {}
+      }
+
+      if (vaAutoListenEnabled) {
+        scheduleVaListeningRefresh(activeSession);
+      }
+    }, 7000);
+  }
+
+  function clearVaResumeMicRetryTimer() {
+    if (vaResumeMicRetryTimer) {
+      clearTimeout(vaResumeMicRetryTimer);
+      vaResumeMicRetryTimer = null;
+    }
+  }
+
+  function clearVaVideoHealthTimer() {
+    if (vaVideoHealthTimer) {
+      clearTimeout(vaVideoHealthTimer);
+      vaVideoHealthTimer = null;
+    }
+  }
+
+  function markVaVideoReady() {
+    if (!vaMode) return;
+    vaVideoReady = true;
+    vaVideoLastFrameAt = Date.now();
+    setVaOverlayVisible(false);
+    if (!loading && !vaAssistantSpeaking) {
+      setVaStatus('Assistant ready');
+    }
+  }
+
+  function scheduleVaVideoHealthCheck(session, delayMs) {
+    clearVaVideoHealthTimer();
+    vaVideoHealthTimer = setTimeout(function () {
+      vaVideoHealthTimer = null;
+      if (!vaMode || !session || !vaVideoEl) return;
+
+      var noFramesYet = !vaVideoReady && (vaVideoEl.readyState < 2 || vaVideoEl.currentTime <= 0);
+      var stalledFrames = vaVideoReady && (Date.now() - vaVideoLastFrameAt > 5000) && (vaVideoEl.readyState < 2 || vaVideoEl.paused);
+      if (!noFramesYet && !stalledFrames) return;
+
+      setVaOverlayVisible(true);
+      setVaStatus('Connecting media…');
+      try {
+        session.attach(vaVideoEl);
+      } catch (eAttach) {}
+      tryResumeVaVideoPlayback({ allowAudio: false });
+
+      // One more follow-up probe for mobile browsers that delay frame rendering.
+      scheduleVaVideoHealthCheck(session, 2200);
+    }, Math.max(400, Number(delayMs || 1500)));
+  }
+
+  function maybeResumeVaMicAfterAssistantSpeech(session) {
+    if (!vaMode || loading || vaAssistantSpeaking) return;
+
+    var shouldResume = vaAutoListenEnabled || vaShouldResumeMicAfterReply;
+    if (!shouldResume) return;
+
+    var activeSession = session || vaSession;
+    if (!activeSession) {
+      vaShouldResumeMicAfterReply = false;
+      vaAutoListenEnabled = false;
+      return;
+    }
+
+    clearVaResumeMicRetryTimer();
+    startVaMicCapture(activeSession)
+      .then(function () {
+        vaShouldResumeMicAfterReply = false;
+        vaResumeMicRetryCount = 0;
+      })
+      .catch(function (err) {
+        // Mobile WebRTC can reject immediate restart right after avatar speech.
+        if (vaResumeMicRetryCount < 3 && (vaAutoListenEnabled || vaShouldResumeMicAfterReply) && !loading && !vaAssistantSpeaking) {
+          vaResumeMicRetryCount += 1;
+          var retryDelay = 450 * vaResumeMicRetryCount;
+          vaResumeMicRetryTimer = setTimeout(function () {
+            vaResumeMicRetryTimer = null;
+            maybeResumeVaMicAfterAssistantSpeech(activeSession);
+          }, retryDelay);
+          return;
+        }
+        vaShouldResumeMicAfterReply = false;
+        vaResumeMicRetryCount = 0;
+        if (vaAutoListenEnabled) {
+          setVaStatus(err && err.message ? err.message : 'Tap mic to continue listening', true);
+          return;
+        }
+        setVaStatus('Assistant ready');
+      });
+  }
+
+  function speakVaAssistantText(session, text, options) {
+    options = options || {};
+    var speechText = String(text || '').trim();
+    var markGreeting = Boolean(options.markGreeting);
+    var useBrowserFallback = options.useBrowserFallback !== false;
+    var resumeMicOnEnd = options.resumeMicOnEnd === true;
+    var onDone = typeof options.onDone === 'function' ? options.onDone : null;
+
+    if (!speechText) {
+      if (onDone) onDone(false);
+      return;
+    }
+
+    clearVaAssistantSpeakFallbackTimer();
+    if (markGreeting) {
+      vaGreetingSpeakInFlight = true;
+      vaAwaitingGreetingAudio = true;
+    }
+
+    var finished = false;
+    function finish(spokenByAvatar) {
+      if (finished) return;
+      finished = true;
+      clearVaAssistantSpeakFallbackTimer();
+      if (markGreeting) {
+        vaGreetingSpokenForSession = true;
+        vaGreetingSpeakInFlight = false;
+        vaAwaitingGreetingAudio = false;
+      }
+      if (onDone) onDone(Boolean(spokenByAvatar));
+    }
+
+    function speakWithBrowserFallback() {
+      if (!useBrowserFallback) {
+        finish(false);
+        if (resumeMicOnEnd) maybeResumeVaMicAfterAssistantSpeech(session);
+        return;
+      }
+
+      speakWithBrowserVoice(speechText, voiceGender, voiceIgnoreEmoji, function () {
+        finish(false);
+        if (resumeMicOnEnd) maybeResumeVaMicAfterAssistantSpeech(session);
+      });
+    }
+
+    if (session && typeof session.repeat === 'function') {
+      var didFirstAttemptSucceed = true;
+      try {
+        session.repeat(speechText);
+      } catch (eRepeat) {
+        didFirstAttemptSucceed = false;
+      }
+
+      var retryCount = 0;
+      var tryAgain = function() {
+        if (vaAssistantSpeaking) return;
+
+        try {
+          session.repeat(speechText);
+        } catch (eRetry) {}
+
+        if (!vaAssistantSpeaking) {
+          retryCount++;
+          if (retryCount < 8) {
+            vaAssistantSpeakFallbackTimer = setTimeout(tryAgain, 600);
+            return;
+          }
+          speakWithBrowserFallback();
+        }
+      };
+
+      vaAssistantSpeakFallbackTimer = setTimeout(tryAgain, didFirstAttemptSucceed ? 3200 : 500);
+      return;
+    }
+
+    speakWithBrowserFallback();
+  }
+
+  function clearVaSilenceTimer() {
+    if (vaSilenceTimer) {
+      clearTimeout(vaSilenceTimer);
+      vaSilenceTimer = null;
+    }
+  }
+
+  function stopVaMicCapture(options) {
+    options = options || {};
+    var shouldUpdateStatus = options.updateStatus !== false;
+    var nextStatus = typeof options.statusText === 'string'
+      ? options.statusText
+      : (loading ? 'Assistant is thinking…' : 'Assistant ready');
+
+    clearVaSilenceTimer();
+    clearVaListeningRefreshTimer();
+    keepMicOpen = false;
+    vaPausedMicForTts = false;
+
+    if (vaSession) {
+      try { vaSession.voiceChat.stop(); } catch (eStop) {}
+      try { vaSession.stopListening(); } catch (eListening) {}
+    }
+
+    setMicButtonState(false);
+    if (shouldUpdateStatus) setVaStatus(nextStatus);
+  }
+
+  function armVaSilenceAutoStop() {
+    if (!vaMode) return;
+    clearVaSilenceTimer();
+    if (!micRecording) return;
+
+    vaSilenceTimer = setTimeout(function () {
+      vaSilenceTimer = null;
+      if (!micRecording) return;
+      stopVaMicCapture({ statusText: 'Assistant ready' });
+    }, 3000);
+  }
+
+  function startVaMicCapture(session) {
+    if (!session) return Promise.reject(new Error('Virtual assistant not ready'));
+    if (!vaSessionReady) return Promise.reject(new Error('Assistant is still connecting'));
+    clearVaSilenceTimer();
+    var attemptPrimary = function () {
+      try { session.startListening(); } catch (ePoseStart) {}
+      return Promise.resolve(session.voiceChat.start());
+    };
+
+    var attemptRecovery = function () {
+      try {
+        if (session.voiceChat && typeof session.voiceChat.stop === 'function') {
+          session.voiceChat.stop();
+        }
+      } catch (eVoiceStop) {}
+      try { session.stopListening(); } catch (eStopListening) {}
+      try { session.startListening(); } catch (eStartListening) {}
+      return Promise.resolve(session.voiceChat.start());
+    };
+
+    return attemptPrimary()
+      .catch(function () {
+        return attemptRecovery();
+      })
+      .then(function () {
+        setMicButtonState(true);
+        setVaStatus('Listening…');
+        scheduleVaListeningRefresh(session);
+        armVaSilenceAutoStop();
+      });
+  }
+
   function maybeSpeakVaGreeting(session) {
     if (!vaMode || vaGreetingSpokenForSession || vaGreetingSpeakInFlight) return;
 
+    // Optional default fallback or custom override
     var greetingText = String(getOpeningMessage() || '').trim() || String(vaOpeningTextFromServer || '').trim();
-    if (!greetingText) return;
+    if (!greetingText) {
+      vaGreetingSpokenForSession = true;
+      if (vaAutoListenEnabled) maybeResumeVaMicAfterAssistantSpeech(session);
+      return;
+    }
 
     if (Array.isArray(messages) && messages.length > 0 && messages[0] && messages[0].role === 'assistant') {
       if (String(messages[0].content || '').trim() !== greetingText) {
@@ -410,34 +721,23 @@
       persistState();
     }
 
-    function finalizeGreetingAttempt() {
+    clearVaGreetingFallbackTimer();
+    vaGreetingFallbackTimer = setTimeout(function () {
+      if (vaGreetingSpokenForSession || !vaGreetingSpeakInFlight) return;
       vaGreetingSpokenForSession = true;
       vaGreetingSpeakInFlight = false;
       vaAwaitingGreetingAudio = false;
-      clearVaGreetingFallbackTimer();
-    }
+      setVaStatus('Assistant voice is reconnecting…');
+    }, 2600);
 
-    vaGreetingSpeakInFlight = true;
-    vaAwaitingGreetingAudio = true;
-    clearVaGreetingFallbackTimer();
-    vaGreetingFallbackTimer = setTimeout(function () {
-      if (!vaAwaitingGreetingAudio) return;
-      finalizeGreetingAttempt();
-      speakWithBrowserVoice(greetingText, voiceGender, voiceIgnoreEmoji);
-    }, 2200);
-
-    // Use the SDK's repeat() method which sends the avatar.speak_text command via LiveKit.
-    // Falls back to browser TTS via the fallback timer if the avatar doesn't start speaking.
-    try {
-      if (session && typeof session.repeat === 'function') {
-        session.repeat(greetingText);
-        // Wait for avatar.speak_started (handled in bindVaSessionEvents) or fallback timer
-        return;
-      }
-    } catch (err) {}
-
-    finalizeGreetingAttempt();
-    speakWithBrowserVoice(greetingText, voiceGender, voiceIgnoreEmoji);
+    speakVaAssistantText(session, greetingText, {
+      markGreeting: true,
+      useBrowserFallback: false,
+      resumeMicOnEnd: true,
+      onDone: function () {
+        clearVaGreetingFallbackTimer();
+      },
+    });
   }
 
   function clearVaKeepAlive() {
@@ -445,6 +745,7 @@
       clearInterval(vaKeepAliveTimer);
       vaKeepAliveTimer = null;
     }
+    clearVaSilenceTimer();
   }
 
   function ensureLiveAvatarSdk() {
@@ -499,23 +800,39 @@
 
   function bindVaSessionEvents(session) {
     session.on('session.stream_ready', function () {
+      vaSessionReady = true;
+      vaVideoReady = false;
+      vaVideoLastFrameAt = 0;
       if (vaVideoEl) {
         try {
           session.attach(vaVideoEl);
         } catch (e) {}
-        tryResumeVaVideoPlayback();
+        tryResumeVaVideoPlayback({ allowAudio: false });
       }
-      setVaStatus('Assistant ready');
-      setVaOverlayVisible(false);
+      setVaStatus('Connecting media…');
+      setVaOverlayVisible(true);
+      scheduleVaVideoHealthCheck(session, 1800);
       maybeSpeakVaGreeting(session);
       setTimeout(function () {
         maybeSpeakVaGreeting(session);
       }, 600);
     });
     session.on('session.disconnected', function () {
+      vaSessionReady = false;
       clearVaKeepAlive();
       clearVaGreetingFallbackTimer();
+      clearVaAssistantSpeakFallbackTimer();
+      clearVaAssistantSpeakWatchdogTimer();
+      clearVaListeningRefreshTimer();
+      clearVaResumeMicRetryTimer();
+      clearVaVideoHealthTimer();
+      vaAssistantSpeaking = false;
       vaAwaitingGreetingAudio = false;
+      vaShouldResumeMicAfterReply = false;
+      vaAutoListenEnabled = false;
+      vaResumeMicRetryCount = 0;
+      vaVideoReady = false;
+      vaVideoLastFrameAt = 0;
       vaSession = null;
       vaSessionStartPromise = null;
       setMicButtonState(false);
@@ -528,16 +845,34 @@
     });
     session.on('user.transcription', function (event) {
       var spokenText = String(event && event.text || '').trim();
-      if (!spokenText || loading) return;
+      if (!spokenText || loading || vaAssistantSpeaking) return;
+      armVaSilenceAutoStop();
+      scheduleVaListeningRefresh(session);
       // Interrupt any context auto-response so our AI pipeline is the sole responder
       try { if (vaSession) vaSession.interrupt(); } catch (eVaInt) {}
       sendToApi(spokenText);
       setVaStatus('Assistant is thinking…');
     });
     session.on('user.speak_started', function () {
+      if (loading || vaAssistantSpeaking) return;
       setVaStatus('Listening…');
+      scheduleVaListeningRefresh(session);
+      armVaSilenceAutoStop();
     });
     session.on('avatar.speak_started', function () {
+      vaAssistantSpeaking = true;
+      vaLastSpeakStartedAt = Date.now();
+      clearVaAssistantSpeakFallbackTimer();
+      clearVaAssistantSpeakWatchdogTimer();
+      vaAssistantSpeakWatchdogTimer = setTimeout(function () {
+        vaAssistantSpeaking = false;
+        setSendButtonState();
+        if (!loading) {
+          setVaStatus('Assistant ready');
+          maybeResumeVaMicAfterAssistantSpeech(session);
+        }
+      }, 25000);
+      setSendButtonState();
       // Mark greeting as done on the first avatar speech in this session
       // (covers both manual session.repeat() and any context auto-speak)
       if (!vaGreetingSpokenForSession) {
@@ -549,21 +884,40 @@
         vaAwaitingGreetingAudio = false;
         clearVaGreetingFallbackTimer();
       }
-      tryResumeVaVideoPlayback();
+      tryResumeVaVideoPlayback({ allowAudio: true });
       setVaStatus('Assistant is speaking…');
     });
     session.on('avatar.speak_ended', function () {
-      setVaStatus(micRecording ? 'Listening…' : 'Assistant ready');
+      vaAssistantSpeaking = false;
+      vaLastSpeakStartedAt = 0;
+      clearVaAssistantSpeakWatchdogTimer();
+      clearVaSilenceTimer();
+      setSendButtonState();
+      setVaStatus('Assistant ready');
+      maybeResumeVaMicAfterAssistantSpeech(session);
     });
   }
 
   function stopVaSession() {
+    vaSessionReady = false;
     clearVaKeepAlive();
     clearVaGreetingFallbackTimer();
+    clearVaAssistantSpeakFallbackTimer();
+    clearVaAssistantSpeakWatchdogTimer();
+    clearVaListeningRefreshTimer();
+    clearVaResumeMicRetryTimer();
+    clearVaVideoHealthTimer();
+    clearVaSilenceTimer();
     vaTranscriptSender = null;
     vaGreetingSpokenForSession = false;
     vaGreetingSpeakInFlight = false;
     vaAwaitingGreetingAudio = false;
+    vaAssistantSpeaking = false;
+    vaShouldResumeMicAfterReply = false;
+    vaAutoListenEnabled = false;
+    vaResumeMicRetryCount = 0;
+    vaVideoReady = false;
+    vaVideoLastFrameAt = 0;
     if (vaSession) {
       var currentSession = vaSession;
       vaSession = null;
@@ -582,8 +936,8 @@
 
   function startVaSession() {
     if (!vaMode) return Promise.resolve(null);
-    if (vaSession) return Promise.resolve(vaSession);
     if (vaSessionStartPromise) return vaSessionStartPromise;
+    if (vaSession) return Promise.resolve(vaSession);
 
     setVaStatus('Starting assistant…');
     setVaOverlayVisible(true);
@@ -597,15 +951,14 @@
         if (!sdk.LiveAvatarSession) {
           throw new Error('LiveAvatar SDK failed to load');
         }
+        vaSessionReady = false;
         vaSession = new sdk.LiveAvatarSession(sessionInfo.sessionToken, { voiceChat: false });
         vaGreetingSpokenForSession = false;
         vaGreetingSpeakInFlight = false;
+        vaAutoListenEnabled = true; // Default to auto-listening for initial greeting
         bindVaSessionEvents(vaSession);
         return vaSession.start().then(function () {
-          maybeSpeakVaGreeting(vaSession);
-          setTimeout(function () {
-            maybeSpeakVaGreeting(vaSession);
-          }, 900);
+          // Greeting moved exclusively to session.stream_ready to avoid early SDK stream dropping
           clearVaKeepAlive();
           vaKeepAliveTimer = setInterval(function () {
             if (!vaSession) return;
@@ -622,6 +975,7 @@
         });
       })
       .catch(function (error) {
+        vaSessionReady = false;
         vaSession = null;
         setVaOverlayVisible(true);
         setVaStatus(error && error.message ? error.message : 'Failed to start assistant', true);
@@ -638,6 +992,10 @@
   function sendVaTextMessage(text) {
     var messageText = String(text || '').trim();
     if (!messageText) return;
+    vaAutoListenEnabled = true;
+    vaShouldResumeMicAfterReply = true;
+    vaResumeMicRetryCount = 0;
+    clearVaResumeMicRetryTimer();
     startVaSession()
       .then(function (session) {
         if (!session) return;
@@ -1382,6 +1740,7 @@
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-start-btn:disabled{opacity:.65;cursor:not-allowed}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-status{max-width:80%;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:12px;line-height:1.35;text-align:center;backdrop-filter:blur(8px)}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-status.is-error{background:rgba(185,28,28,.65)}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-sandbox-warning{position:absolute;top:10px;left:50%;transform:translateX(-50%);max-width:90%;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;line-height:1.35;text-align:center;backdrop-filter:blur(8px);z-index:5;pointer-events:none}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-controls{display:flex;flex-direction:column;align-items:center;padding:14px 16px 8px;gap:10px;background:var(--chat-surface);border-top:1px solid var(--chat-border);flex-shrink:0}',
       '#jploft-chat-root .jploft-va-mic-btn{width:60px;height:60px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;box-shadow:0 6px 18px -4px var(--chat-launcher-shadow,rgba(224,47,58,.45))}',
       '#jploft-chat-root .jploft-va-mic-btn:hover{transform:scale(1.06);box-shadow:0 8px 22px -4px var(--chat-launcher-shadow,rgba(224,47,58,.55))}',
@@ -2039,9 +2398,7 @@
   function stopMicCapture() {
     keepMicOpen = false;
     if (vaMode && vaSession) {
-      try { vaSession.voiceChat.stop(); } catch (e) {}
-      try { vaSession.stopListening(); } catch (e2) {}
-      setMicButtonState(false);
+      stopVaMicCapture({ updateStatus: false });
       return;
     }
     if (speechRecognition) {
@@ -2099,11 +2456,12 @@
     };
 
     recognition.onend = function () {
-      if (keepMicOpen) {
+      if (keepMicOpen && !loading && !isAssistantSpeaking()) {
         try {
           recognition.start();
         } catch (e) {}
       } else {
+        keepMicOpen = false;
         setMicButtonState(false);
       }
     };
@@ -2120,31 +2478,102 @@
   function onMicButtonClick(event) {
     event.preventDefault();
     if (vaMode) {
+      var staleSpeakGate = Boolean(
+        vaAssistantSpeaking
+        && !loading
+        && vaLastSpeakStartedAt
+        && (Date.now() - vaLastSpeakStartedAt > 6000)
+      );
+
+      if (staleSpeakGate) {
+        vaAssistantSpeaking = false;
+        vaLastSpeakStartedAt = 0;
+        clearVaAssistantSpeakWatchdogTimer();
+      }
+
+      if (loading) {
+        vaAutoListenEnabled = false;
+        vaShouldResumeMicAfterReply = false;
+        vaResumeMicRetryCount = 0;
+        clearVaResumeMicRetryTimer();
+        stopVaMicCapture({ updateStatus: false });
+        setVaStatus('Assistant is thinking…');
+        return;
+      }
+
+      if (isAssistantSpeaking()) {
+        try { if (vaSession) vaSession.interrupt(); } catch (eInt) {}
+        vaAssistantSpeaking = false;
+        vaLastSpeakStartedAt = 0;
+        clearVaAssistantSpeakWatchdogTimer();
+        setSendButtonState();
+      }
+
       startVaSession()
         .then(function (session) {
           if (!session) return;
+
+          var beginMic = function () {
+            vaAutoListenEnabled = true;
+            vaResumeMicRetryCount = 0;
+            clearVaResumeMicRetryTimer();
+            startVaMicCapture(session)
+              .catch(function (error) {
+                // One delayed recovery attempt handles late SDK state transitions on mobile.
+                setTimeout(function () {
+                  if (!vaSession || loading || vaAssistantSpeaking) {
+                    vaAutoListenEnabled = false;
+                    stopVaMicCapture({ updateStatus: false });
+                    setVaStatus(error && error.message ? error.message : 'Microphone unavailable', true);
+                    return;
+                  }
+
+                  startVaMicCapture(session)
+                    .catch(function (retryError) {
+                      vaAutoListenEnabled = false;
+                      stopVaMicCapture({ updateStatus: false });
+                      setVaStatus(retryError && retryError.message ? retryError.message : 'Microphone unavailable', true);
+                    });
+                }, 350);
+              });
+          };
+
           if (micRecording) {
-            try { session.voiceChat.stop(); } catch (eStop) {}
-            try { session.stopListening(); } catch (ePoseStop) {}
-            setMicButtonState(false);
-            setVaStatus('Assistant ready');
+            vaAutoListenEnabled = false;
+            vaShouldResumeMicAfterReply = false;
+            vaResumeMicRetryCount = 0;
+            clearVaResumeMicRetryTimer();
+            stopVaMicCapture({ statusText: 'Assistant ready' });
             return;
           }
-          try { session.startListening(); } catch (ePoseStart) {}
-          Promise.resolve(session.voiceChat.start())
-            .then(function () {
-              setMicButtonState(true);
-              setVaStatus('Listening…');
-            })
-            .catch(function (error) {
-              setMicButtonState(false);
-              setVaStatus(error && error.message ? error.message : 'Microphone unavailable', true);
-            });
+
+          if (!vaSessionReady) {
+            setVaStatus('Connecting media…');
+            var waitUntil = Date.now() + 4000;
+            var waitTimer = setInterval(function () {
+              if (!vaSession || loading) {
+                clearInterval(waitTimer);
+                return;
+              }
+              if (vaSessionReady) {
+                clearInterval(waitTimer);
+                beginMic();
+                return;
+              }
+              if (Date.now() >= waitUntil) {
+                clearInterval(waitTimer);
+                beginMic();
+              }
+            }, 120);
+            return;
+          }
+
+          beginMic();
         })
         .catch(function () {});
       return;
     }
-    if ((!voiceEnabled && !vaMode) || loading) return;
+    if ((!voiceEnabled && !vaMode) || loading || isAssistantSpeaking()) return;
 
     if (micRecording) {
       vaPausedMicForTts = false;
@@ -2361,10 +2790,16 @@
     if (micBtn) {
       // In VA mode, hide footer mic (VA has its own mic button)
       micBtn.style.display = (voiceEnabled && !vaMode) ? 'inline-flex' : 'none';
-      micBtn.disabled = loading || !effectiveVoice;
+      micBtn.disabled = loading || isAssistantSpeaking() || !effectiveVoice;
     }
     if (vaMicBtnEl) {
+      // Keep VA mic enabled when not loading so user can recover from stale speaking state.
       vaMicBtnEl.disabled = loading;
+    }
+    if ((loading || isAssistantSpeaking()) && micRecording) {
+      if (!vaMode) {
+        stopMicCapture();
+      }
     }
     if (!effectiveVoice) {
       stopMicCapture();
@@ -2389,7 +2824,7 @@
     if (!sendBtn || !inputEl) return;
     var hasText = (inputEl.value || '').trim().length > 0;
     sendBtn.disabled = loading || !hasText;
-    if (micBtn) micBtn.disabled = loading || (!voiceEnabled && !vaMode);
+    if (micBtn) micBtn.disabled = loading || isAssistantSpeaking() || (!voiceEnabled && !vaMode);
     if (vaMicBtnEl) vaMicBtnEl.disabled = loading;
   }
 
@@ -2667,6 +3102,14 @@
     });
     var msgs = messages.slice(); // snapshot for API (user msg already included)
     loading = true;
+    if (vaMode && micRecording) {
+      vaAutoListenEnabled = true;
+      vaShouldResumeMicAfterReply = true;
+      vaResumeMicRetryCount = 0;
+      clearVaResumeMicRetryTimer();
+      // Removed stopVaMicCapture to prevent tearing down WebRTC track
+      setVaStatus('Listening… (Paused for API)');
+    }
     setSendButtonState();
     applyVoiceFeatureState();
     renderMessages();
@@ -2685,37 +3128,90 @@
       idempotencyKey: idempotencyKey,
     };
 
+    function parseChatMessageResponse(r) {
+      if (!r.ok) {
+        return r.text().then(function (text) {
+          var serverResponseBody = null;
+          try {
+            serverResponseBody = text ? JSON.parse(text) : null;
+          } catch (e2) {
+            serverResponseBody = text ? { raw: text.slice(0, 8000) } : null;
+          }
+          var msg =
+            (serverResponseBody && serverResponseBody.error) ||
+            (typeof text === 'string' && text.trim() ? text.trim().slice(0, 500) : '') ||
+            ('HTTP ' + r.status);
+          var errObj = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+          errObj.httpStatus = r.status;
+          errObj.serverResponseBody = serverResponseBody;
+          if (serverResponseBody && typeof serverResponseBody === 'object') {
+            errObj.requestId = serverResponseBody.requestId || undefined;
+            errObj.serverStage = serverResponseBody.stage || undefined;
+          }
+          throw errObj;
+        });
+      }
+      return r.json();
+    }
+
+    function showDefaultTechnicalIssue(err) {
+      var reason = err && err.message ? err.message : String(err);
+      var technicalIssueText = 'We are facing some technical issue. Please try again.';
+      resetOperatorRetryState();
+      pendingOperatorRetry = null;
+      operatorRetryInFlight = false;
+      console.error('[JPLoft Chat] send failed (user shown technical issue):', reason, err);
+      try {
+        fetch(apiUrl + '/chat/client-error', {
+          method: 'POST',
+          headers: mergeHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            companyId: companyId,
+            sessionId: sessionId || undefined,
+            reason: reason,
+            detail: err && err.stack ? String(err.stack).slice(0, 12000) : '',
+            pageUrl: pageUrl,
+            source: clientErrorSource,
+            embedIframePage: Boolean(forceOpen),
+            requestId: err && err.requestId,
+            serverStage: err && err.serverStage,
+            httpStatus: err && err.httpStatus,
+            serverResponseBody: err && err.serverResponseBody,
+            errorName: err && err.name,
+            networkError: Boolean(err && (err.message === 'Failed to fetch' || err.name === 'TypeError')),
+          }),
+        }).catch(function () {});
+      } catch (ignore) {}
+      messages.push({
+        role: 'assistant',
+        content: technicalIssueText,
+        createdAt: getNowIso(),
+      });
+      loading = false;
+      setSendButtonState();
+      applyVoiceFeatureState();
+      renderMessages();
+      persistState();
+      if (vaMode) {
+        setVaStatus('Assistant is speaking…');
+        speakVaAssistantText(vaSession, technicalIssueText, {
+          useBrowserFallback: false,
+          resumeMicOnEnd: true,
+          onDone: function () {
+            if (!loading) setVaStatus('Assistant ready');
+          },
+        });
+      }
+      if (callback) callback();
+    }
+
     function requestChatMessage(attempt) {
       return fetch(apiUrl + '/chat/message', {
         method: 'POST',
         headers: mergeHeaders({ 'Content-Type': 'application/json', 'X-Page-Url': pageUrl }),
         body: JSON.stringify(payload),
       })
-      .then(function (r) {
-        if (!r.ok) {
-          return r.text().then(function (text) {
-            var serverResponseBody = null;
-            try {
-              serverResponseBody = text ? JSON.parse(text) : null;
-            } catch (e2) {
-              serverResponseBody = text ? { raw: text.slice(0, 8000) } : null;
-            }
-            var msg =
-              (serverResponseBody && serverResponseBody.error) ||
-              (typeof text === 'string' && text.trim() ? text.trim().slice(0, 500) : '') ||
-              ('HTTP ' + r.status);
-            var errObj = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-            errObj.httpStatus = r.status;
-            errObj.serverResponseBody = serverResponseBody;
-            if (serverResponseBody && typeof serverResponseBody === 'object') {
-              errObj.requestId = serverResponseBody.requestId || undefined;
-              errObj.serverStage = serverResponseBody.stage || undefined;
-            }
-            throw errObj;
-          });
-        }
-        return r.json();
-      })
+      .then(parseChatMessageResponse)
       .catch(function (err) {
         var status = Number(err && err.httpStatus);
         var retryable = !status || status >= 500 || status === 429;
@@ -2769,10 +3265,16 @@
         var assistantIndex = messages.length - 1;
         if (vaMode) {
           // VA mode: make the avatar speak the response; skip browser/ElevenLabs TTS
-          setVaStatus(micRecording ? 'Listening…' : 'Assistant ready');
-          if (vaSession) {
-            try { vaSession.repeat(assistantText); } catch (eVaSpeak) {}
-          }
+          setVaStatus('Assistant is speaking…');
+          speakVaAssistantText(vaSession, assistantText, {
+            useBrowserFallback: false,
+            resumeMicOnEnd: true,
+            onDone: function (spokenByAvatar) {
+              if (!spokenByAvatar && !loading) {
+                setVaStatus('Assistant ready');
+              }
+            },
+          });
         } else if (voiceResponseEnabled) {
           if (voiceUrl) {
             playAssistantVoice(voiceUrl, assistantIndex);
@@ -2789,44 +3291,7 @@
       })
       .catch(function (err) {
         if (gen !== requestGeneration) return;
-        var reason = err && err.message ? err.message : String(err);
-        resetOperatorRetryState();
-        console.error('[JPLoft Chat] send failed (user shown technical issue):', reason, err);
-        try {
-          fetch(apiUrl + '/chat/client-error', {
-            method: 'POST',
-            headers: mergeHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({
-              companyId: companyId,
-              sessionId: sessionId || undefined,
-              reason: reason,
-              detail: err && err.stack ? String(err.stack).slice(0, 12000) : '',
-              pageUrl: pageUrl,
-              source: clientErrorSource,
-              embedIframePage: Boolean(forceOpen),
-              requestId: err && err.requestId,
-              serverStage: err && err.serverStage,
-              httpStatus: err && err.httpStatus,
-              serverResponseBody: err && err.serverResponseBody,
-              errorName: err && err.name,
-              networkError: Boolean(err && (err.message === 'Failed to fetch' || err.name === 'TypeError')),
-            }),
-          }).catch(function () {});
-        } catch (ignore) {}
-        // User message was already pushed optimistically — just add error assistant message.
-        messages.push({
-          role: 'assistant',
-          content: 'We are facing some technical issue. Please try again.',
-          createdAt: getNowIso(),
-        });
-        loading = false;
-        setSendButtonState();
-        applyVoiceFeatureState();
-        renderMessages();
-        if (vaMode) {
-          setVaStatus('Assistant ready');
-        }
-        if (callback) callback();
+        showDefaultTechnicalIssue(err);
       });
   }
 
@@ -2984,15 +3449,42 @@
       vaVideoEl = document.createElement('video');
       vaVideoEl.className = 'jploft-va-video';
       vaVideoEl.autoplay = true;
+      vaVideoEl.muted = true;
+      vaVideoEl.defaultMuted = true;
       vaVideoEl.playsInline = true;
       vaVideoEl.setAttribute('playsinline', '');
       vaVideoEl.setAttribute('webkit-playsinline', '');
+      vaVideoEl.addEventListener('loadedmetadata', markVaVideoReady);
+      vaVideoEl.addEventListener('loadeddata', markVaVideoReady);
+      vaVideoEl.addEventListener('canplay', markVaVideoReady);
+      vaVideoEl.addEventListener('playing', markVaVideoReady);
+      vaVideoEl.addEventListener('timeupdate', function () {
+        if (!vaMode) return;
+        vaVideoLastFrameAt = Date.now();
+      });
+      vaVideoEl.addEventListener('waiting', function () {
+        if (!vaMode || !vaSession) return;
+        scheduleVaVideoHealthCheck(vaSession, 1200);
+      });
+      vaVideoEl.addEventListener('stalled', function () {
+        if (!vaMode || !vaSession) return;
+        scheduleVaVideoHealthCheck(vaSession, 900);
+      });
+      vaVideoEl.addEventListener('pause', function () {
+        if (!vaMode || !vaSession) return;
+        scheduleVaVideoHealthCheck(vaSession, 1100);
+      });
       vaAvatarWrap.appendChild(vaVideoEl);
 
       vaProcessingEl = document.createElement('div');
       vaProcessingEl.className = 'jploft-va-processing is-hidden';
       vaProcessingEl.innerHTML = '<span class="jploft-va-processing-spinner" aria-hidden="true"></span>';
       vaAvatarWrap.appendChild(vaProcessingEl);
+
+      var vaSandboxWarningEl = document.createElement('div');
+      vaSandboxWarningEl.className = 'jploft-va-sandbox-warning';
+      vaSandboxWarningEl.textContent = 'Sandbox Mode, sessions are intentionally limited and will automatically terminate after approximately 1 minute.';
+      vaAvatarWrap.appendChild(vaSandboxWarningEl);
 
       vaOverlayEl = document.createElement('div');
       vaOverlayEl.className = 'jploft-va-overlay';
@@ -3001,7 +3493,7 @@
       vaStartBtnEl.className = 'jploft-va-start-btn';
       vaStartBtnEl.textContent = 'Start Assistant';
       vaStartBtnEl.addEventListener('click', function () {
-        tryResumeVaVideoPlayback();
+        tryResumeVaVideoPlayback({ allowAudio: true });
         startVaSession().catch(function () {});
       });
       vaStatusEl = document.createElement('div');
@@ -3020,7 +3512,7 @@
       vaMicBtnEl.setAttribute('aria-label', 'Start voice input');
       vaMicBtnEl.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
       vaMicBtnEl.addEventListener('click', onMicButtonClick);
-      vaMicBtnEl.addEventListener('click', tryResumeVaVideoPlayback);
+      vaMicBtnEl.addEventListener('click', function () { tryResumeVaVideoPlayback({ allowAudio: true }); });
       vaControlsArea.appendChild(vaMicBtnEl);
 
       var vaTranscriptToggle = document.createElement('button');
@@ -3254,7 +3746,31 @@
       headers: mergeHeaders({ 'Content-Type': 'application/json', 'X-Page-Url': typeof window !== 'undefined' ? window.location.href : '' }),
       body: JSON.stringify(Object.assign({}, pending, { operatorRetry: true })),
     })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('retry failed')); })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (text) {
+            var serverResponseBody = null;
+            try {
+              serverResponseBody = text ? JSON.parse(text) : null;
+            } catch (e2) {
+              serverResponseBody = text ? { raw: text.slice(0, 8000) } : null;
+            }
+            var msg =
+              (serverResponseBody && serverResponseBody.error) ||
+              (typeof text === 'string' && text.trim() ? text.trim().slice(0, 500) : '') ||
+              ('HTTP ' + r.status);
+            var errObj = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            errObj.httpStatus = r.status;
+            errObj.serverResponseBody = serverResponseBody;
+            if (serverResponseBody && typeof serverResponseBody === 'object') {
+              errObj.requestId = serverResponseBody.requestId || undefined;
+              errObj.serverStage = serverResponseBody.stage || undefined;
+            }
+            throw errObj;
+          });
+        }
+        return r.json();
+      })
       .then(function (retryData) {
         operatorRetryInFlight = false;
         if (retryData && retryData.operatorActive) {
@@ -3263,9 +3779,9 @@
             if (!presenceWs || presenceWs.readyState !== 1) {
               scheduleOperatorRetryPoll(8000);
             } else {
-              loading = false;
-              setSendButtonState();
-              renderMessages();
+              // WS is connected and operator is still active — keep loading visible.
+              // The WS will deliver the operator reply; stop any stale poll timer.
+              clearOperatorRetryTimer();
             }
           });
         }
@@ -3287,15 +3803,30 @@
         persistState();
         loadSessions();
       })
-      .catch(function () {
-        operatorRetryInFlight = false;
-        if (!presenceWs || presenceWs.readyState !== 1) {
-          scheduleOperatorRetryPoll(8000);
-        } else {
+      .catch(function (err) {
+        var status = Number(err && err.httpStatus);
+        if (status || !presenceWs || presenceWs.readyState !== 1) {
+          resetOperatorRetryState();
+          pendingOperatorRetry = null;
+          operatorRetryInFlight = false;
+          console.error('[JPLoft Chat] operator retry failed (user shown technical issue):', err && err.message ? err.message : String(err), err);
+          messages.push({
+            role: 'assistant',
+            content: 'We are facing some technical issue. Please try again.',
+            createdAt: getNowIso(),
+          });
           loading = false;
           setSendButtonState();
+          applyVoiceFeatureState();
           renderMessages();
+          persistState();
+          if (vaMode) {
+            setVaStatus('Assistant ready');
+          }
+          return;
         }
+        operatorRetryInFlight = false;
+        clearOperatorRetryTimer();
       });
   }
 
@@ -3340,6 +3871,10 @@
           wsReconnectTimer = null;
         }
         sendPresenceRegister(sessionId, window.location ? window.location.href : '');
+        // WS reconnected while waiting for operator — stop HTTP poll, WS will deliver the response
+        if (pendingOperatorRetry) {
+          clearOperatorRetryTimer();
+        }
       };
       presenceWs.onmessage = function (event) {
         try {
@@ -3376,6 +3911,13 @@
         presenceWs = null;
         if (!wsReconnectTimer) {
           wsReconnectTimer = setTimeout(connectPresenceWs, WS_RECONNECT_MS);
+        }
+        // WS dropped while waiting for operator — start HTTP poll fallback so we don't lose the loading state
+        if (pendingOperatorRetry && !operatorRetryTimer && !operatorRetryInFlight) {
+          // Reset the start-time so elapsed-time check in scheduleOperatorRetryPoll is fresh
+          operatorRetryStartTime = Date.now();
+          operatorRetryCount = 0;
+          scheduleOperatorRetryPoll(WS_RECONNECT_MS + 2000);
         }
       };
       presenceWs.onerror = function () {};
