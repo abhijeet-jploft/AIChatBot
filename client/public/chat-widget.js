@@ -278,9 +278,11 @@
   var vaGreetingSpeakInFlight = false;
   var vaOpeningTextFromServer = '';
   var vaGreetingFallbackTimer = null;
+  var vaPendingGreetingTimer = null;
   var vaAssistantSpeakFallbackTimer = null;
   var vaAssistantSpeakWatchdogTimer = null;
   var vaAwaitingGreetingAudio = false;
+  var vaGreetingClaimedGeneration = 0;
   var vaProcessingEl = null;
   var vaSilenceTimer = null;
   var vaAssistantSpeaking = false;
@@ -293,6 +295,13 @@
   var vaVideoLastFrameAt = 0;
   var vaVideoReady = false;
   var vaLastSpeakStartedAt = 0;
+  var vaLifecycleGeneration = 0;
+  var vaAudioMuted = false;
+  var vaMuteBtnEl = null;
+  var vaTranscriptToggleEl = null;
+  var vaTranscriptHideMobileEl = null;
+  var vaLastSpeakKey = '';
+  var vaLastSpeakAt = 0;
 
   var root = null;
   var launcher = null;
@@ -373,6 +382,47 @@
     vaStatusEl.classList.toggle('is-error', Boolean(isError));
   }
 
+  function updateVaMuteButtonState() {
+    if (!vaMuteBtnEl) return;
+    var nextLabel = vaAudioMuted ? 'Unmute' : 'Mute';
+    var icon = vaAudioMuted
+      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>';
+    vaMuteBtnEl.classList.toggle('is-active', vaAudioMuted);
+    vaMuteBtnEl.setAttribute('aria-label', nextLabel + ' assistant audio');
+    vaMuteBtnEl.setAttribute('title', nextLabel + ' assistant audio');
+    vaMuteBtnEl.innerHTML = icon + '<span class="jploft-va-icon-label">' + nextLabel + '</span>';
+  }
+
+  function applyVaAudioMuteState() {
+    if (vaVideoEl) {
+      try {
+        vaVideoEl.muted = vaAudioMuted;
+        vaVideoEl.defaultMuted = vaAudioMuted;
+        vaVideoEl.volume = vaAudioMuted ? 0 : 1;
+      } catch (eMute) {}
+    }
+    updateVaMuteButtonState();
+  }
+
+  function syncVaTranscriptLayout() {
+    if (!vaMode || !panel) return;
+    var mobileTranscriptOpen = isSmallScreen() && vaTranscriptVisible;
+    panel.classList.toggle('jploft-va-transcript-open', vaTranscriptVisible);
+    panel.classList.toggle('jploft-va-transcript-mobile-fullscreen', mobileTranscriptOpen);
+    if (vaTranscriptToggleEl) {
+      vaTranscriptToggleEl.style.display = 'inline-flex';
+      vaTranscriptToggleEl.setAttribute('aria-pressed', vaTranscriptVisible ? 'true' : 'false');
+      vaTranscriptToggleEl.setAttribute('aria-label', vaTranscriptVisible ? 'Hide transcript' : 'View transcript');
+      vaTranscriptToggleEl.setAttribute('title', vaTranscriptVisible ? 'Hide transcript' : 'View transcript');
+      vaTranscriptToggleEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h10"></path></svg><span class="jploft-va-icon-label">' + (vaTranscriptVisible ? 'Hide Transcript' : 'View Transcript') + '</span>';
+    }
+    if (vaTranscriptHideMobileEl) {
+      vaTranscriptHideMobileEl.style.display = mobileTranscriptOpen ? 'inline-flex' : 'none';
+      vaTranscriptHideMobileEl.setAttribute('aria-hidden', mobileTranscriptOpen ? 'false' : 'true');
+    }
+  }
+
   function setVaOverlayVisible(visible) {
     if (!vaOverlayEl) return;
     vaOverlayEl.classList.toggle('is-hidden', !visible);
@@ -391,7 +441,7 @@
 
   function tryResumeVaVideoPlayback(options) {
     options = options || {};
-    var allowAudio = options.allowAudio === true;
+    var allowAudio = options.allowAudio === true && !vaAudioMuted;
     if (!vaVideoEl) return;
     try {
       vaVideoEl.muted = !allowAudio;
@@ -413,6 +463,21 @@
       clearTimeout(vaGreetingFallbackTimer);
       vaGreetingFallbackTimer = null;
     }
+  }
+
+  function clearVaPendingGreetingTimer() {
+    if (vaPendingGreetingTimer) {
+      clearTimeout(vaPendingGreetingTimer);
+      vaPendingGreetingTimer = null;
+    }
+  }
+
+  function scheduleVaGreeting(session, expectedGeneration) {
+    clearVaPendingGreetingTimer();
+    vaPendingGreetingTimer = setTimeout(function () {
+      vaPendingGreetingTimer = null;
+      maybeSpeakVaGreeting(session, expectedGeneration);
+    }, 900);
   }
 
   function clearVaAssistantSpeakFallbackTimer() {
@@ -559,6 +624,17 @@
       return;
     }
 
+    // Guard against duplicate replay of identical speech (commonly seen on mobile resume/retry paths).
+    var speakKey = String((session && session.session_id) || (session && session.id) || 'session') + '::' + speechText.toLowerCase();
+    var now = Date.now();
+    if (speakKey === vaLastSpeakKey && (now - vaLastSpeakAt) < 2200) {
+      if (onDone) onDone(false);
+      if (resumeMicOnEnd) maybeResumeVaMicAfterAssistantSpeech(session);
+      return;
+    }
+    vaLastSpeakKey = speakKey;
+    vaLastSpeakAt = now;
+
     clearVaAssistantSpeakFallbackTimer();
     if (markGreeting) {
       vaGreetingSpeakInFlight = true;
@@ -579,7 +655,8 @@
     }
 
     function speakWithBrowserFallback() {
-      if (!useBrowserFallback) {
+      // VA mode must never fallback to browser TTS; it creates duplicate/voice-mismatch playback on mobile.
+      if (vaMode || !useBrowserFallback) {
         finish(false);
         if (resumeMicOnEnd) maybeResumeVaMicAfterAssistantSpeech(session);
         return;
@@ -594,30 +671,39 @@
     if (session && typeof session.repeat === 'function') {
       var didFirstAttemptSucceed = true;
       try {
+        // Cancel stale browser speech that can linger after mobile tab/background transitions.
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          speechUtterance = null;
+        }
         session.repeat(speechText);
       } catch (eRepeat) {
         didFirstAttemptSucceed = false;
       }
 
-      var retryCount = 0;
+      var retriedOnce = false;
       var tryAgain = function() {
         if (vaAssistantSpeaking) return;
 
+        if (retriedOnce) {
+          speakWithBrowserFallback();
+          return;
+        }
+
+        retriedOnce = true;
         try {
           session.repeat(speechText);
-        } catch (eRetry) {}
-
-        if (!vaAssistantSpeaking) {
-          retryCount++;
-          if (retryCount < 8) {
-            vaAssistantSpeakFallbackTimer = setTimeout(tryAgain, 600);
-            return;
-          }
+        } catch (eRetry) {
           speakWithBrowserFallback();
+          return;
         }
+
+        vaAssistantSpeakFallbackTimer = setTimeout(function () {
+          if (!vaAssistantSpeaking) speakWithBrowserFallback();
+        }, 1800);
       };
 
-      vaAssistantSpeakFallbackTimer = setTimeout(tryAgain, didFirstAttemptSucceed ? 3200 : 500);
+      vaAssistantSpeakFallbackTimer = setTimeout(tryAgain, didFirstAttemptSucceed ? 4200 : 900);
       return;
     }
 
@@ -644,12 +730,32 @@
     vaPausedMicForTts = false;
 
     if (vaSession) {
-      try { vaSession.voiceChat.stop(); } catch (eStop) {}
+      try {
+        if (vaSession.voiceChat && typeof vaSession.voiceChat.stop === 'function') {
+          vaSession.voiceChat.stop();
+        }
+      } catch (eStop) {}
       try { vaSession.stopListening(); } catch (eListening) {}
     }
 
     setMicButtonState(false);
     if (shouldUpdateStatus) setVaStatus(nextStatus);
+  }
+
+  function pauseVaMicCaptureForReply(statusText) {
+    clearVaSilenceTimer();
+    clearVaListeningRefreshTimer();
+    keepMicOpen = false;
+    if (vaSession) {
+      try { vaSession.stopListening(); } catch (eListening) {}
+      try {
+        if (vaSession.voiceChat && typeof vaSession.voiceChat.stop === 'function') {
+          vaSession.voiceChat.stop();
+        }
+      } catch (eVoice) {}
+    }
+    setMicButtonState(false);
+    if (statusText) setVaStatus(statusText);
   }
 
   function armVaSilenceAutoStop() {
@@ -668,9 +774,17 @@
     if (!session) return Promise.reject(new Error('Virtual assistant not ready'));
     if (!vaSessionReady) return Promise.reject(new Error('Assistant is still connecting'));
     clearVaSilenceTimer();
+
+    var startVoiceChat = function () {
+      if (!session.voiceChat || typeof session.voiceChat.start !== 'function') {
+        return Promise.reject(new Error('Voice chat is unavailable for this assistant session'));
+      }
+      return Promise.resolve(session.voiceChat.start());
+    };
+
     var attemptPrimary = function () {
       try { session.startListening(); } catch (ePoseStart) {}
-      return Promise.resolve(session.voiceChat.start());
+      return startVoiceChat();
     };
 
     var attemptRecovery = function () {
@@ -681,7 +795,7 @@
       } catch (eVoiceStop) {}
       try { session.stopListening(); } catch (eStopListening) {}
       try { session.startListening(); } catch (eStartListening) {}
-      return Promise.resolve(session.voiceChat.start());
+      return startVoiceChat();
     };
 
     return attemptPrimary()
@@ -689,6 +803,7 @@
         return attemptRecovery();
       })
       .then(function () {
+        keepMicOpen = true;
         setMicButtonState(true);
         setVaStatus('Listening…');
         scheduleVaListeningRefresh(session);
@@ -696,11 +811,17 @@
       });
   }
 
-  function maybeSpeakVaGreeting(session) {
+  function maybeSpeakVaGreeting(session, expectedGeneration) {
     if (!vaMode || vaGreetingSpokenForSession || vaGreetingSpeakInFlight) return;
+    if (session && session !== vaSession) return;
+    if (expectedGeneration && expectedGeneration !== vaLifecycleGeneration) return;
+    if (vaGreetingClaimedGeneration === vaLifecycleGeneration) return;
+    vaGreetingClaimedGeneration = vaLifecycleGeneration;
 
     // Optional default fallback or custom override
-    var greetingText = String(getOpeningMessage() || '').trim() || String(vaOpeningTextFromServer || '').trim();
+    var greetingText = vaMode
+      ? (String(vaOpeningTextFromServer || '').trim() || String(getOpeningMessage() || '').trim())
+      : String(getOpeningMessage() || '').trim();
     if (!greetingText) {
       vaGreetingSpokenForSession = true;
       if (vaAutoListenEnabled) maybeResumeVaMicAfterAssistantSpeech(session);
@@ -798,8 +919,13 @@
     persistState();
   }
 
-  function bindVaSessionEvents(session) {
+  function bindVaSessionEvents(session, sessionGeneration) {
+    function isStaleVaSession() {
+      return sessionGeneration !== vaLifecycleGeneration || session !== vaSession;
+    }
+
     session.on('session.stream_ready', function () {
+      if (isStaleVaSession()) return;
       vaSessionReady = true;
       vaVideoReady = false;
       vaVideoLastFrameAt = 0;
@@ -807,19 +933,19 @@
         try {
           session.attach(vaVideoEl);
         } catch (e) {}
+        applyVaAudioMuteState();
         tryResumeVaVideoPlayback({ allowAudio: false });
       }
       setVaStatus('Connecting media…');
       setVaOverlayVisible(true);
       scheduleVaVideoHealthCheck(session, 1800);
-      maybeSpeakVaGreeting(session);
-      setTimeout(function () {
-        maybeSpeakVaGreeting(session);
-      }, 600);
+      scheduleVaGreeting(session, sessionGeneration);
     });
     session.on('session.disconnected', function () {
+      if (isStaleVaSession()) return;
       vaSessionReady = false;
       clearVaKeepAlive();
+      clearVaPendingGreetingTimer();
       clearVaGreetingFallbackTimer();
       clearVaAssistantSpeakFallbackTimer();
       clearVaAssistantSpeakWatchdogTimer();
@@ -833,6 +959,8 @@
       vaResumeMicRetryCount = 0;
       vaVideoReady = false;
       vaVideoLastFrameAt = 0;
+      vaLastSpeakKey = '';
+      vaLastSpeakAt = 0;
       vaSession = null;
       vaSessionStartPromise = null;
       setMicButtonState(false);
@@ -844,6 +972,7 @@
       }
     });
     session.on('user.transcription', function (event) {
+      if (isStaleVaSession()) return;
       var spokenText = String(event && event.text || '').trim();
       if (!spokenText || loading || vaAssistantSpeaking) return;
       armVaSilenceAutoStop();
@@ -854,12 +983,15 @@
       setVaStatus('Assistant is thinking…');
     });
     session.on('user.speak_started', function () {
+      if (isStaleVaSession()) return;
       if (loading || vaAssistantSpeaking) return;
       setVaStatus('Listening…');
       scheduleVaListeningRefresh(session);
       armVaSilenceAutoStop();
     });
     session.on('avatar.speak_started', function () {
+      if (isStaleVaSession()) return;
+      clearVaPendingGreetingTimer();
       vaAssistantSpeaking = true;
       vaLastSpeakStartedAt = Date.now();
       clearVaAssistantSpeakFallbackTimer();
@@ -886,21 +1018,26 @@
       }
       tryResumeVaVideoPlayback({ allowAudio: true });
       setVaStatus('Assistant is speaking…');
+      setMicButtonState(micRecording);
     });
     session.on('avatar.speak_ended', function () {
+      if (isStaleVaSession()) return;
       vaAssistantSpeaking = false;
       vaLastSpeakStartedAt = 0;
       clearVaAssistantSpeakWatchdogTimer();
       clearVaSilenceTimer();
       setSendButtonState();
       setVaStatus('Assistant ready');
+      setMicButtonState(micRecording);
       maybeResumeVaMicAfterAssistantSpeech(session);
     });
   }
 
   function stopVaSession() {
+    vaLifecycleGeneration += 1;
     vaSessionReady = false;
     clearVaKeepAlive();
+    clearVaPendingGreetingTimer();
     clearVaGreetingFallbackTimer();
     clearVaAssistantSpeakFallbackTimer();
     clearVaAssistantSpeakWatchdogTimer();
@@ -911,6 +1048,7 @@
     vaTranscriptSender = null;
     vaGreetingSpokenForSession = false;
     vaGreetingSpeakInFlight = false;
+    vaGreetingClaimedGeneration = 0;
     vaAwaitingGreetingAudio = false;
     vaAssistantSpeaking = false;
     vaShouldResumeMicAfterReply = false;
@@ -918,6 +1056,8 @@
     vaResumeMicRetryCount = 0;
     vaVideoReady = false;
     vaVideoLastFrameAt = 0;
+    vaLastSpeakKey = '';
+    vaLastSpeakAt = 0;
     if (vaSession) {
       var currentSession = vaSession;
       vaSession = null;
@@ -928,6 +1068,7 @@
     vaSessionStartPromise = null;
     setMicButtonState(false);
     setVaOverlayVisible(true);
+    applyVaAudioMuteState();
     if (vaStartBtnEl) {
       vaStartBtnEl.disabled = false;
       vaStartBtnEl.textContent = 'Start Assistant';
@@ -938,6 +1079,9 @@
     if (!vaMode) return Promise.resolve(null);
     if (vaSessionStartPromise) return vaSessionStartPromise;
     if (vaSession) return Promise.resolve(vaSession);
+
+    var sessionGeneration = vaLifecycleGeneration + 1;
+    vaLifecycleGeneration = sessionGeneration;
 
     setVaStatus('Starting assistant…');
     setVaOverlayVisible(true);
@@ -952,12 +1096,18 @@
           throw new Error('LiveAvatar SDK failed to load');
         }
         vaSessionReady = false;
-        vaSession = new sdk.LiveAvatarSession(sessionInfo.sessionToken, { voiceChat: false });
+        var nextSession = new sdk.LiveAvatarSession(sessionInfo.sessionToken, { voiceChat: true });
         vaGreetingSpokenForSession = false;
         vaGreetingSpeakInFlight = false;
+        vaGreetingClaimedGeneration = 0;
         vaAutoListenEnabled = true; // Default to auto-listening for initial greeting
-        bindVaSessionEvents(vaSession);
-        return vaSession.start().then(function () {
+        vaSession = nextSession;
+        bindVaSessionEvents(nextSession, sessionGeneration);
+        return nextSession.start().then(function () {
+          if (sessionGeneration !== vaLifecycleGeneration || nextSession !== vaSession) {
+            try { nextSession.stop(); } catch (eStop) {}
+            return null;
+          }
           // Greeting moved exclusively to session.stream_ready to avoid early SDK stream dropping
           clearVaKeepAlive();
           vaKeepAliveTimer = setInterval(function () {
@@ -971,10 +1121,14 @@
           persistState();
           setVaStatus('Connecting media…');
           if (vaStartBtnEl) vaStartBtnEl.textContent = 'Restart Assistant';
-          return vaSession;
+          applyVaAudioMuteState();
+          return nextSession;
         });
       })
       .catch(function (error) {
+        if (sessionGeneration !== vaLifecycleGeneration) {
+          return null;
+        }
         vaSessionReady = false;
         vaSession = null;
         setVaOverlayVisible(true);
@@ -1339,6 +1493,7 @@
     widgetButtonPos = clampWidgetButtonPosition(widgetButtonPos, vp.width, vp.height);
     applyWidgetButtonPosition();
     updatePanelPosition();
+    syncVaTranscriptLayout();
   }
 
   function withDragGuard(action) {
@@ -1729,7 +1884,10 @@
       '@media(max-width:1024px){#jploft-chat-root .jploft-panel{inset:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;border-radius:0;border:0;box-shadow:none}#jploft-chat-root .jploft-lead-grid{grid-template-columns:minmax(0,1fr)}#jploft-chat-root .jploft-close-fab{display:none !important}#jploft-chat-root .jploft-btn,#jploft-chat-root .jploft-close-fab{right:14px;bottom:14px}}',
 
       /* ── Virtual Assistant mode ── */
-      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-avatar-wrap{flex:1 1 auto;min-height:180px;background:#000;position:relative;overflow:hidden}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode{width:min(1120px,calc(100vw - 24px));height:min(760px,calc(100vh - 24px));max-height:calc(100vh - 24px)}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-shell{display:flex;flex:1 1 auto;min-height:0;background:var(--chat-surface)}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-media-column{display:flex;flex-direction:column;flex:1 1 100%;min-width:0;max-width:none;background:#050505;min-height:0}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-avatar-wrap{flex:1 1 auto;min-height:220px;background:#000;position:relative;overflow:hidden}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-video{width:100%;height:100%;display:block;object-fit:cover;background:#000}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,.62));transition:opacity .18s ease}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-overlay.is-hidden{opacity:0;pointer-events:none}',
@@ -1741,17 +1899,24 @@
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-status{max-width:80%;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:12px;line-height:1.35;text-align:center;backdrop-filter:blur(8px)}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-status.is-error{background:rgba(185,28,28,.65)}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-sandbox-warning{position:absolute;top:10px;left:50%;transform:translateX(-50%);max-width:90%;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;line-height:1.35;text-align:center;backdrop-filter:blur(8px);z-index:5;pointer-events:none}',
-      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-controls{display:flex;flex-direction:column;align-items:center;padding:14px 16px 8px;gap:10px;background:var(--chat-surface);border-top:1px solid var(--chat-border);flex-shrink:0}',
-      '#jploft-chat-root .jploft-va-mic-btn{width:60px;height:60px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;box-shadow:0 6px 18px -4px var(--chat-launcher-shadow,rgba(224,47,58,.45))}',
-      '#jploft-chat-root .jploft-va-mic-btn:hover{transform:scale(1.06);box-shadow:0 8px 22px -4px var(--chat-launcher-shadow,rgba(224,47,58,.55))}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-controls{display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 16px;background:var(--chat-surface);border-top:1px solid var(--chat-border);flex-shrink:0;flex-wrap:wrap}',
+      '#jploft-chat-root .jploft-va-mic-btn{height:44px;padding:0 18px;border-radius:999px;border:none;background:linear-gradient(135deg,var(--chat-launcher-gradient-start),var(--chat-launcher-gradient-end));color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;flex-shrink:0;transition:all .2s;box-shadow:0 6px 18px -4px var(--chat-launcher-shadow,rgba(224,47,58,.45));font-size:13px;font-weight:700}',
+      '#jploft-chat-root .jploft-va-mic-btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px -4px var(--chat-launcher-shadow,rgba(224,47,58,.55))}',
       '#jploft-chat-root .jploft-va-mic-btn.is-recording{background:#dc2626;box-shadow:0 0 0 5px rgba(220,38,38,.22);animation:jploft-va-pulse 1.5s ease-in-out infinite}',
+      '#jploft-chat-root .jploft-va-mic-btn.is-interrupt{background:#111827;box-shadow:0 0 0 5px rgba(17,24,39,.16)}',
       '#jploft-chat-root .jploft-va-mic-btn:disabled{opacity:.55;cursor:not-allowed;transform:none}',
-      '#jploft-chat-root .jploft-va-transcript-toggle{display:flex;align-items:center;gap:6px;padding:7px 16px;border:none;border-radius:20px;background:var(--chat-bg);color:var(--chat-muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.02em}',
-      '#jploft-chat-root .jploft-va-transcript-toggle:hover{color:var(--chat-text);background:var(--chat-border)}',
-      '#jploft-chat-root .jploft-va-transcript-toggle svg{transition:transform .25s ease}',
-      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-fullscreen-inner{display:none !important}',
+      '#jploft-chat-root .jploft-va-mic-btn .jploft-va-btn-label{white-space:nowrap}',
+      '#jploft-chat-root .jploft-va-icon-btn{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 16px;border:none;border-radius:999px;background:var(--chat-bg);color:var(--chat-muted);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.02em}',
+      '#jploft-chat-root .jploft-va-icon-btn:hover{background:var(--chat-border);color:var(--chat-text)}',
+      '#jploft-chat-root .jploft-va-icon-btn.is-active{background:#111827;color:#fff}',
+      '#jploft-chat-root .jploft-va-icon-label{white-space:nowrap}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-fullscreen-inner{display:none !important;flex:1 1 auto;min-width:0;min-height:0;background:var(--chat-surface)}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-open .jploft-fullscreen-inner{display:flex !important;flex:1 1 auto;min-height:0}',
-      '#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-open .jploft-va-avatar-wrap{flex:0 0 38%;min-height:120px}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-open .jploft-va-media-column{flex:0 0 42%;min-width:320px;max-width:460px;border-right:1px solid var(--chat-border)}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-sidebar{display:none !important}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-main{width:100%;min-width:0}',
+      '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-body{background:linear-gradient(180deg,#fafafa 0%,#f4f4f5 100%)}',
+      '@media (max-width: 900px){#jploft-chat-root .jploft-panel.jploft-va-mode{width:calc(100vw - 16px);height:calc(100vh - 16px)}#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-shell{position:relative;display:block}#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-media-column{width:100%;max-width:none;min-width:0;height:100%;border-right:none}#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-open .jploft-va-media-column{width:100%;max-width:none;min-width:0;border-right:none}#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-avatar-wrap{min-height:calc(100vh - 190px)}#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-fullscreen-inner{display:none !important;position:absolute;inset:0;z-index:4}#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-mobile-fullscreen .jploft-fullscreen-inner{display:flex !important}#jploft-chat-root .jploft-panel.jploft-va-mode.jploft-va-transcript-mobile-fullscreen .jploft-va-media-column{display:none}#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-va-controls{justify-content:space-between}}',
       '#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-btn,#jploft-chat-root .jploft-panel.jploft-va-mode .jploft-close-fab{display:none !important}',
       '@keyframes jploft-va-pulse{0%,100%{box-shadow:0 0 0 5px rgba(220,38,38,.22)}50%{box-shadow:0 0 0 10px rgba(220,38,38,.08)}}'
     ].join('\n');
@@ -2375,11 +2540,18 @@
         : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
     }
     if (vaMicBtnEl) {
-      vaMicBtnEl.classList.toggle('is-recording', micRecording);
-      vaMicBtnEl.setAttribute('aria-label', micRecording ? 'Stop voice input' : 'Start voice input');
-      vaMicBtnEl.innerHTML = micRecording
-        ? '<span class="jploft-mic-wave" style="color:#fff"><span></span></span>'
-        : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+      var vaInterrupting = vaMode && vaAssistantSpeaking;
+      var vaLabel = vaInterrupting ? 'Interrupt' : (micRecording ? 'Listening' : 'Mic');
+      var vaIcon = vaInterrupting
+        ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"></path></svg>'
+        : (micRecording
+          ? '<span class="jploft-mic-wave" style="color:#fff"><span></span></span>'
+          : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>');
+      vaMicBtnEl.classList.toggle('is-recording', micRecording && !vaInterrupting);
+      vaMicBtnEl.classList.toggle('is-interrupt', vaInterrupting);
+      vaMicBtnEl.setAttribute('aria-label', vaInterrupting ? 'Interrupt the assistant' : (micRecording ? 'Stop voice input' : 'Start voice input'));
+      vaMicBtnEl.setAttribute('title', vaInterrupting ? 'Interrupt the assistant' : (micRecording ? 'Stop voice input' : 'Start voice input'));
+      vaMicBtnEl.innerHTML = vaIcon + '<span class="jploft-va-btn-label">' + vaLabel + '</span>';
     }
   }
 
@@ -2796,6 +2968,8 @@
       // Keep VA mic enabled when not loading so user can recover from stale speaking state.
       vaMicBtnEl.disabled = loading;
     }
+    updateVaMuteButtonState();
+    syncVaTranscriptLayout();
     if ((loading || isAssistantSpeaking()) && micRecording) {
       if (!vaMode) {
         stopMicCapture();
@@ -2826,6 +3000,7 @@
     sendBtn.disabled = loading || !hasText;
     if (micBtn) micBtn.disabled = loading || isAssistantSpeaking() || (!voiceEnabled && !vaMode);
     if (vaMicBtnEl) vaMicBtnEl.disabled = loading;
+    setMicButtonState(micRecording);
   }
 
   function resizeInput() {
@@ -3107,8 +3282,7 @@
       vaShouldResumeMicAfterReply = true;
       vaResumeMicRetryCount = 0;
       clearVaResumeMicRetryTimer();
-      // Removed stopVaMicCapture to prevent tearing down WebRTC track
-      setVaStatus('Listening… (Paused for API)');
+      pauseVaMicCaptureForReply('Listening… (Paused for API)');
     }
     setSendButtonState();
     applyVoiceFeatureState();
@@ -3368,6 +3542,9 @@
           '</div>' +
         '</div>' +
         '<div class="jploft-right">' +
+          '<button type="button" class="jploft-icon-btn jploft-va-hide-transcript-btn" aria-label="Hide transcript" title="Hide transcript" style="display:none">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h10"></path></svg>' +
+          '</button>' +
           '<button type="button" class="jploft-icon-btn jploft-close-btn" aria-label="Close widget" title="Close">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
           '</button>' +
@@ -3400,6 +3577,13 @@
 
     var closeBtn = panel.querySelector('.jploft-close-btn');
     closeBtn.onclick = closePanel;
+    vaTranscriptHideMobileEl = panel.querySelector('.jploft-va-hide-transcript-btn');
+    if (vaTranscriptHideMobileEl) {
+      vaTranscriptHideMobileEl.onclick = function () {
+        vaTranscriptVisible = false;
+        syncVaTranscriptLayout();
+      };
+    }
     var newBtn = panel.querySelector('.jploft-new-btn');
     if (newBtn) {
       newBtn.onclick = function (e) {
@@ -3444,6 +3628,12 @@
     // ── VA mode: inject avatar, mic, transcript toggle ──
     if (vaMode) {
       panel.classList.add('jploft-va-mode');
+
+      var fullscreenInner = panel.querySelector('.jploft-fullscreen-inner');
+      var vaShell = document.createElement('div');
+      vaShell.className = 'jploft-va-shell';
+      var vaMediaColumn = document.createElement('div');
+      vaMediaColumn.className = 'jploft-va-media-column';
 
       var vaAvatarWrap = document.createElement('div');
       vaAvatarWrap.className = 'jploft-va-avatar-wrap';
@@ -3511,30 +3701,42 @@
       vaMicBtnEl.type = 'button';
       vaMicBtnEl.className = 'jploft-va-mic-btn';
       vaMicBtnEl.setAttribute('aria-label', 'Start voice input');
-      vaMicBtnEl.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+      vaMicBtnEl.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg><span class="jploft-va-btn-label">Mic</span>';
       vaMicBtnEl.addEventListener('click', onMicButtonClick);
       vaMicBtnEl.addEventListener('click', function () { tryResumeVaVideoPlayback({ allowAudio: true }); });
       vaControlsArea.appendChild(vaMicBtnEl);
 
-      var vaTranscriptToggle = document.createElement('button');
-      vaTranscriptToggle.type = 'button';
-      vaTranscriptToggle.className = 'jploft-va-transcript-toggle';
-      vaTranscriptToggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg><span>View Transcript</span>';
-      vaTranscriptToggle.addEventListener('click', function () {
+      vaMuteBtnEl = document.createElement('button');
+      vaMuteBtnEl.type = 'button';
+      vaMuteBtnEl.className = 'jploft-va-icon-btn';
+      vaMuteBtnEl.addEventListener('click', function () {
+        vaAudioMuted = !vaAudioMuted;
+        applyVaAudioMuteState();
+        tryResumeVaVideoPlayback({ allowAudio: !vaAudioMuted });
+      });
+      vaControlsArea.appendChild(vaMuteBtnEl);
+
+      vaTranscriptToggleEl = document.createElement('button');
+      vaTranscriptToggleEl.type = 'button';
+      vaTranscriptToggleEl.className = 'jploft-va-icon-btn';
+      vaTranscriptToggleEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h10"></path></svg><span class="jploft-va-icon-label">View Transcript</span>';
+      vaTranscriptToggleEl.addEventListener('click', function () {
         vaTranscriptVisible = !vaTranscriptVisible;
-        panel.classList.toggle('jploft-va-transcript-open', vaTranscriptVisible);
-        var arrowSvg = vaTranscriptToggle.querySelector('svg');
-        if (arrowSvg) arrowSvg.style.transform = vaTranscriptVisible ? 'rotate(180deg)' : '';
-        vaTranscriptToggle.querySelector('span').textContent = vaTranscriptVisible ? 'Hide Transcript' : 'View Transcript';
+        syncVaTranscriptLayout();
         if (vaTranscriptVisible && messagesEl) {
           setTimeout(function () { messagesEl.scrollTop = messagesEl.scrollHeight; }, 60);
         }
       });
-      vaControlsArea.appendChild(vaTranscriptToggle);
+      vaControlsArea.appendChild(vaTranscriptToggleEl);
 
-      var fullscreenInner = panel.querySelector('.jploft-fullscreen-inner');
-      panel.insertBefore(vaAvatarWrap, fullscreenInner);
-      panel.insertBefore(vaControlsArea, fullscreenInner);
+      vaMediaColumn.appendChild(vaAvatarWrap);
+      vaMediaColumn.appendChild(vaControlsArea);
+      vaShell.appendChild(vaMediaColumn);
+      vaShell.appendChild(fullscreenInner);
+      panel.appendChild(vaShell);
+      vaTranscriptVisible = false;
+      applyVaAudioMuteState();
+      syncVaTranscriptLayout();
     }
 
     root.appendChild(launcher);

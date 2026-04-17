@@ -201,6 +201,7 @@ router.get('/staff/audit-logs', requireSuperAuth, requirePermission('user_manage
 function saVaProxy(handler) {
 	return (req, res, next) => {
 		req.adminCompanyId = req.params.companyId;
+		req.adminSettingsAccessBypass = true;
 		return handler(req, res, next);
 	};
 }

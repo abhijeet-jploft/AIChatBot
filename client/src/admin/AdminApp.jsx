@@ -112,17 +112,27 @@ function AdminLayout({ children }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef(null);
+  const visibleSearchEntries = useMemo(
+    () => ADMIN_SEARCH_ENTRIES.filter((entry) => {
+      if (entry.to === '/admin/virtual-assistant') return canAccessVA;
+      if (entry.to === '/admin/voice-settings') return canAccessVoiceSettings;
+      if (entry.to === '/admin/modes') return canAccessAiMode;
+      if (entry.to === '/admin/training') return canAccessTraining;
+      return true;
+    }),
+    [canAccessAiMode, canAccessTraining, canAccessVA, canAccessVoiceSettings]
+  );
 
   const searchResults = useMemo(() => {
     const q = normalizeSearch(searchQuery);
     if (!q) return [];
-    return ADMIN_SEARCH_ENTRIES
+    return visibleSearchEntries
       .filter((entry) => {
         const haystack = `${entry.page} ${entry.text} ${entry.keywords}`.toLowerCase();
         return haystack.includes(q);
       })
       .slice(0, 10);
-  }, [searchQuery]);
+  }, [searchQuery, visibleSearchEntries]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;

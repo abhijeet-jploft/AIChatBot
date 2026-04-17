@@ -97,12 +97,10 @@ function defaultSafety() {
   };
 }
 
-function getActiveSettingsSection(activeTab, generalSubTab) {
-  if (activeTab === 'general') {
-    if (generalSubTab === 'business') return 'general-business';
-    if (generalSubTab === 'website') return 'general-website';
-    return 'general-branding';
-  }
+function getActiveSettingsSection(activeTab) {
+  if (activeTab === 'branding') return 'general-branding';
+  if (activeTab === 'business') return 'general-business';
+  if (activeTab === 'website') return 'general-website';
   if (activeTab === 'chat') return 'chat';
   if (activeTab === 'policies') return 'policies';
   return 'general-branding';
@@ -141,15 +139,13 @@ export default function Settings() {
   const [safety, setSafety] = useState(defaultSafety);
   const [embed, setEmbed] = useState(null);
   const [adminVisibility, setAdminVisibility] = useState(() => mergeAdminVisibility());
-  const [activeTab, setActiveTab] = useState('general');
-  /** Sub-sections inside General (reduces scrolling). */
-  const [generalSubTab, setGeneralSubTab] = useState('branding');
+  const [activeTab, setActiveTab] = useState('branding');
 
   const tabChatVisible = adminVisibility.settings.chatLanguages || adminVisibility.settings.autoTrigger;
   const tabPoliciesVisible = adminVisibility.settings.escalation || adminVisibility.settings.safety;
 
   const validTabs = useMemo(() => {
-    const t = ['general'];
+    const t = ['branding', 'business', 'website'];
     if (tabChatVisible) t.push('chat');
     if (tabPoliciesVisible) t.push('policies');
     return t;
@@ -161,8 +157,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (location.hash === '#chatbot-name' || location.hash === '#company-name') {
-      setActiveTab('general');
-      setGeneralSubTab('branding');
+      setActiveTab('branding');
       requestAnimationFrame(() => {
         const id = location.hash === '#company-name' ? 'company-name' : 'chatbot-name';
         document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -272,7 +267,7 @@ export default function Settings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const activeSection = getActiveSettingsSection(activeTab, generalSubTab);
+    const activeSection = getActiveSettingsSection(activeTab);
     const coName = companyName.trim();
     var payload = {};
 
@@ -423,9 +418,6 @@ export default function Settings() {
   const tabBtnClass = (id) =>
     `nav-link py-2 px-3 ${activeTab === id ? 'active' : ''}`;
 
-  const generalSubBtnClass = (id) =>
-    `nav-link py-1 px-3 small ${generalSubTab === id ? 'active' : ''}`;
-
   return (
     <div className="p-4" id="settings-top">
       <h5 className="mb-3" style={{ color: 'var(--chat-text-heading)' }}>Company settings</h5>
@@ -436,8 +428,18 @@ export default function Settings() {
           role="tablist"
         >
           <li className="nav-item" role="presentation">
-            <button type="button" className={tabBtnClass('general')} onClick={() => setActiveTab('general')} style={{ color: activeTab === 'general' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'general' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
-              General
+            <button type="button" className={tabBtnClass('branding')} onClick={() => setActiveTab('branding')} style={{ color: activeTab === 'branding' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'branding' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
+              Branding &amp; greeting
+            </button>
+          </li>
+          <li className="nav-item" role="presentation">
+            <button type="button" className={tabBtnClass('business')} onClick={() => setActiveTab('business')} style={{ color: activeTab === 'business' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'business' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
+              Business information
+            </button>
+          </li>
+          <li className="nav-item" role="presentation">
+            <button type="button" className={tabBtnClass('website')} onClick={() => setActiveTab('website')} style={{ color: activeTab === 'website' ? 'var(--chat-text-heading)' : 'var(--chat-muted)', background: activeTab === 'website' ? 'var(--chat-surface)' : 'transparent', borderColor: 'var(--chat-border)' }}>
+              Widget, embed &amp; leads
             </button>
           </li>
           {tabChatVisible ? (
@@ -456,60 +458,11 @@ export default function Settings() {
           ) : null}
         </ul>
 
-        {activeTab === 'general' && (
+        {(activeTab === 'branding' || activeTab === 'business' || activeTab === 'website') && (
         <div className="settings-tab-panel">
-        <ul
-          className="nav nav-tabs flex-wrap gap-1 mb-3 pb-2 border-bottom"
-          style={{ borderColor: 'var(--chat-border)' }}
-          role="tablist"
-          aria-label="General settings sections"
-        >
-          <li className="nav-item" role="presentation">
-            <button
-              type="button"
-              className={generalSubBtnClass('branding')}
-              onClick={() => setGeneralSubTab('branding')}
-              style={{
-                color: generalSubTab === 'branding' ? 'var(--chat-text-heading)' : 'var(--chat-muted)',
-                background: generalSubTab === 'branding' ? 'var(--chat-surface)' : 'transparent',
-                borderColor: 'var(--chat-border)',
-              }}
-            >
-              Branding &amp; greeting
-            </button>
-          </li>
-          <li className="nav-item" role="presentation">
-            <button
-              type="button"
-              className={generalSubBtnClass('business')}
-              onClick={() => setGeneralSubTab('business')}
-              style={{
-                color: generalSubTab === 'business' ? 'var(--chat-text-heading)' : 'var(--chat-muted)',
-                background: generalSubTab === 'business' ? 'var(--chat-surface)' : 'transparent',
-                borderColor: 'var(--chat-border)',
-              }}
-            >
-              Business information
-            </button>
-          </li>
-          <li className="nav-item" role="presentation">
-            <button
-              type="button"
-              className={generalSubBtnClass('website')}
-              onClick={() => setGeneralSubTab('website')}
-              style={{
-                color: generalSubTab === 'website' ? 'var(--chat-text-heading)' : 'var(--chat-muted)',
-                background: generalSubTab === 'website' ? 'var(--chat-surface)' : 'transparent',
-                borderColor: 'var(--chat-border)',
-              }}
-            >
-              Widget, embed &amp; leads
-            </button>
-          </li>
-        </ul>
         <div className="row g-4 align-items-start">
           <div className="col-12">
-            {generalSubTab === 'branding' && (
+            {activeTab === 'branding' && (
             <>
             <div className="mb-3" id="company-name">
               <label className="form-label">Company name <span className="text-danger">*</span></label>
@@ -611,7 +564,7 @@ export default function Settings() {
             </>
             )}
 
-            {generalSubTab === 'business' && (
+            {activeTab === 'business' && (
             <div className="mb-4 p-3 rounded-3" style={cardStyle}>
               <div className="fw-semibold mb-2" style={headingStyle}>Business information</div>
               <p className="small mb-3" style={mutedStyle}>
@@ -686,7 +639,7 @@ export default function Settings() {
             </div>
             )}
 
-            {generalSubTab === 'website' && (
+            {activeTab === 'website' && (
             <>
             <div className="mb-3">
               <label className="form-label">Widget side</label>

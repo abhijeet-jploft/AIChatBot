@@ -249,7 +249,7 @@ export default function CompanyAdminSettingsAccess() {
             <div className="sa-field-check"><label><input type="checkbox" checked={Boolean(access.settings.autoTrigger)} onChange={(e) => setAccess((prev) => ({ ...prev, settings: { ...prev.settings, autoTrigger: e.target.checked } }))} />Auto-Trigger Settings</label></div>
             <div className="sa-field-check"><label><input type="checkbox" checked={Boolean(access.settings.escalation)} onChange={(e) => setAccess((prev) => ({ ...prev, settings: { ...prev.settings, escalation: e.target.checked } }))} />Escalation</label></div>
             <div className="sa-field-check"><label><input type="checkbox" checked={Boolean(access.settings.safety)} onChange={(e) => setAccess((prev) => ({ ...prev, settings: { ...prev.settings, safety: e.target.checked } }))} />Safety &amp; Compliance</label></div>
-            <div className="sa-field-check"><label><input type="checkbox" checked={Boolean(access.settings.virtualAssistant)} onChange={(e) => setAccess((prev) => ({ ...prev, settings: { ...prev.settings, virtualAssistant: e.target.checked } }))} />Virtual Assistant</label></div>
+            <div className="sa-field-check"><label><input type="checkbox" checked={Boolean(access.virtualAssistant)} onChange={(e) => setAccess((prev) => ({ ...prev, virtualAssistant: e.target.checked }))} />Virtual Assistant</label></div>
           </>
         )}
 

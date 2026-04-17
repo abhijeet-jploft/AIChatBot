@@ -12,7 +12,9 @@
 
 const CompanyAdmin = require('../models/CompanyAdmin');
 const liveAvatar = require('../../services/liveAvatarService');
+const { resolveVoiceSelection } = require('../../services/elevenlabsService');
 const pool = require('../../db/index');
+const { buildAdminVisibilityPayload } = require('../../services/adminSettingsAccess');
 
 const LIVEAVATAR_SANDBOX_AVATAR_ID = 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
 const LIVEAVATAR_SANDBOX_AVATAR_NAME = 'Wayne';
@@ -47,10 +49,28 @@ function pickVASettings(company) {
   };
 }
 
+async function getAccessibleCompany(req, res) {
+  const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+  if (!company) {
+    res.status(404).json({ error: 'Company not found' });
+    return null;
+  }
+
+  if (!req.adminSettingsAccessBypass) {
+    const adminVisibility = buildAdminVisibilityPayload(company);
+    if (!adminVisibility.virtualAssistant) {
+      res.status(403).json({ error: 'Virtual Assistant is not accessible for this admin' });
+      return null;
+    }
+  }
+
+  return company;
+}
+
 async function getSettings(req, res) {
   try {
-    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
-    if (!company) return res.status(404).json({ error: 'Company not found' });
+    const company = await getAccessibleCompany(req, res);
+    if (!company) return;
     const vaSettings = pickVASettings(company);
     // Include existing voice_settings config for display when voiceSource = 'elevenlabs'
     vaSettings.voiceCustomId = company.voice_custom_id || '';
@@ -67,6 +87,8 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
   try {
+    const companyBeforeUpdate = await getAccessibleCompany(req, res);
+    if (!companyBeforeUpdate) return;
     const {
       vaEnabled,
       avatarId,
@@ -119,6 +141,8 @@ async function resolveApiKey(companyId) {
 
 async function listAvatars(req, res) {
   try {
+    const company = await getAccessibleCompany(req, res);
+    if (!company) return;
     const apiKey = await resolveApiKey(req.adminCompanyId);
     const sandboxMode = String(req.query.sandbox || '').trim().toLowerCase() === 'true';
     const [publicAvatars, userAvatars] = await Promise.all([
@@ -149,6 +173,8 @@ async function listAvatars(req, res) {
 
 async function listVoices(req, res) {
   try {
+    const company = await getAccessibleCompany(req, res);
+    if (!company) return;
     const apiKey = await resolveApiKey(req.adminCompanyId);
     const voices = await liveAvatar.listVoices(apiKey);
     return res.json({ voices });
@@ -160,6 +186,8 @@ async function listVoices(req, res) {
 
 async function listContexts(req, res) {
   try {
+    const company = await getAccessibleCompany(req, res);
+    if (!company) return;
     const apiKey = await resolveApiKey(req.adminCompanyId);
     const contexts = await liveAvatar.listContexts(apiKey);
     return res.json({ contexts });
@@ -171,6 +199,8 @@ async function listContexts(req, res) {
 
 async function createContextHandler(req, res) {
   try {
+    const company = await getAccessibleCompany(req, res);
+    if (!company) return;
     const apiKey = await resolveApiKey(req.adminCompanyId);
     const { name, prompt, opening_text, links } = req.body;
     if (!name || !prompt) {
@@ -186,6 +216,8 @@ async function createContextHandler(req, res) {
 
 async function getCredits(req, res) {
   try {
+    const company = await getAccessibleCompany(req, res);
+    if (!company) return;
     const apiKey = await resolveApiKey(req.adminCompanyId);
     const credits = await liveAvatar.getUserCredits(apiKey);
     return res.json({ credits });
@@ -197,8 +229,10 @@ async function getCredits(req, res) {
 
 async function createEmbed(req, res) {
   try {
+    const accessibleCompany = await getAccessibleCompany(req, res);
+    if (!accessibleCompany) return;
     const apiKey = await resolveApiKey(req.adminCompanyId);
-    const company = await CompanyAdmin.findByCompanyId(req.adminCompanyId);
+    const company = accessibleCompany;
     const contextId = req.body.contextId || company.liveavatar_context_id;
     const sandbox = req.body.sandbox ?? company.va_sandbox_mode;
     const voiceSource = company.va_voice_source || 'liveavatar';
@@ -219,19 +253,36 @@ async function createEmbed(req, res) {
     let voiceId = Boolean(sandbox)
       ? String(avatar?.default_voice?.id || avatar?.default_voice_id || avatar?.voice_id || '').trim()
       : (req.body.voiceId || company.liveavatar_voice_id);
-    if (voiceSource === 'elevenlabs' && company.voice_custom_id && company.elevenlabs_api_key) {
+    if (voiceSource === 'elevenlabs' && company.elevenlabs_api_key) {
       try {
-        const secret = await liveAvatar.createSecret(apiKey, {
-          secret_name: `elevenlabs_${req.adminCompanyId}`,
-          secret_value: company.elevenlabs_api_key,
-          secret_type: 'ELEVENLABS_API_KEY',
-        });
-        const bound = await liveAvatar.bindThirdPartyVoice(apiKey, {
-          provider_voice_id: company.voice_custom_id,
-          secret_id: secret.id,
-          name: company.voice_custom_name || 'ElevenLabs Voice',
-        });
-        if (bound?.voice_id) voiceId = bound.voice_id;
+        let providerVoiceId = String(company.voice_custom_id || '').trim();
+        const providerVoiceName = String(company.voice_custom_name || '').trim();
+
+        if (!providerVoiceId) {
+          const resolvedVoice = await resolveVoiceSelection({
+            apiKey: company.elevenlabs_api_key,
+            profile: company.voice_profile || 'professional',
+            gender: company.voice_gender || 'female',
+            customVoiceId: company.voice_custom_id || null,
+            customVoiceName: company.voice_custom_name || null,
+            customVoiceGender: company.voice_custom_gender || null,
+          }).catch(() => null);
+          providerVoiceId = String(resolvedVoice?.voiceId || '').trim();
+        }
+
+        if (providerVoiceId) {
+          const secret = await liveAvatar.createSecret(apiKey, {
+            secret_name: `elevenlabs_${req.adminCompanyId}`,
+            secret_value: company.elevenlabs_api_key,
+            secret_type: 'ELEVENLABS_API_KEY',
+          });
+          const bound = await liveAvatar.bindThirdPartyVoice(apiKey, {
+            provider_voice_id: providerVoiceId,
+            secret_id: secret.id,
+            name: providerVoiceName || 'ElevenLabs Voice',
+          });
+          if (bound?.voice_id) voiceId = bound.voice_id;
+        }
       } catch (bindErr) {
         console.error('[virtual-assistant] ElevenLabs voice bind error:', bindErr.message);
       }

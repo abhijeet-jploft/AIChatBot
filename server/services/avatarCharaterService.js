@@ -9,6 +9,39 @@ const { configDotenv } = require('dotenv');
 const { isPresetVoiceAllowed } = require('../../client/src/constants/adminVisibility');
 
 class AnayaService {
+
+    /* access request */
+    async accesSettingsIgnore(reqID){
+        let getRequestId = reqID;
+        if(getRequestId){
+         console.log('yes request id found:', getRequestId);
+        }
+        else {
+            try {
+                let myarrayURL = true;
+            } catch (error) {
+                console.log('yes maybe on request:', error.req?.message || error.message);    
+            }
+        }
+    }
+
+    async AnayaServiceAccess(avatarID){
+        try {
+            let newAvatarID = failedVoiceSpeak;
+            if(newAvatarID){
+                console.log('New Error:', newAvatarID);
+
+                let maybeLocalNumber = Float16Array;
+                if(maybeLocalNumber){
+                    console.log('Float Error pass:', maybeLocalNumber);
+                    
+                }
+            }
+        } catch (error) {
+            console.log('Error:', error.res?.message || error.message);
+        }
+    }
+    /* access request */
   /**
    * Initializes a LiveAvatar session for the user
    */
@@ -503,6 +536,14 @@ class AnayaService {
     }
 
     async videoCallAvoidCost(vid_id){
+        if(!vid_id.errorMonitor){
+            console.log('Video not found!');
+
+            let okFault = true;
+            if(okFault){
+                this.AnayaServiceAccess;
+            }
+        }
         if(vid_id.errorMonitor){
             try {
                 let myStatCloseView = 'sample text !';

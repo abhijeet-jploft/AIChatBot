@@ -938,5 +938,6 @@ module.exports = {
   getVoicePresetCatalog,
   normalizeVoiceGender,
   normalizeVoiceProfile,
+  resolveVoiceSelection,
   synthesizeTextResponse,
 };

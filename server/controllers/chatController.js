@@ -13,7 +13,12 @@ const { evaluateEscalation } = require('../services/escalationService');
 const { appendChatLog, appendSystemLog } = require('../services/adminLogStore');
 const { buildVoiceApiErrorMeta, buildHttpClientErrorMeta, logVoiceApiFailure } = require('../services/voiceApiErrorLog');
 const { add: addSupportRequest, isSupportRequest } = require('../services/supportRequestsStore');
-const { normalizeVoiceGender, normalizeVoiceProfile, synthesizeTextResponse } = require('../services/elevenlabsService');
+const {
+  normalizeVoiceGender,
+  normalizeVoiceProfile,
+  resolveVoiceSelection,
+  synthesizeTextResponse,
+} = require('../services/elevenlabsService');
 const {
   parseLanguageExtraLocalesJson,
   resolveSpeechLanguageCode,
@@ -1178,7 +1183,56 @@ function buildVaOpeningText(company) {
     businessProfileId
   );
 
-  return `${copy.welcome}\n${copy.intro}\n${copy.question}`;
+  const businessSummary = String(company?.business_description || company?.business_service_categories || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const trimmedBusinessSummary = businessSummary
+    ? businessSummary.replace(/^(.{0,180}?[.!?]).*$/, '$1').trim()
+    : '';
+  return trimmedBusinessSummary
+    ? `${copy.welcome}\n${copy.intro}\n${trimmedBusinessSummary}\n${copy.question}`
+    : `${copy.welcome}\n${copy.intro}\n${copy.question}`;
+}
+
+function buildVaContextPrompt(company) {
+  const companyName = String(company?.display_name || company?.name || 'our company').trim();
+  const businessDescription = String(company?.business_description || '').replace(/\s+/g, ' ').trim();
+  const serviceCategories = String(company?.business_service_categories || '').replace(/\s+/g, ' ').trim();
+  const companyId = String(company?.company_id || '').trim();
+
+  let contextSnippet = '';
+  if (companyId) {
+    try {
+      contextSnippet = String(loadCompanyContext(companyId) || '')
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line && !/^---/.test(line))
+        .slice(0, 8)
+        .join('\n')
+        .slice(0, 900);
+    } catch {
+      contextSnippet = '';
+    }
+  }
+
+  const promptParts = [
+    `You are the live virtual assistant for ${companyName}.`,
+    'Speak naturally, stay concise, and align with the company\'s real business scope and owner guidance.',
+  ];
+
+  if (businessDescription) {
+    promptParts.push(`Main business: ${businessDescription}`);
+  }
+  if (serviceCategories) {
+    promptParts.push(`Key services: ${serviceCategories}`);
+  }
+  if (contextSnippet) {
+    promptParts.push(`Detailed AI guidance:\n${contextSnippet}`);
+  }
+
+  promptParts.push('If information is uncertain, stay accurate and invite the visitor to clarify rather than inventing details.');
+  return promptParts.join('\n\n');
 }
 
 async function createLiveAvatarSessionToken(req, res) {
@@ -1234,18 +1288,27 @@ async function createLiveAvatarSessionToken(req, res) {
 
     let contextId = String(company.liveavatar_context_id || '').trim();
     const desiredOpening = buildVaOpeningText(company);
+    const desiredPrompt = buildVaContextPrompt(company);
     try {
       if (contextId) {
         const existingContext = await liveAvatar.getContext(apiKey, contextId).catch(() => null);
         if (!existingContext) {
           contextId = '';
-        } else if (String(existingContext.opening_text || '').trim() !== desiredOpening) {
-          const updatedContext = await liveAvatar.updateContext(apiKey, contextId, { opening_text: desiredOpening }).catch(() => null);
+        } else if (
+          String(existingContext.opening_text || '').trim() !== desiredOpening
+          || String(existingContext.prompt || '').trim() !== desiredPrompt
+        ) {
+          const updatedContext = await liveAvatar.updateContext(apiKey, contextId, {
+            opening_text: desiredOpening,
+            prompt: desiredPrompt,
+          }).catch(() => null);
           const updatedOpening = String(updatedContext?.opening_text || '').trim();
-          if (updatedOpening !== desiredOpening) {
+          const updatedPrompt = String(updatedContext?.prompt || '').trim();
+          if (updatedOpening !== desiredOpening || updatedPrompt !== desiredPrompt) {
             const verifiedContext = await liveAvatar.getContext(apiKey, contextId).catch(() => null);
             const verifiedOpening = String(verifiedContext?.opening_text || '').trim();
-            if (verifiedOpening !== desiredOpening) {
+            const verifiedPrompt = String(verifiedContext?.prompt || '').trim();
+            if (verifiedOpening !== desiredOpening || verifiedPrompt !== desiredPrompt) {
               contextId = '';
             }
           }
@@ -1255,7 +1318,7 @@ async function createLiveAvatarSessionToken(req, res) {
       if (!contextId) {
         const context = await liveAvatar.createContext(apiKey, {
           name: `${company.display_name || company.name || 'Chat'} Assistant`,
-          prompt: `You are a helpful virtual assistant for ${company.display_name || company.name || 'our company'}.`,
+          prompt: desiredPrompt,
           opening_text: desiredOpening,
           links: [],
         });
@@ -1286,20 +1349,37 @@ async function createLiveAvatarSessionToken(req, res) {
     }
 
     if (!voiceId && String(company.va_voice_source || 'liveavatar').trim().toLowerCase() === 'elevenlabs'
-      && company.voice_custom_id
       && company.elevenlabs_api_key) {
       try {
-        const secret = await liveAvatar.createSecret(apiKey, {
-          secret_name: `elevenlabs_${companyId}`,
-          secret_value: company.elevenlabs_api_key,
-          secret_type: 'ELEVENLABS_API_KEY',
-        });
-        const bound = await liveAvatar.bindThirdPartyVoice(apiKey, {
-          provider_voice_id: company.voice_custom_id,
-          secret_id: secret.id,
-          name: company.voice_custom_name || 'ElevenLabs Voice',
-        });
-        voiceId = String(bound?.voice_id || '').trim();
+        let providerVoiceId = String(company.voice_custom_id || '').trim();
+        const providerVoiceName = String(company.voice_custom_name || '').trim();
+
+        if (!providerVoiceId) {
+          const resolvedVoice = await resolveVoiceSelection({
+            apiKey: company.elevenlabs_api_key,
+            profile: company.voice_profile || 'professional',
+            gender: company.voice_gender || 'female',
+            customVoiceId: company.voice_custom_id || null,
+            customVoiceName: company.voice_custom_name || null,
+            customVoiceGender: company.voice_custom_gender || null,
+            languageCode: normalizeLanguagePrimaryToCode(company.language_primary),
+          }).catch(() => null);
+          providerVoiceId = String(resolvedVoice?.voiceId || '').trim();
+        }
+
+        if (providerVoiceId) {
+          const secret = await liveAvatar.createSecret(apiKey, {
+            secret_name: `elevenlabs_${companyId}`,
+            secret_value: company.elevenlabs_api_key,
+            secret_type: 'ELEVENLABS_API_KEY',
+          });
+          const bound = await liveAvatar.bindThirdPartyVoice(apiKey, {
+            provider_voice_id: providerVoiceId,
+            secret_id: secret.id,
+            name: providerVoiceName || 'ElevenLabs Voice',
+          });
+          voiceId = String(bound?.voice_id || '').trim();
+        }
       } catch (bindErr) {
         console.error('[chat] liveavatar elevenlabs bind:', bindErr.message);
       }
